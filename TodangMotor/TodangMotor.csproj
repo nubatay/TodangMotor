@@ -10,8 +10,18 @@
 
   <ItemGroup>
     <PackageReference Include="BCrypt.Net-Next" Version="4.2.0" />
+    <PackageReference Include="ClosedXML" Version="0.105.1" />
     <PackageReference Include="Dapper" Version="2.1.86" />
     <PackageReference Include="Microsoft.Data.SqlClient" Version="7.1.0" />
+    <PackageReference Include="QuestPDF" Version="2026.9.1" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <EditorConfigFiles Remove="C:\Users\Acer\source\repos\TodangMotor\TodangMotor\Controls\.editorconfig" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="C:\Users\Acer\source\repos\TodangMotor\TodangMotor\Controls\.editorconfig" />
   </ItemGroup>
 
 </Project>

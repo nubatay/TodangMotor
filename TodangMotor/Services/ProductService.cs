@@ -13,6 +13,7 @@ namespace TodangMotor.Services
         private const int ProductNameMaxLength = 150;
         private const int BrandMaxLength = 100;
         private const int UnitMaxLength = 20;
+        private const int NotesMaxLength = 500;
 
         public ProductService()
         {
@@ -22,8 +23,6 @@ namespace TodangMotor.Services
 
         // ==================== READ ====================
 
-        // Returns ALL products (active + inactive), including CostPrice.
-        // Owner-only — Cashier must never even fetch this (Rule 5).
         public async Task<(bool Success, string ErrorMessage, List<Product> Products)> GetAllAsync()
         {
             if (!SessionManager.IsOwner)
@@ -61,32 +60,33 @@ namespace TodangMotor.Services
 
         // ==================== ADD ====================
 
-        public async Task<(bool Success, string ErrorMessage)> AddAsync(
+        public async Task<(bool Success, string ErrorMessage, int NewProductId)> AddAsync(
             int categoryId, string productName, string brand, string unit,
-            string costPriceText, string sellingPriceText, string reorderLevelText)
+            string costPriceText, string sellingPriceText, string reorderLevelText,
+            string notes)
         {
             if (!SessionManager.IsOwner)
-                return (false, "Access denied. Only the Owner can manage products.");
+                return (false, "Access denied. Only the Owner can manage products.", 0);
 
             var (valid, errorMessage, cleanProduct) = await ValidateAndBuildAsync(
                 categoryId, productName, brand, unit, costPriceText, sellingPriceText, reorderLevelText,
-                excludingProductId: null);
+                notes, excludingProductId: null);
 
             if (!valid)
-                return (false, errorMessage);
+                return (false, errorMessage, 0);
 
             try
             {
-                await _productRepository.InsertAsync(cleanProduct!);
-                return (true, string.Empty);
+                var newId = await _productRepository.InsertAsync(cleanProduct!);
+                return (true, string.Empty, newId);
             }
             catch (Microsoft.Data.SqlClient.SqlException ex) when (ex.Number == 2627 || ex.Number == 2601)
             {
-                return (false, "A product with this name and brand already exists.");
+                return (false, "A product with this name and brand already exists.", 0);
             }
             catch (Exception)
             {
-                return (false, "Could not add the product. Please check your database connection.");
+                return (false, "Could not add the product. Please check your database connection.", 0);
             }
         }
 
@@ -94,7 +94,8 @@ namespace TodangMotor.Services
 
         public async Task<(bool Success, string ErrorMessage)> UpdateAsync(
             int productId, int categoryId, string productName, string brand, string unit,
-            string costPriceText, string sellingPriceText, string reorderLevelText)
+            string costPriceText, string sellingPriceText, string reorderLevelText,
+            string notes)
         {
             if (!SessionManager.IsOwner)
                 return (false, "Access denied. Only the Owner can manage products.");
@@ -105,7 +106,7 @@ namespace TodangMotor.Services
 
             var (valid, errorMessage, cleanProduct) = await ValidateAndBuildAsync(
                 categoryId, productName, brand, unit, costPriceText, sellingPriceText, reorderLevelText,
-                excludingProductId: productId);
+                notes, excludingProductId: productId);
 
             if (!valid)
                 return (false, errorMessage);
@@ -127,6 +128,105 @@ namespace TodangMotor.Services
             catch (Exception)
             {
                 return (false, "Could not update the product. Please check your database connection.");
+            }
+        }
+
+        // ==================== UPDATE STOCK (ADJUSTMENT) ====================
+
+        public async Task<(bool Success, string ErrorMessage)> UpdateStockAsync(
+            int productId, int newQuantity, string? notes)
+        {
+            if (!SessionManager.IsOwner)
+                return (false, "Access denied. Only the Owner can adjust stock.");
+
+            if (productId <= 0)
+                return (false, "Invalid product selected.");
+
+            if (newQuantity < 0)
+                return (false, "Stock quantity cannot be negative.");
+
+            Product? existing;
+            try
+            {
+                existing = await _productRepository.GetByIdAsync(productId);
+            }
+            catch (Exception)
+            {
+                return (false, "Could not load the product. Please check your database connection.");
+            }
+
+            if (existing == null)
+                return (false, "Product not found.");
+
+            int before = existing.QuantityOnHand;
+
+            if (newQuantity == before)
+                return (false, "New stock quantity is the same as the current quantity — nothing to record.");
+
+            int userId = SessionManager.CurrentUser?.UserId ?? 0;
+            if (userId <= 0)
+                return (false, "Could not identify the current user. Please log in again.");
+
+            try
+            {
+                var success = await _productRepository.UpdateStockWithMovementAsync(
+                    productId, before, newQuantity, userId, notes);
+
+                if (!success)
+                    return (false, "Product not found.");
+
+                return (true, string.Empty);
+            }
+            catch (Exception)
+            {
+                return (false, "Could not update stock. Please check your database connection.");
+            }
+        }
+
+        // ==================== UPDATE COST PRICE (Stock-In prompt) ====================
+
+        /// <summary>
+        /// Batch-updates CostPrice for multiple products.
+        /// Called by StockInForm after the Owner accepts the prompt-after-save.
+        /// Skips any product whose new cost would exceed its current SellingPrice —
+        /// a second safety net against violating the locked rule.
+        /// Returns the number of products actually updated.
+        /// </summary>
+        public async Task<(bool Success, string ErrorMessage, int UpdatedCount)> UpdateCostPricesAsync(
+            List<(int ProductId, decimal NewCost)> updates)
+        {
+            if (!SessionManager.IsOwner)
+                return (false, "Access denied. Only the Owner can update cost prices.", 0);
+
+            if (updates == null || updates.Count == 0)
+                return (true, string.Empty, 0);
+
+            int count = 0;
+            try
+            {
+                foreach (var (productId, newCost) in updates)
+                {
+                    if (productId <= 0) continue;
+                    if (newCost < 0) continue;
+
+                    var product = await _productRepository.GetByIdAsync(productId);
+                    if (product == null) continue;
+
+                    // Safety net: never allow CostPrice to exceed SellingPrice.
+                    if (newCost > product.SellingPrice) continue;
+
+                    // No-op: skip if unchanged.
+                    if (newCost == product.CostPrice) continue;
+
+                    await _productRepository.UpdateCostPriceAsync(productId, newCost);
+                    count++;
+                }
+
+                return (true, string.Empty, count);
+            }
+            catch (Exception)
+            {
+                return (false, "Some cost prices could not be updated. Please check your database connection.", count);
             }
         }
 
@@ -190,13 +290,10 @@ namespace TodangMotor.Services
 
         // ==================== SHARED VALIDATION ====================
 
-        // Validates everything and, if all good, returns a ready-to-save
-        // Product object (QuantityOnHand/IsActive/timestamps are NOT set
-        // here — the Repository handles those).
         private async Task<(bool Valid, string ErrorMessage, Product? Product)> ValidateAndBuildAsync(
             int categoryId, string productName, string brand, string unit,
             string costPriceText, string sellingPriceText, string reorderLevelText,
-            int? excludingProductId)
+            string notes, int? excludingProductId)
         {
             // ---- ProductName ----
             if (string.IsNullOrWhiteSpace(productName))
@@ -206,7 +303,7 @@ namespace TodangMotor.Services
             if (productName.Length > ProductNameMaxLength)
                 return (false, $"Product name cannot exceed {ProductNameMaxLength} characters.", null);
 
-            // ---- Brand (required per business decision) ----
+            // ---- Brand ----
             if (string.IsNullOrWhiteSpace(brand))
                 return (false, "Brand is required.", null);
 
@@ -257,7 +354,15 @@ namespace TodangMotor.Services
             if (reorderLevel < 0)
                 return (false, "Reorder level cannot be negative.", null);
 
-            // ---- Duplicate check: ProductName + Brand (case-insensitive) ----
+            // ---- Notes (optional) ----
+            if (!string.IsNullOrEmpty(notes))
+            {
+                notes = notes.Trim();
+                if (notes.Length > NotesMaxLength)
+                    return (false, $"Notes cannot exceed {NotesMaxLength} characters.", null);
+            }
+
+            // ---- Duplicate check: ProductName + Brand (case-sensitive) ----
             var existingMatch = await _productRepository.GetByNameAndBrandAsync(productName, brand);
             if (existingMatch != null && existingMatch.ProductId != excludingProductId)
                 return (false, "A product with this name and brand already exists.", null);
@@ -270,7 +375,8 @@ namespace TodangMotor.Services
                 Unit = unit,
                 CostPrice = costPrice,
                 SellingPrice = sellingPrice,
-                ReorderLevel = reorderLevel
+                ReorderLevel = reorderLevel,
+                Notes = string.IsNullOrWhiteSpace(notes) ? null : notes
             };
 
             return (true, string.Empty, product);
