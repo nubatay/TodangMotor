@@ -1,262 +1,499 @@
-﻿using System;
-using System.Drawing;
-using System.Drawing.Drawing2D;
-using System.Threading.Tasks;
-using System.Windows.Forms;
-using TodangMotor.Common;
+﻿using System.Drawing.Drawing2D;
+using System.Runtime.InteropServices;
 using TodangMotor.Data;
 using TodangMotor.Models;
 using TodangMotor.Services;
 
 namespace TodangMotor.Forms
 {
-    /// <summary>
-    /// Add / Edit product popup.
-    /// Owner-only, single-record editor.
-    /// - Add mode: Owner can enter initial stock (logged as an Adjustment movement).
-    /// - Edit mode: Owner can adjust stock (also logged).
-    /// </summary>
-    public class ProductForm : ShellForm
+    public class ProductForm : Form
     {
+        // --- Win32 helper for dragging a borderless window ---
+        [DllImport("user32.dll")]
+        private static extern bool ReleaseCapture();
+
+        [DllImport("user32.dll")]
+        private static extern int SendMessage(IntPtr hWnd, int Msg, int wParam, int lParam);
+
+        private const int WM_NCLBUTTONDOWN = 0xA1;
+        private const int HT_CAPTION = 0x2;
+
+        // --- Win32 constants for edge-resize hit testing ---
+        private const int WM_NCHITTEST = 0x0084;
+        private const int HTCLIENT = 1;
+        private const int HTLEFT = 10;
+        private const int HTRIGHT = 11;
+        private const int HTTOP = 12;
+        private const int HTTOPLEFT = 13;
+        private const int HTTOPRIGHT = 14;
+        private const int HTBOTTOM = 15;
+        private const int HTBOTTOMLEFT = 16;
+        private const int HTBOTTOMRIGHT = 17;
+        private const int ResizeBorderThickness = 8;
+
+        // --- Colors (matches CategoryForm / SupplierForm exactly) ---
+        private readonly Color _bgColor = Color.FromArgb(250, 248, 245);
+        private readonly Color _headerBg = Color.White;
+        private readonly Color _headerTitleColor = Color.FromArgb(45, 45, 45);
+        private readonly Color _orange = Color.FromArgb(230, 126, 34);
+        private readonly Color _orangeHover = Color.FromArgb(211, 84, 0);
+        private readonly Color _textColor = Color.FromArgb(35, 35, 35);
+        private readonly Color _mutedText = Color.FromArgb(140, 140, 140);
+        private readonly Color _inputBg = Color.FromArgb(248, 249, 251);
+        private readonly Color _disabledInputBg = Color.FromArgb(238, 238, 238);
+        private readonly Color _inputBorder = Color.FromArgb(220, 223, 228);
+        private readonly Color _inputBorderFocus = Color.FromArgb(230, 126, 34);
+        private readonly Color _chromeIcon = Color.FromArgb(120, 120, 120);
+        private readonly Color _chromeHoverBg = Color.FromArgb(238, 238, 238);
+        private readonly Color _chromeHoverFg = Color.FromArgb(45, 45, 45);
+        private readonly Color _closeHoverBg = Color.FromArgb(232, 17, 35);
+
+        private const int HeaderHeight = 52;
+
         private readonly ProductService _productService;
         private readonly CategoryRepository _categoryRepository;
 
+        // The product being edited, or null if we're adding a new one.
         private readonly Product? _productToEdit;
         private bool IsEditMode => _productToEdit != null;
 
-        private int _originalQuantity;
+        // --- Window chrome controls ---
+        private Panel headerPanel = null!;
+        private Label lblHeaderTitle = null!;
+        private Button btnMinimize = null!;
+        private Button btnCloseChrome = null!;
 
-        // ---- Layout constants ----
-        private const int RowStep = 58;
-        private const int LeftX = 32;
-        private const int LeftLabelW = 110;
-        private const int LeftFieldX = 148;
-        private const int LeftFieldW = 260;
+        // --- Functional controls ---
+        private Label lblProductName = null!;
+        private Panel txtProductNameWrapper = null!;
+        private TextBox txtProductName = null!;
 
-        private const int RightX = 440;
-        private const int RightLabelW = 100;
-        private const int RightFieldX = 548;
-        private const int RightFieldW = 200;
+        private Label lblBrand = null!;
+        private Panel txtBrandWrapper = null!;
+        private TextBox txtBrand = null!;
 
-        // ---- Fields ----
-        private RoundedTextBox _txtProductName;
-        private RoundedTextBox _txtBrand;
-        private ComboBox _cmbCategory;
-        private RoundedTextBox _txtUnit;
-        private RoundedTextBox _txtCostPrice;
-        private RoundedTextBox _txtSellingPrice;
-        private RoundedTextBox _txtReorderLevel;
-        private RoundedTextBox _txtQuantityOnHand;
-        private Panel _notesWrapper;
-        private TextBox _txtNotes;
+        private Label lblCategory = null!;
+        private ComboBox cmbCategory = null!;
 
-        private Button _btnSave;
-        private Button _btnCancel;
-        private Label _lblStatus;
+        private Label lblUnit = null!;
+        private Panel txtUnitWrapper = null!;
+        private TextBox txtUnit = null!;
 
-        // ============================================================
-        // CONSTRUCTION
-        // ============================================================
+        private Label lblCostPrice = null!;
+        private Panel txtCostPriceWrapper = null!;
+        private TextBox txtCostPrice = null!;
 
+        private Label lblSellingPrice = null!;
+        private Panel txtSellingPriceWrapper = null!;
+        private TextBox txtSellingPrice = null!;
+
+        private Label lblReorderLevel = null!;
+        private Panel txtReorderLevelWrapper = null!;
+        private TextBox txtReorderLevel = null!;
+
+        private Label lblQuantityOnHand = null!;
+        private Panel txtQuantityOnHandWrapper = null!;
+        private TextBox txtQuantityOnHand = null!;
+        private Label lblQuantityHint = null!;
+
+        private Button btnSave = null!;
+        private Button btnCancel = null!;
+        private Label lblStatus = null!;
+
+        // Pass null for Add mode, or an existing Product for Edit mode.
         public ProductForm(Product? productToEdit = null)
         {
             _productService = new ProductService();
             _categoryRepository = new CategoryRepository();
             _productToEdit = productToEdit;
 
-            HeaderTitle = IsEditMode ? "Edit Product" : "Add Product";
-            ShowMaximizeButton = false;
-            ShowMinimizeButton = true;
-            StartPosition = FormStartPosition.CenterParent;
-            ClientSize = new Size(780, 560);
-            MinimumSize = new Size(740, 540);
-            BackColor = Theme.Background;
-            KeyPreview = true;
-
-            BuildLayout();
-
-            Load += ProductForm_LoadAsync;
-            KeyDown += ProductForm_KeyDown;
+            InitializeControls();
+            this.Load += ProductForm_LoadAsync;
         }
 
-        // ============================================================
-        // LAYOUT
-        // ============================================================
-
-        private void BuildLayout()
+        private void InitializeControls()
         {
-            int y = 24;
+            this.Text = "Product Details";
+            this.Size = new Size(700, 650);
+            this.MinimumSize = new Size(620, 610);
+            this.StartPosition = FormStartPosition.CenterParent;
+            this.FormBorderStyle = FormBorderStyle.None;
+            this.BackColor = _bgColor;
+            this.KeyPreview = true;
+            this.DoubleBuffered = true;
 
-            // ---- Row 1: Product Name (left) | Brand (right) ----
-            AddLabel("Product Name:", LeftX, y, LeftLabelW);
-            _txtProductName = UiFactory.CreateTextBox(LeftFieldW);
-            _txtProductName.Location = new Point(LeftFieldX, y - 8);
-            _txtProductName.MaxLength = 150;
-            ContentPanel.Controls.Add(_txtProductName);
+            this.KeyDown += ProductForm_KeyDown;
+            this.Resize += ProductForm_Resize;
 
-            AddLabel("Brand:", RightX, y, RightLabelW);
-            _txtBrand = UiFactory.CreateTextBox(RightFieldW);
-            _txtBrand.Location = new Point(RightFieldX, y - 8);
-            _txtBrand.MaxLength = 100;
-            ContentPanel.Controls.Add(_txtBrand);
-            y += RowStep;
+            BuildHeader();
 
-            // ---- Row 2: Category (left) | Unit (right) ----
-            AddLabel("Category:", LeftX, y, LeftLabelW);
-            _cmbCategory = UiFactory.CreateComboBox(LeftFieldW);
-            _cmbCategory.Location = new Point(LeftFieldX, y - 6);
-            _cmbCategory.DisplayMember = "CategoryName";
-            _cmbCategory.ValueMember = "CategoryId";
-            ContentPanel.Controls.Add(_cmbCategory);
+            int y = HeaderHeight + 30;
+            int rowStep = 56;
+            int labelX = 30;
+            int fieldX = 170;
+            int fieldWidth = 480;
 
-            AddLabel("Unit:", RightX, y, RightLabelW);
-            _txtUnit = UiFactory.CreateTextBox(RightFieldW);
-            _txtUnit.Location = new Point(RightFieldX, y - 8);
-            _txtUnit.MaxLength = 20;
-            ContentPanel.Controls.Add(_txtUnit);
-            y += RowStep;
+            // ---- ProductName ----
+            lblProductName = MakeLabel("Product Name:", labelX, y);
+            (txtProductNameWrapper, txtProductName) = MakeTextInput(fieldX, y - 5, fieldWidth, 150);
+            y += rowStep;
 
-            // ---- Row 3: Cost Price (left) | Selling Price (right) ----
-            AddLabel("Cost Price (PHP):", LeftX, y, LeftLabelW);
-            _txtCostPrice = UiFactory.CreateTextBox(LeftFieldW);
-            _txtCostPrice.Location = new Point(LeftFieldX, y - 8);
-            _txtCostPrice.MaxLength = 12;
-            ContentPanel.Controls.Add(_txtCostPrice);
+            // ---- Brand ----
+            lblBrand = MakeLabel("Brand:", labelX, y);
+            (txtBrandWrapper, txtBrand) = MakeTextInput(fieldX, y - 5, fieldWidth, 100);
+            y += rowStep;
 
-            AddLabel("Selling Price (PHP):", RightX, y, RightLabelW);
-            _txtSellingPrice = UiFactory.CreateTextBox(RightFieldW);
-            _txtSellingPrice.Location = new Point(RightFieldX, y - 8);
-            _txtSellingPrice.MaxLength = 12;
-            ContentPanel.Controls.Add(_txtSellingPrice);
-            y += RowStep;
-
-            // ---- Row 4: Reorder Level (left) | Current Stock (right) ----
-            AddLabel("Reorder Level:", LeftX, y, LeftLabelW);
-            _txtReorderLevel = UiFactory.CreateTextBox(LeftFieldW);
-            _txtReorderLevel.Location = new Point(LeftFieldX, y - 8);
-            _txtReorderLevel.MaxLength = 6;
-            ContentPanel.Controls.Add(_txtReorderLevel);
-
-            AddLabel("Current Stock:", RightX, y, RightLabelW);
-            _txtQuantityOnHand = UiFactory.CreateTextBox(RightFieldW);
-            _txtQuantityOnHand.Location = new Point(RightFieldX, y - 8);
-            _txtQuantityOnHand.MaxLength = 9;
-            ContentPanel.Controls.Add(_txtQuantityOnHand);
-            y += RowStep;
-
-            // ---- Row 5: Notes (full width) ----
-            AddLabel("Notes:", LeftX, y, LeftLabelW);
-
-            _notesWrapper = new Panel
+            // ---- Category ----
+            lblCategory = MakeLabel("Category:", labelX, y);
+            cmbCategory = new ComboBox
             {
-                Location = new Point(LeftFieldX, y - 8),
-                Size = new Size(RightFieldX + RightFieldW - LeftFieldX, 100),
-                BackColor = Theme.InputBackground,
-                Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right
+                Location = new Point(fieldX, y - 5),
+                Size = new Size(fieldWidth, 30),
+                Font = new Font("Segoe UI", 10.5f),
+                DropDownStyle = ComboBoxStyle.DropDownList,
+                FlatStyle = FlatStyle.Flat,
+                DisplayMember = "CategoryName",
+                ValueMember = "CategoryId"
             };
-            _notesWrapper.Paint += NotesWrapper_Paint;
+            y += rowStep;
 
-            _txtNotes = new TextBox
+            // ---- Unit ----
+            lblUnit = MakeLabel("Unit:", labelX, y);
+            (txtUnitWrapper, txtUnit) = MakeTextInput(fieldX, y - 5, fieldWidth, 20);
+            y += rowStep;
+
+            // ---- CostPrice ----
+            lblCostPrice = MakeLabel("Cost Price:", labelX, y);
+            (txtCostPriceWrapper, txtCostPrice) = MakeTextInput(fieldX, y - 5, 200, 10);
+            y += rowStep;
+
+            // ---- SellingPrice ----
+            lblSellingPrice = MakeLabel("Selling Price:", labelX, y);
+            (txtSellingPriceWrapper, txtSellingPrice) = MakeTextInput(fieldX, y - 5, 200, 10);
+            y += rowStep;
+
+            // ---- ReorderLevel ----
+            lblReorderLevel = MakeLabel("Reorder Level:", labelX, y);
+            (txtReorderLevelWrapper, txtReorderLevel) = MakeTextInput(fieldX, y - 5, 200, 6);
+            y += rowStep;
+
+            // ---- QuantityOnHand (read-only) ----
+            lblQuantityOnHand = MakeLabel("Current Stock:", labelX, y);
+            (txtQuantityOnHandWrapper, txtQuantityOnHand) = MakeTextInput(fieldX, y - 5, 200, 20);
+            txtQuantityOnHand.ReadOnly = true;
+            txtQuantityOnHand.TabStop = false;
+            txtQuantityOnHand.BackColor = _disabledInputBg;
+            txtQuantityOnHandWrapper.BackColor = _disabledInputBg;
+
+            lblQuantityHint = new Label
             {
-                Location = new Point(12, 10),
-                Size = new Size(_notesWrapper.Width - 28, _notesWrapper.Height - 20),
-                Multiline = true,
-                ScrollBars = ScrollBars.Vertical,
-                BorderStyle = BorderStyle.None,
-                BackColor = Theme.InputBackground,
-                ForeColor = Theme.TextPrimary,
-                Font = Theme.FontBody,
-                MaxLength = 500,
-                Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right
-            };
-            _txtNotes.Enter += (s, e) => _notesWrapper.Invalidate();
-            _txtNotes.Leave += (s, e) => _notesWrapper.Invalidate();
-            _notesWrapper.Controls.Add(_txtNotes);
-            _notesWrapper.Resize += (s, e) =>
-            {
-                _txtNotes.Size = new Size(
-                    Math.Max(20, _notesWrapper.Width - 28),
-                    Math.Max(20, _notesWrapper.Height - 20));
-            };
-
-            ContentPanel.Controls.Add(_notesWrapper);
-            y += 100 + 20;
-
-            // ---- Status ----
-            _lblStatus = new Label
-            {
-                Text = string.Empty,
-                Font = Theme.FontSmall,
-                ForeColor = Theme.Danger,
-                AutoSize = false,
-                Location = new Point(LeftX, y),
-                Size = new Size(ClientSize.Width - LeftX - 32, 22),
-                TextAlign = ContentAlignment.MiddleLeft,
-                BackColor = Color.Transparent,
-                Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right
-            };
-            ContentPanel.Controls.Add(_lblStatus);
-            y += 30;
-
-            // ---- Buttons (bottom-right) ----
-            int btnW = 120;
-            int btnH = 42;
-            int btnY = y;
-
-            _btnSave = UiFactory.CreateButton("Save", UiFactory.ButtonStyle.Primary, btnW, btnH);
-            _btnSave.Location = new Point(ClientSize.Width - 32 - btnW, btnY);
-            _btnSave.Anchor = AnchorStyles.Top | AnchorStyles.Right;
-            _btnSave.Click += async (s, e) => await SaveAsync();
-
-            _btnCancel = UiFactory.CreateButton("Cancel", UiFactory.ButtonStyle.Ghost, btnW, btnH);
-            _btnCancel.Location = new Point(ClientSize.Width - 32 - btnW - 8 - btnW, btnY);
-            _btnCancel.Anchor = AnchorStyles.Top | AnchorStyles.Right;
-            _btnCancel.Click += (s, e) => { DialogResult = DialogResult.Cancel; Close(); };
-
-            ContentPanel.Controls.Add(_btnSave);
-            ContentPanel.Controls.Add(_btnCancel);
-        }
-
-        private void AddLabel(string text, int x, int y, int width)
-        {
-            var lbl = new Label
-            {
-                Text = text,
-                Font = Theme.FontSmall,
-                ForeColor = Theme.TextSecondary,
-                AutoSize = false,
-                Size = new Size(width, 20),
-                Location = new Point(x, y),
-                TextAlign = ContentAlignment.MiddleLeft,
+                Text = "Stock is managed via Stock-In, not editable here.",
+                Font = new Font("Segoe UI", 8f),
+                ForeColor = _mutedText,
+                AutoSize = true,
+                Location = new Point(fieldX + 210, y + 4),
                 BackColor = Color.Transparent
             };
-            ContentPanel.Controls.Add(lbl);
+            y += rowStep + 10;
+
+            // ---- Buttons ----
+            btnCancel = new Button
+            {
+                Text = "Cancel",
+                Location = new Point(fieldX + 280, y),
+                Size = new Size(100, 36),
+                BackColor = Color.White,
+                ForeColor = _textColor,
+                Font = new Font("Segoe UI", 10f),
+                FlatStyle = FlatStyle.Flat,
+                Cursor = Cursors.Hand
+            };
+            btnCancel.FlatAppearance.BorderSize = 1;
+            btnCancel.FlatAppearance.BorderColor = _inputBorder;
+            btnCancel.MouseEnter += (s, e) => btnCancel.ForeColor = _orange;
+            btnCancel.MouseLeave += (s, e) => btnCancel.ForeColor = _textColor;
+            btnCancel.Click += (s, e) =>
+            {
+                this.DialogResult = DialogResult.Cancel;
+                this.Close();
+            };
+
+            btnSave = new Button
+            {
+                Text = "Save",
+                Location = new Point(fieldX + 390, y),
+                Size = new Size(100, 36),
+                BackColor = _orange,
+                ForeColor = Color.White,
+                Font = new Font("Segoe UI", 10f, FontStyle.Bold),
+                FlatStyle = FlatStyle.Flat,
+                Cursor = Cursors.Hand
+            };
+            btnSave.FlatAppearance.BorderSize = 0;
+            btnSave.FlatAppearance.MouseOverBackColor = _orangeHover;
+            btnSave.MouseEnter += (s, e) => btnSave.BackColor = _orangeHover;
+            btnSave.MouseLeave += (s, e) => btnSave.BackColor = _orange;
+            btnSave.Click += BtnSave_Click;
+
+            y += 50;
+
+            // ---- Status label ----
+            lblStatus = new Label
+            {
+                Text = string.Empty,
+                AutoSize = false,
+                Font = new Font("Segoe UI", 9f),
+                Size = new Size(fieldWidth + (fieldX - labelX), 40),
+                Location = new Point(labelX, y),
+                ForeColor = Color.Firebrick,
+                BackColor = Color.Transparent,
+                TextAlign = ContentAlignment.TopLeft
+            };
+
+            this.Controls.Add(lblProductName);
+            this.Controls.Add(txtProductNameWrapper);
+            this.Controls.Add(lblBrand);
+            this.Controls.Add(txtBrandWrapper);
+            this.Controls.Add(lblCategory);
+            this.Controls.Add(cmbCategory);
+            this.Controls.Add(lblUnit);
+            this.Controls.Add(txtUnitWrapper);
+            this.Controls.Add(lblCostPrice);
+            this.Controls.Add(txtCostPriceWrapper);
+            this.Controls.Add(lblSellingPrice);
+            this.Controls.Add(txtSellingPriceWrapper);
+            this.Controls.Add(lblReorderLevel);
+            this.Controls.Add(txtReorderLevelWrapper);
+            this.Controls.Add(lblQuantityOnHand);
+            this.Controls.Add(txtQuantityOnHandWrapper);
+            this.Controls.Add(lblQuantityHint);
+            this.Controls.Add(btnCancel);
+            this.Controls.Add(btnSave);
+            this.Controls.Add(lblStatus);
+
+            this.Controls.Add(headerPanel);
+            headerPanel.BringToFront();
         }
 
-        private void NotesWrapper_Paint(object? sender, PaintEventArgs e)
-        {
-            if (_notesWrapper == null) return;
-            bool focused = _txtNotes != null && _txtNotes.Focused;
-            e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
+        // ==================== SMALL BUILDER HELPERS ====================
 
-            var rect = new Rectangle(0, 0, _notesWrapper.Width - 1, _notesWrapper.Height - 1);
-            using var path = Theme.RoundedRect(rect, Theme.RadiusSmall);
-            using var pen = new Pen(focused ? Theme.FocusBorder : Theme.InputBorder, focused ? 2f : 1f);
+        private Label MakeLabel(string text, int x, int y)
+        {
+            return new Label
+            {
+                Text = text,
+                Font = new Font("Segoe UI", 9.5f),
+                ForeColor = _textColor,
+                AutoSize = true,
+                Location = new Point(x, y),
+                BackColor = Color.Transparent
+            };
+        }
+
+        private (Panel wrapper, TextBox box) MakeTextInput(int x, int y, int width, int maxLength)
+        {
+            var wrapper = new Panel
+            {
+                Location = new Point(x, y),
+                Size = new Size(width, 34),
+                BackColor = _inputBg
+            };
+
+            var box = new TextBox
+            {
+                Location = new Point(12, 7),
+                Size = new Size(width - 24, 22),
+                Font = new Font("Segoe UI", 10.5f),
+                BorderStyle = BorderStyle.None,
+                BackColor = _inputBg,
+                ForeColor = _textColor,
+                MaxLength = maxLength
+            };
+
+            wrapper.Paint += (s, e) => PaintInputWrapper(e, wrapper, box);
+            box.Enter += (s, e) => wrapper.Invalidate();
+            box.Leave += (s, e) => wrapper.Invalidate();
+            wrapper.Controls.Add(box);
+
+            return (wrapper, box);
+        }
+
+        private void PaintInputWrapper(PaintEventArgs e, Panel wrapper, TextBox box)
+        {
+            bool focused = box.Focused && !box.ReadOnly;
+
+            e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
+            var rect = new Rectangle(0, 0, wrapper.Width - 1, wrapper.Height - 1);
+            using var path = GetRoundedRectPath(rect, 10);
+            using var pen = new Pen(focused ? _inputBorderFocus : _inputBorder, focused ? 1.6f : 1f);
             e.Graphics.DrawPath(pen, path);
         }
 
-        // ============================================================
-        // LOAD
-        // ============================================================
+        // ==================== HEADER (window chrome) ====================
+        private void BuildHeader()
+        {
+            headerPanel = new Panel
+            {
+                Dock = DockStyle.Top,
+                Height = HeaderHeight,
+                BackColor = _headerBg
+            };
+            headerPanel.MouseDown += HeaderPanel_MouseDown;
 
+            lblHeaderTitle = new Label
+            {
+                Text = "Product Details",
+                Font = new Font("Segoe UI", 12f, FontStyle.Bold),
+                ForeColor = _headerTitleColor,
+                AutoSize = true,
+                Location = new Point(20, 15),
+                BackColor = Color.Transparent
+            };
+            lblHeaderTitle.MouseDown += HeaderPanel_MouseDown;
+
+            btnMinimize = new Button
+            {
+                Text = "—",
+                ForeColor = _chromeIcon,
+                Font = new Font("Segoe UI", 12f, FontStyle.Bold),
+                Size = new Size(46, HeaderHeight),
+                Location = new Point(this.Width - 92, 0),
+                FlatStyle = FlatStyle.Flat,
+                TextAlign = ContentAlignment.MiddleCenter,
+                Cursor = Cursors.Hand,
+                Anchor = AnchorStyles.Top | AnchorStyles.Right,
+                BackColor = _headerBg,
+                TabStop = false
+            };
+            btnMinimize.FlatAppearance.BorderSize = 0;
+            btnMinimize.FlatAppearance.MouseOverBackColor = _chromeHoverBg;
+            btnMinimize.Click += (s, e) => this.WindowState = FormWindowState.Minimized;
+            btnMinimize.MouseEnter += (s, e) => btnMinimize.ForeColor = _chromeHoverFg;
+            btnMinimize.MouseLeave += (s, e) => btnMinimize.ForeColor = _chromeIcon;
+
+            btnCloseChrome = new Button
+            {
+                Text = "X",
+                ForeColor = _chromeIcon,
+                Font = new Font("Segoe UI", 10.5f, FontStyle.Bold),
+                Size = new Size(46, HeaderHeight),
+                Location = new Point(this.Width - 46, 0),
+                FlatStyle = FlatStyle.Flat,
+                TextAlign = ContentAlignment.MiddleCenter,
+                Cursor = Cursors.Hand,
+                Anchor = AnchorStyles.Top | AnchorStyles.Right,
+                BackColor = _headerBg,
+                TabStop = false
+            };
+            btnCloseChrome.FlatAppearance.BorderSize = 0;
+            btnCloseChrome.FlatAppearance.MouseOverBackColor = _closeHoverBg;
+            btnCloseChrome.Click += (s, e) =>
+            {
+                this.DialogResult = DialogResult.Cancel;
+                this.Close();
+            };
+            btnCloseChrome.MouseEnter += (s, e) => btnCloseChrome.ForeColor = Color.White;
+            btnCloseChrome.MouseLeave += (s, e) => btnCloseChrome.ForeColor = _chromeIcon;
+
+            headerPanel.Controls.Add(lblHeaderTitle);
+            headerPanel.Controls.Add(btnMinimize);
+            headerPanel.Controls.Add(btnCloseChrome);
+        }
+
+        private void HeaderPanel_MouseDown(object? sender, MouseEventArgs e)
+        {
+            if (e.Button == MouseButtons.Left)
+            {
+                ReleaseCapture();
+                SendMessage(this.Handle, WM_NCLBUTTONDOWN, HT_CAPTION, 0);
+            }
+        }
+
+        // ==================== EDGE-RESIZE SUPPORT ====================
+        protected override void WndProc(ref Message m)
+        {
+            base.WndProc(ref m);
+
+            if (m.Msg == WM_NCHITTEST && (int)m.Result == HTCLIENT
+                && this.WindowState != FormWindowState.Maximized)
+            {
+                Point screenPoint = new Point(m.LParam.ToInt32());
+                Point clientPoint = this.PointToClient(screenPoint);
+
+                int x = clientPoint.X;
+                int y = clientPoint.Y;
+                int width = this.ClientSize.Width;
+                int height = this.ClientSize.Height;
+
+                if (x <= ResizeBorderThickness && y <= ResizeBorderThickness)
+                    m.Result = (IntPtr)HTTOPLEFT;
+                else if (x >= width - ResizeBorderThickness && y <= ResizeBorderThickness)
+                    m.Result = (IntPtr)HTTOPRIGHT;
+                else if (x <= ResizeBorderThickness && y >= height - ResizeBorderThickness)
+                    m.Result = (IntPtr)HTBOTTOMLEFT;
+                else if (x >= width - ResizeBorderThickness && y >= height - ResizeBorderThickness)
+                    m.Result = (IntPtr)HTBOTTOMRIGHT;
+                else if (x <= ResizeBorderThickness)
+                    m.Result = (IntPtr)HTLEFT;
+                else if (x >= width - ResizeBorderThickness)
+                    m.Result = (IntPtr)HTRIGHT;
+                else if (y <= ResizeBorderThickness)
+                    m.Result = (IntPtr)HTTOP;
+                else if (y >= height - ResizeBorderThickness)
+                    m.Result = (IntPtr)HTBOTTOM;
+            }
+        }
+
+        // ==================== ROUNDING HELPERS ====================
+        private void ProductForm_Resize(object? sender, EventArgs e)
+        {
+            if (this.ClientRectangle.Width > 0 && this.ClientRectangle.Height > 0)
+            {
+                this.Region = new Region(GetRoundedRectPath(this.ClientRectangle, 18));
+            }
+        }
+
+        private GraphicsPath GetRoundedRectPath(Rectangle bounds, int radius)
+        {
+            var path = new GraphicsPath();
+            if (radius <= 0) radius = 1;
+
+            int d = radius * 2;
+            if (d > bounds.Width) d = bounds.Width;
+            if (d > bounds.Height) d = bounds.Height;
+
+            if (d <= 0)
+            {
+                path.AddRectangle(bounds);
+                return path;
+            }
+
+            path.AddArc(bounds.X, bounds.Y, d, d, 180, 90);
+            path.AddArc(bounds.Right - d, bounds.Y, d, d, 270, 90);
+            path.AddArc(bounds.Right - d, bounds.Bottom - d, d, d, 0, 90);
+            path.AddArc(bounds.X, bounds.Bottom - d, d, d, 90, 90);
+            path.CloseFigure();
+            return path;
+        }
+
+        private void ProductForm_KeyDown(object? sender, KeyEventArgs e)
+        {
+            if (e.KeyCode == Keys.Escape)
+            {
+                this.DialogResult = DialogResult.Cancel;
+                this.Close();
+            }
+        }
+
+        // ==================== LOAD / POPULATE ====================
         private async void ProductForm_LoadAsync(object? sender, EventArgs e)
         {
-            Animator.SlideFadeInForm(this, 180, 12);
+            this.Region = new Region(GetRoundedRectPath(this.ClientRectangle, 18));
 
             try
             {
                 var categories = await _categoryRepository.GetActiveAsync();
-                _cmbCategory.DataSource = categories;
+                cmbCategory.DataSource = categories;
             }
             catch (Exception)
             {
@@ -266,170 +503,80 @@ namespace TodangMotor.Forms
 
             if (IsEditMode)
             {
-                var p = _productToEdit!;
-                _txtProductName.Text = p.ProductName ?? string.Empty;
-                _txtBrand.Text = p.Brand ?? string.Empty;
-                _txtUnit.Text = p.Unit ?? "pcs";
-                _txtCostPrice.Text = p.CostPrice.ToString("0.00");
-                _txtSellingPrice.Text = p.SellingPrice.ToString("0.00");
-                _txtReorderLevel.Text = p.ReorderLevel.ToString();
-                _txtQuantityOnHand.Text = p.QuantityOnHand.ToString();
-                _txtNotes.Text = p.Notes ?? string.Empty;
-                _cmbCategory.SelectedValue = p.CategoryId;
-
-                _originalQuantity = p.QuantityOnHand;
+                lblHeaderTitle.Text = "Edit Product";
+                txtProductName.Text = _productToEdit!.ProductName;
+                txtBrand.Text = _productToEdit.Brand;
+                txtUnit.Text = _productToEdit.Unit;
+                txtCostPrice.Text = _productToEdit.CostPrice.ToString("0.00");
+                txtSellingPrice.Text = _productToEdit.SellingPrice.ToString("0.00");
+                txtReorderLevel.Text = _productToEdit.ReorderLevel.ToString();
+                txtQuantityOnHand.Text = $"{_productToEdit.QuantityOnHand} {_productToEdit.Unit}";
+                cmbCategory.SelectedValue = _productToEdit.CategoryId;
             }
             else
             {
-                _txtUnit.Text = "pcs";
-                _txtCostPrice.Text = "0";
-                _txtReorderLevel.Text = "5";
-                _txtQuantityOnHand.Text = "0";
-
-                if (_cmbCategory.Items.Count > 0)
-                    _cmbCategory.SelectedIndex = 0;
-
-                _originalQuantity = 0;
+                lblHeaderTitle.Text = "Add Product";
+                txtUnit.Text = "pcs";
+                txtCostPrice.Text = "0";
+                txtReorderLevel.Text = "5";
+                txtQuantityOnHand.Text = "0 (New Product)";
+                if (cmbCategory.Items.Count > 0)
+                    cmbCategory.SelectedIndex = 0;
             }
         }
 
-        // ============================================================
-        // SAVE
-        // ============================================================
-
-        private async Task SaveAsync()
+        // ==================== SAVE ====================
+        private async void BtnSave_Click(object? sender, EventArgs e)
         {
-            if (_cmbCategory.SelectedValue == null)
+            if (cmbCategory.SelectedValue == null)
             {
                 ShowError("Please select a category.");
                 return;
             }
 
-            int categoryId = (int)_cmbCategory.SelectedValue;
+            int categoryId = (int)cmbCategory.SelectedValue;
 
-            SetBusy(true);
+            btnSave.Enabled = false;
+            btnCancel.Enabled = false;
+
             try
             {
+                (bool success, string errorMessage) result;
+
                 if (IsEditMode)
                 {
-                    // 1. Save editable fields (and Notes).
-                    var update = await _productService.UpdateAsync(
-                        _productToEdit!.ProductId,
-                        categoryId,
-                        _txtProductName.Text,
-                        _txtBrand.Text,
-                        _txtUnit.Text,
-                        _txtCostPrice.Text,
-                        _txtSellingPrice.Text,
-                        _txtReorderLevel.Text,
-                        _txtNotes.Text);
-
-                    if (!update.Success)
-                    {
-                        ShowError(update.ErrorMessage);
-                        return;
-                    }
-
-                    // 2. If stock changed, log an adjustment.
-                    if (int.TryParse(_txtQuantityOnHand.Text.Trim(), out int newQty)
-                        && newQty != _originalQuantity)
-                    {
-                        var stockResult = await _productService.UpdateStockAsync(
-                            _productToEdit.ProductId,
-                            newQty,
-                            _txtNotes.Text);
-
-                        if (!stockResult.Success)
-                        {
-                            ShowError(stockResult.ErrorMessage);
-                            return;
-                        }
-                    }
-
-                    DialogResult = DialogResult.OK;
-                    Close();
+                    result = await _productService.UpdateAsync(
+                        _productToEdit!.ProductId, categoryId, txtProductName.Text, txtBrand.Text,
+                        txtUnit.Text, txtCostPrice.Text, txtSellingPrice.Text, txtReorderLevel.Text);
                 }
                 else
                 {
-                    // Add mode: create the product.
-                    var add = await _productService.AddAsync(
-                        categoryId,
-                        _txtProductName.Text,
-                        _txtBrand.Text,
-                        _txtUnit.Text,
-                        _txtCostPrice.Text,
-                        _txtSellingPrice.Text,
-                        _txtReorderLevel.Text,
-                        _txtNotes.Text);
+                    result = await _productService.AddAsync(
+                        categoryId, txtProductName.Text, txtBrand.Text,
+                        txtUnit.Text, txtCostPrice.Text, txtSellingPrice.Text, txtReorderLevel.Text);
+                }
 
-                    if (!add.Success)
-                    {
-                        ShowError(add.ErrorMessage);
-                        return;
-                    }
-
-                    // If Owner entered initial stock, log it as an adjustment.
-                    if (int.TryParse(_txtQuantityOnHand.Text.Trim(), out int initialQty)
-                        && initialQty > 0)
-                    {
-                        var stockResult = await _productService.UpdateStockAsync(
-                            add.NewProductId,
-                            initialQty,
-                            _txtNotes.Text);
-
-                        if (!stockResult.Success)
-                        {
-                            ShowError("Product created, but stock could not be set: " + stockResult.ErrorMessage);
-                            return;
-                        }
-                    }
-
-                    DialogResult = DialogResult.OK;
-                    Close();
+                if (result.success)
+                {
+                    this.DialogResult = DialogResult.OK;
+                    this.Close();
+                }
+                else
+                {
+                    ShowError(result.errorMessage);
                 }
             }
             finally
             {
-                SetBusy(false);
+                btnSave.Enabled = true;
+                btnCancel.Enabled = true;
             }
-        }
-
-        // ============================================================
-        // EVENTS
-        // ============================================================
-
-        private void ProductForm_KeyDown(object? sender, KeyEventArgs e)
-        {
-            if (e.KeyCode == Keys.Escape)
-            {
-                DialogResult = DialogResult.Cancel;
-                Close();
-            }
-        }
-
-        // ============================================================
-        // HELPERS
-        // ============================================================
-
-        private void SetBusy(bool busy)
-        {
-            _btnSave.Enabled = !busy;
-            _btnCancel.Enabled = !busy;
-            _txtProductName.Enabled = !busy;
-            _txtBrand.Enabled = !busy;
-            _cmbCategory.Enabled = !busy;
-            _txtUnit.Enabled = !busy;
-            _txtCostPrice.Enabled = !busy;
-            _txtSellingPrice.Enabled = !busy;
-            _txtReorderLevel.Enabled = !busy;
-            _txtQuantityOnHand.Enabled = !busy;
-            _txtNotes.Enabled = !busy;
         }
 
         private void ShowError(string message)
         {
-            _lblStatus.ForeColor = Theme.Danger;
-            _lblStatus.Text = message ?? string.Empty;
+            lblStatus.ForeColor = Color.Firebrick;
+            lblStatus.Text = message;
         }
     }
 }

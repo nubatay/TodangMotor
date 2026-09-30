@@ -1,5 +1,4 @@
-﻿using System.Data;
-using Dapper;
+﻿using Dapper;
 using TodangMotor.Models;
 
 namespace TodangMotor.Data
@@ -7,7 +6,7 @@ namespace TodangMotor.Data
     public class ProductRepository
     {
         // Returns ALL products (active AND inactive), all columns including
-        // CostPrice and Notes. Owner-only code paths only.
+        // CostPrice. This is only ever called from Owner-only code paths.
         public async Task<List<Product>> GetAllAsync()
         {
             using var connection = DbConnectionFactory.CreateConnection();
@@ -15,7 +14,7 @@ namespace TodangMotor.Data
             const string sql = @"
                 SELECT ProductId, CategoryId, ProductName, Brand, Unit,
                        CostPrice, SellingPrice, QuantityOnHand, ReorderLevel,
-                       IsActive, CreatedAt, UpdatedAt, Notes
+                       IsActive, CreatedAt, UpdatedAt
                 FROM Products
                 ORDER BY ProductName ASC;";
 
@@ -23,7 +22,8 @@ namespace TodangMotor.Data
             return products.ToList();
         }
 
-        // Fetch a single product by its Id.
+        // Fetch a single product by its Id (used when opening ProductForm
+        // in Edit mode).
         public async Task<Product?> GetByIdAsync(int productId)
         {
             using var connection = DbConnectionFactory.CreateConnection();
@@ -31,31 +31,34 @@ namespace TodangMotor.Data
             const string sql = @"
                 SELECT ProductId, CategoryId, ProductName, Brand, Unit,
                        CostPrice, SellingPrice, QuantityOnHand, ReorderLevel,
-                       IsActive, CreatedAt, UpdatedAt, Notes
+                       IsActive, CreatedAt, UpdatedAt
                 FROM Products
                 WHERE ProductId = @ProductId;";
 
             return await connection.QuerySingleOrDefaultAsync<Product>(sql, new { ProductId = productId });
         }
 
-        // CASE-SENSITIVE lookup on ProductName + Brand combination.
+        // Case-insensitive lookup on ProductName + Brand combination.
+        // Used by the Service for the duplicate check (Option B).
         public async Task<Product?> GetByNameAndBrandAsync(string productName, string brand)
         {
             using var connection = DbConnectionFactory.CreateConnection();
 
             const string sql = @"
-                SELECT TOP 1 ProductId, CategoryId, ProductName, Brand, Unit,
+                SELECT ProductId, CategoryId, ProductName, Brand, Unit,
                        CostPrice, SellingPrice, QuantityOnHand, ReorderLevel,
-                       IsActive, CreatedAt, UpdatedAt, Notes
+                       IsActive, CreatedAt, UpdatedAt
                 FROM Products
-                WHERE ProductName COLLATE SQL_Latin1_General_CP1_CS_AS = @ProductName
-                  AND Brand       COLLATE SQL_Latin1_General_CP1_CS_AS = @Brand;";
+                WHERE LOWER(ProductName) = LOWER(@ProductName)
+                  AND LOWER(Brand) = LOWER(@Brand);";
 
             return await connection.QuerySingleOrDefaultAsync<Product>(
                 sql, new { ProductName = productName, Brand = brand });
         }
 
-        // Inserts a brand-new product. QuantityOnHand always starts at 0.
+        // Inserts a brand-new product. QuantityOnHand always starts at 0 —
+        // it is NEVER set here, it only changes via Stock-In/Sales later.
+        // Returns the new ProductId (needed so the Form can refresh/select it).
         public async Task<int> InsertAsync(Product product)
         {
             using var connection = DbConnectionFactory.CreateConnection();
@@ -64,11 +67,11 @@ namespace TodangMotor.Data
                 INSERT INTO Products
                     (CategoryId, ProductName, Brand, Unit, CostPrice,
                      SellingPrice, QuantityOnHand, ReorderLevel, IsActive,
-                     CreatedAt, UpdatedAt, Notes)
+                     CreatedAt, UpdatedAt)
                 VALUES
                     (@CategoryId, @ProductName, @Brand, @Unit, @CostPrice,
                      @SellingPrice, 0, @ReorderLevel, 1,
-                     GETDATE(), GETDATE(), @Notes);
+                     GETDATE(), GETDATE());
 
                 SELECT CAST(SCOPE_IDENTITY() AS int);";
 
@@ -80,14 +83,14 @@ namespace TodangMotor.Data
                 product.Unit,
                 product.CostPrice,
                 product.SellingPrice,
-                product.ReorderLevel,
-                product.Notes
+                product.ReorderLevel
             });
 
             return newId;
         }
 
-        // Updates the editable fields (including Notes).
+        // Updates the 6 editable fields only. Deliberately does NOT touch
+        // QuantityOnHand or IsActive — those are handled elsewhere.
         public async Task<bool> UpdateAsync(Product product)
         {
             using var connection = DbConnectionFactory.CreateConnection();
@@ -101,7 +104,6 @@ namespace TodangMotor.Data
                     CostPrice     = @CostPrice,
                     SellingPrice  = @SellingPrice,
                     ReorderLevel  = @ReorderLevel,
-                    Notes         = @Notes,
                     UpdatedAt     = GETDATE()
                 WHERE ProductId = @ProductId;";
 
@@ -114,8 +116,7 @@ namespace TodangMotor.Data
                 product.Unit,
                 product.CostPrice,
                 product.SellingPrice,
-                product.ReorderLevel,
-                product.Notes
+                product.ReorderLevel
             });
 
             return rowsAffected > 0;
@@ -134,91 +135,6 @@ namespace TodangMotor.Data
 
             var rowsAffected = await connection.ExecuteAsync(
                 sql, new { ProductId = productId, IsActive = isActive });
-
-            return rowsAffected > 0;
-        }
-
-        // Updates QuantityOnHand and logs a StockMovements row in one
-        // atomic transaction.
-        public async Task<bool> UpdateStockWithMovementAsync(
-            int productId,
-            int quantityBefore,
-            int quantityAfter,
-            int userId,
-            string? notes)
-        {
-            using var connection = DbConnectionFactory.CreateConnection();
-            connection.Open();
-            using var transaction = connection.BeginTransaction();
-
-            try
-            {
-                const string updateSql = @"
-                    UPDATE Products
-                    SET QuantityOnHand = @QuantityAfter,
-                        UpdatedAt      = GETDATE()
-                    WHERE ProductId = @ProductId;";
-
-                var rows = await connection.ExecuteAsync(updateSql, new
-                {
-                    ProductId = productId,
-                    QuantityAfter = quantityAfter
-                }, transaction);
-
-                if (rows == 0)
-                {
-                    transaction.Rollback();
-                    return false;
-                }
-
-                const string insertSql = @"
-                    INSERT INTO StockMovements
-                        (ProductId, MovementType, QuantityChange,
-                         QuantityBefore, QuantityAfter, ReferenceId, UserId,
-                         MovementDate, Notes)
-                    VALUES
-                        (@ProductId, 'Adjustment', @QuantityChange,
-                         @QuantityBefore, @QuantityAfter, NULL, @UserId,
-                         GETDATE(), @Notes);";
-
-                await connection.ExecuteAsync(insertSql, new
-                {
-                    ProductId = productId,
-                    QuantityChange = quantityAfter - quantityBefore,
-                    QuantityBefore = quantityBefore,
-                    QuantityAfter = quantityAfter,
-                    UserId = userId,
-                    Notes = notes
-                }, transaction);
-
-                transaction.Commit();
-                return true;
-            }
-            catch
-            {
-                try { transaction.Rollback(); } catch { /* ignore */ }
-                throw;
-            }
-        }
-
-        // Updates only CostPrice. Used by Stock-In's "prompt after save"
-        // flow when the Owner accepts a delivery's new cost as the product's
-        // new baseline cost. UpdatedAt is stamped.
-        public async Task<bool> UpdateCostPriceAsync(int productId, decimal costPrice)
-        {
-            using var connection = DbConnectionFactory.CreateConnection();
-
-            const string sql = @"
-                UPDATE Products
-                SET CostPrice = @CostPrice,
-                    UpdatedAt = GETDATE()
-                WHERE ProductId = @ProductId;";
-
-            var rowsAffected = await connection.ExecuteAsync(sql, new
-            {
-                ProductId = productId,
-                CostPrice = costPrice
-            });
 
             return rowsAffected > 0;
         }
