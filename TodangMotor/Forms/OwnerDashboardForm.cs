@@ -25,6 +25,7 @@ namespace TodangMotor.Forms
         private const string KeyCategories = "categories";
         private const string KeySales = "sales";
         private const string KeyUsers = "users";
+        private const string KeySettings = "settings";
 
         private const string IconDashboard = "\uE80F";
         private const string IconInventory = "\uE7B8";
@@ -33,6 +34,7 @@ namespace TodangMotor.Forms
         private const string IconCategories = "\uE8EC";
         private const string IconSales = "\uE719";
         private const string IconUsers = "\uE77B";
+        private const string IconSettings = "\uE713";
         private const string IconLogout = "\uE7E8";
 
         // ============================================================
@@ -203,6 +205,7 @@ namespace TodangMotor.Forms
             AddNavItem(KeyCategories, IconCategories, "Categories");
             AddNavItem(KeySales, IconSales, "Sales");
             AddNavItem(KeyUsers, IconUsers, "Users");
+            AddNavItem(KeySettings, IconSettings, "Settings");
 
             _rootLayout.Controls.Add(_sidebar, 0, 0);
         }
@@ -216,12 +219,17 @@ namespace TodangMotor.Forms
                 BackColor = Theme.SidebarBg
             };
 
+            // Small blue tile with a white "T" — no image loaded.
             var logo = new LogoPlaceholder
             {
                 Width = 48,
                 Height = 48,
                 Radius = 12,
-                Location = new Point(20, 32)
+                Location = new Point(20, 32),
+                TileColor = Theme.Primary,
+                LetterColor = Color.White,
+                Letter = "T",
+                ForcePlaceholder = true
             };
 
             var ownerName = new Label
@@ -230,8 +238,8 @@ namespace TodangMotor.Forms
                 Font = new Font(Theme.UiFontFamily, 12F, FontStyle.Bold),
                 ForeColor = Color.White,
                 AutoSize = false,
-                Location = new Point(80, 32),
-                Size = new Size(128, 26),
+                Location = new Point(80, 30),
+                Size = new Size(128, 30),
                 TextAlign = ContentAlignment.MiddleLeft,
                 BackColor = Color.Transparent,
                 AutoEllipsis = false
@@ -302,7 +310,13 @@ namespace TodangMotor.Forms
             if (key == KeyDashboard)
             {
                 HeaderTitle = "Dashboard";
-                ShowContent(new DashboardHomeControl());
+                var home = new DashboardHomeControl();
+                home.NavigateRequested += navKey =>
+                {
+                    if (navKey == "inventory") NavigateTo(KeyInventory);
+                    else if (navKey == "sales") NavigateTo(KeySales);
+                };
+                ShowContent(home);
             }
             else if (key == KeyInventory)
             {
@@ -327,16 +341,17 @@ namespace TodangMotor.Forms
             else if (key == KeySales)
             {
                 HeaderTitle = "Sales";
-                ShowContent(new PlaceholderControl(
-                    "Sales",
-                    "The Sales (POS) module is coming in Module 6."));
+                ShowContent(new SalesHistoryControl());
             }
             else if (key == KeyUsers)
             {
                 HeaderTitle = "Users";
-                ShowContent(new PlaceholderControl(
-                    "Users",
-                    "User Management is coming in Module 9."));
+                ShowContent(new UserManagementControl());
+            }
+            else if (key == KeySettings)
+            {
+                HeaderTitle = "Settings";
+                ShowContent(new SettingsControl());
             }
         }
 

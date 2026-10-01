@@ -548,13 +548,13 @@ namespace TodangMotor.Common
 
     /// <summary>
     /// Flat, rounded dropdown that matches RoundedTextBox.
-    /// The native ComboBox arrow is clipped off the right edge by making
-    /// the inner control wider than the panel; our custom chevron is
-    /// drawn on top of the panel so it is the only arrow visible.
+    /// The native ComboBox arrow is clipped off the right edge; a small
+    /// overlay panel on top of the ComboBox paints our custom chevron.
     /// </summary>
     public class RoundedComboBox : Panel
     {
         private readonly ComboBox _inner;
+        private readonly Panel _arrowOverlay;
         private bool _focused;
         private bool _hoverArrow;
 
@@ -582,16 +582,44 @@ namespace TodangMotor.Common
                 BackColor = Theme.InputBackground,
                 ForeColor = Theme.TextPrimary,
                 Font = Theme.FontBody,
-                IntegralHeight = false,
-                DrawMode = DrawMode.OwnerDrawFixed,
-                ItemHeight = 22
+                IntegralHeight = false
             };
 
-            _inner.DrawItem += Inner_DrawItem;
-            _inner.GotFocus += (s, e) => { _focused = true; Invalidate(); };
-            _inner.LostFocus += (s, e) => { _focused = false; Invalidate(); };
+            _inner.GotFocus += (s, e) =>
+            {
+                _focused = true;
+                // Windows overrides BackColor with white when a ComboBox gets
+                // focus. Force it back on the next message pump cycle.
+                BeginInvoke(new Action(() =>
+                {
+                    if (!_inner.IsDisposed)
+                        _inner.BackColor = Theme.InputBackground;
+                }));
+                Invalidate();
+            };
+            _inner.LostFocus += (s, e) =>
+            {
+                _focused = false;
+                _inner.BackColor = Theme.InputBackground;
+                Invalidate();
+            };
 
             Controls.Add(_inner);
+
+            // Arrow overlay: sits on top of the ComboBox's right side,
+            // matching its background and painting our chevron.
+            _arrowOverlay = new Panel
+            {
+                BackColor = Theme.InputBackground,
+                Cursor = Cursors.Hand
+            };
+            _arrowOverlay.Paint += ArrowOverlay_Paint;
+            _arrowOverlay.Click += (s, e) => _inner.Focus();
+            _arrowOverlay.MouseEnter += (s, e) => { _hoverArrow = true; _arrowOverlay.Invalidate(); };
+            _arrowOverlay.MouseLeave += (s, e) => { _hoverArrow = false; _arrowOverlay.Invalidate(); };
+
+            Controls.Add(_arrowOverlay);
+            _arrowOverlay.BringToFront();
 
             Resize += (s, e) =>
             {
@@ -600,31 +628,52 @@ namespace TodangMotor.Common
             };
             Theme.ApplyRoundedRegion(this, Theme.RadiusSmall);
 
-            MouseEnter += (s, e) => { _hoverArrow = true; Invalidate(); };
-            MouseLeave += (s, e) => { _hoverArrow = false; Invalidate(); };
-            Click += (s, e) => _inner.Focus();
-
             LayoutInner();
         }
 
         /// <summary>
         /// Positions the inner ComboBox so its native dropdown arrow is
-        /// past the right edge of the panel and therefore clipped.
+        /// clipped past the right edge, and pins the arrow overlay just
+        /// inside the panel's right border.
         /// </summary>
         private void LayoutInner()
         {
-            if (_inner == null) return;
+            if (_inner == null || _arrowOverlay == null) return;
+            if (Width <= 0 || Height <= 0) return;
 
             int comboH = _inner.Height > 0 ? _inner.Height : 24;
             int y = Math.Max(0, (Height - comboH) / 2);
 
             _inner.Location = new Point(12, y);
-
-            // Extra 30 px puts the native dropdown arrow off-panel.
+            // Extra 30 px pushes the native arrow off the panel.
             _inner.Width = Width - 12 + 30;
-
-            // The dropdown list should open at the visible width, not the overflowed width.
             _inner.DropDownWidth = Math.Max(120, Width - 12);
+
+            // Arrow overlay: 32 px wide, inset 3 px from the right edge so
+            // it doesn't cover the panel's rounded border.
+            const int overlayW = 32;
+            int overlayH = Math.Max(comboH, 20);
+            int overlayX = Width - overlayW - 3;
+            int overlayY = Math.Max(2, (Height - overlayH) / 2);
+
+            _arrowOverlay.SetBounds(overlayX, overlayY, overlayW, overlayH);
+            _arrowOverlay.BringToFront();
+        }
+
+        private void ArrowOverlay_Paint(object? sender, PaintEventArgs e)
+        {
+            e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
+
+            Color arrowColor = _focused ? Theme.FocusBorder
+                              : _hoverArrow ? Theme.Primary
+                              : Theme.TextSecondary;
+
+            using var pen = new Pen(arrowColor, 1.6f);
+            int cx = _arrowOverlay.Width / 2;
+            int cy = _arrowOverlay.Height / 2;
+
+            e.Graphics.DrawLine(pen, cx - 4, cy - 1, cx, cy + 3);
+            e.Graphics.DrawLine(pen, cx, cy + 3, cx + 4, cy - 1);
         }
 
         [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
@@ -644,23 +693,7 @@ namespace TodangMotor.Common
             set => _inner.SelectedItem = value;
         }
 
-        private void Inner_DrawItem(object? sender, DrawItemEventArgs e)
-        {
-            if (e.Index < 0) return;
-
-            bool isSelected = (e.State & DrawItemState.Selected) == DrawItemState.Selected;
-
-            Color back = isSelected ? Theme.Primary : Theme.Surface;
-            Color fore = isSelected ? Color.White : Theme.TextPrimary;
-
-            using var backBrush = new SolidBrush(back);
-            e.Graphics.FillRectangle(backBrush, e.Bounds);
-
-            string text = _inner.Items[e.Index]?.ToString() ?? string.Empty;
-            var textRect = new Rectangle(e.Bounds.X + 8, e.Bounds.Y, e.Bounds.Width - 8, e.Bounds.Height);
-            TextRenderer.DrawText(e.Graphics, text, Theme.FontBody, textRect, fore,
-                TextFormatFlags.Left | TextFormatFlags.VerticalCenter);
-        }
+        public new void Focus() => _inner.Focus();
 
         protected override void OnPaint(PaintEventArgs e)
         {
@@ -669,20 +702,6 @@ namespace TodangMotor.Common
             using (var brush = new SolidBrush(Theme.InputBackground))
                 e.Graphics.FillRectangle(brush, ClientRectangle);
 
-            // Custom chevron on the right.
-            Color arrowColor = _focused ? Theme.FocusBorder
-                              : _hoverArrow ? Theme.Primary
-                              : Theme.TextSecondary;
-
-            using (var pen = new Pen(arrowColor, 1.6f))
-            {
-                int cx = Width - 18;
-                int cy = Height / 2;
-                e.Graphics.DrawLine(pen, cx - 4, cy - 1, cx, cy + 3);
-                e.Graphics.DrawLine(pen, cx, cy + 3, cx + 4, cy - 1);
-            }
-
-            // Rounded border.
             Color borderColor = _focused ? Theme.FocusBorder : Theme.InputBorder;
             float thickness = _focused ? 2f : 1f;
 

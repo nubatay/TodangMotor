@@ -7,10 +7,6 @@ using TodangMotor.Services;
 
 namespace TodangMotor.Forms
 {
-    /// <summary>
-    /// Split-screen login: branded blue panel on the left, login card on the right.
-    /// Borderless custom chrome with minimize + close only (no maximize).
-    /// </summary>
     public class LoginForm : ShellForm
     {
         private const int LeftPanelPercent = 45;
@@ -27,6 +23,10 @@ namespace TodangMotor.Forms
         private Button _minBtn;
         private bool _isBusy;
 
+        private System.Windows.Forms.Timer _lockoutTimer;
+        private int _lockoutSecondsRemaining;
+        private bool _lockoutActive;
+
         public LoginForm()
         {
             ShowHeader = false;
@@ -40,11 +40,19 @@ namespace TodangMotor.Forms
             KeyPreview = true;
             BackColor = Theme.Background;
 
+            _lockoutTimer = new System.Windows.Forms.Timer { Interval = 1000 };
+            _lockoutTimer.Tick += LockoutTimer_Tick;
+
             BuildLayout();
 
             KeyDown += LoginForm_KeyDown;
             Shown += LoginForm_Shown;
+            FormClosed += LoginForm_FormClosed;
         }
+
+        // ============================================================
+        // LAYOUT
+        // ============================================================
 
         private void BuildLayout()
         {
@@ -70,6 +78,8 @@ namespace TodangMotor.Forms
             ContentPanel.Controls.Add(split);
         }
 
+        // ---------------- LEFT PANEL — just a big logo ----------------
+
         private Panel BuildLeftPanel()
         {
             var panel = new Panel
@@ -78,44 +88,16 @@ namespace TodangMotor.Forms
                 BackColor = Theme.Primary
             };
 
+            // Large white card with the logo inside — aspect preserved.
+            // Large white card with the logo inside — aspect preserved.
             var logo = new LogoPlaceholder
             {
-                Width = 96,
-                Height = 96,
-                Radius = 20,
+                Width = 500,
+                Height = 170,
+                Radius = 24,
                 TileColor = Color.White,
                 LetterColor = Theme.Primary,
                 Letter = "T"
-            };
-
-            var brand = new Label
-            {
-                Text = "TODANG MOTOR",
-                Font = new Font(Theme.UiFontFamily, 22F, FontStyle.Bold),
-                ForeColor = Color.White,
-                AutoSize = false,
-                TextAlign = ContentAlignment.MiddleCenter,
-                Size = new Size(340, 40)
-            };
-
-            var subtitle = new Label
-            {
-                Text = "Parts & Accessories",
-                Font = new Font(Theme.UiFontFamily, 12F, FontStyle.Regular),
-                ForeColor = Color.FromArgb(230, 235, 255),
-                AutoSize = false,
-                TextAlign = ContentAlignment.MiddleCenter,
-                Size = new Size(340, 26)
-            };
-
-            var tagline = new Label
-            {
-                Text = "Inventory & Sales Management",
-                Font = Theme.FontSmall,
-                ForeColor = Color.FromArgb(200, 210, 245),
-                AutoSize = false,
-                TextAlign = ContentAlignment.MiddleCenter,
-                Size = new Size(340, 22)
             };
 
             var footer = new Label
@@ -131,26 +113,21 @@ namespace TodangMotor.Forms
             panel.Resize += (s, e) =>
             {
                 int cx = panel.ClientSize.Width / 2;
-                int logoY = (int)(panel.ClientSize.Height * 0.20);
-                int brandY = logoY + 96 + 20;
-                int subY = brandY + 40 + 4;
-                int tagY = subY + 26 + 18;
 
-                logo.Location = new Point(cx - logo.Width / 2, logoY);
-                brand.Location = new Point(cx - brand.Width / 2, brandY);
-                subtitle.Location = new Point(cx - subtitle.Width / 2, subY);
-                tagline.Location = new Point(cx - tagline.Width / 2, tagY);
-                footer.Location = new Point(cx - footer.Width / 2, panel.ClientSize.Height - 40);
+                logo.Left = cx - logo.Width / 2;
+                logo.Top = (panel.ClientSize.Height - logo.Height) / 2 - 20;
+
+                footer.Left = cx - footer.Width / 2;
+                footer.Top = panel.ClientSize.Height - 40;
             };
 
             panel.Controls.Add(logo);
-            panel.Controls.Add(brand);
-            panel.Controls.Add(subtitle);
-            panel.Controls.Add(tagline);
             panel.Controls.Add(footer);
 
             return panel;
         }
+
+        // ---------------- RIGHT PANEL — login card ----------------
 
         private Panel BuildRightPanel()
         {
@@ -199,7 +176,6 @@ namespace TodangMotor.Forms
                 BorderSize = 1
             };
 
-            // ---- Header ----
             var title = new Label
             {
                 Text = "Welcome Back",
@@ -222,7 +198,6 @@ namespace TodangMotor.Forms
                 Size = new Size(296, 22)
             };
 
-            // ---- Username ----
             var userLabel = new Label
             {
                 Text = "Username",
@@ -238,7 +213,6 @@ namespace TodangMotor.Forms
             _usernameBox.Placeholder = "Enter your username";
             _usernameBox.MaxLength = 50;
 
-            // ---- Password ----
             var passLabel = new Label
             {
                 Text = "Password",
@@ -255,7 +229,6 @@ namespace TodangMotor.Forms
             _passwordBox.MaxLength = 100;
             _passwordBox.ShowPasswordToggle = true;
 
-            // ---- Error ----
             _errorLabel = new Label
             {
                 Text = string.Empty,
@@ -267,7 +240,6 @@ namespace TodangMotor.Forms
                 Size = new Size(296, 22)
             };
 
-            // ---- Sign In ----
             _signInButton = UiFactory.CreateButton("Sign In", UiFactory.ButtonStyle.Primary, 296, 44);
             _signInButton.Location = new Point(32, 296);
             _signInButton.Click += async (s, e) => await DoSignInAsync();
@@ -335,9 +307,18 @@ namespace TodangMotor.Forms
                 Close();
         }
 
+        private void LoginForm_FormClosed(object sender, FormClosedEventArgs e)
+        {
+            if (_lockoutTimer != null)
+            {
+                _lockoutTimer.Stop();
+                _lockoutTimer.Dispose();
+            }
+        }
+
         private async void Input_KeyDown(object sender, KeyEventArgs e)
         {
-            if (e.KeyCode == Keys.Enter)
+            if (e.KeyCode == Keys.Enter && !_lockoutActive)
             {
                 e.SuppressKeyPress = true;
                 await DoSignInAsync();
@@ -350,7 +331,7 @@ namespace TodangMotor.Forms
 
         private async Task DoSignInAsync()
         {
-            if (_isBusy) return;
+            if (_isBusy || _lockoutActive) return;
 
             string username = (_usernameBox.Text ?? string.Empty).Trim();
             string password = _passwordBox.Text ?? string.Empty;
@@ -371,7 +352,8 @@ namespace TodangMotor.Forms
             SetBusy(true);
             try
             {
-                var (result, user) = await _authService.LoginAsync(username, password);
+                var (result, user, lockoutSeconds) =
+                    await _authService.LoginAsync(username, password);
 
                 switch (result)
                 {
@@ -381,8 +363,14 @@ namespace TodangMotor.Forms
                             ShowError("Login succeeded but no user was returned.");
                             return;
                         }
+                        StopLockoutCountdown();
                         SessionManager.Login(user);
                         OpenDashboardForCurrentUser();
+                        break;
+
+                    case LoginResult.LockedOut:
+                        StartLockoutCountdown(lockoutSeconds);
+                        _passwordBox.Text = string.Empty;
                         break;
 
                     case LoginResult.AccountDisabled:
@@ -418,9 +406,6 @@ namespace TodangMotor.Forms
             Hide();
             next.FormClosed += (s, e) =>
             {
-                // If the dashboard closed because of a logout
-                // (SessionManager cleared the current user), show the
-                // login form again instead of exiting the app.
                 if (!SessionManager.IsLoggedIn)
                 {
                     Show();
@@ -438,17 +423,74 @@ namespace TodangMotor.Forms
             next.Show();
         }
 
+        // ============================================================
+        // LOCKOUT COUNTDOWN
+        // ============================================================
+
+        private void StartLockoutCountdown(int seconds)
+        {
+            if (seconds <= 0) seconds = 1;
+
+            _lockoutActive = true;
+            _lockoutSecondsRemaining = seconds;
+
+            UpdateLockoutMessage();
+            SetBusy(false);
+
+            _lockoutTimer.Stop();
+            _lockoutTimer.Start();
+        }
+
+        private void StopLockoutCountdown()
+        {
+            _lockoutActive = false;
+            _lockoutSecondsRemaining = 0;
+            _lockoutTimer.Stop();
+        }
+
+        private void LockoutTimer_Tick(object? sender, EventArgs e)
+        {
+            _lockoutSecondsRemaining--;
+
+            if (_lockoutSecondsRemaining <= 0)
+            {
+                StopLockoutCountdown();
+                _errorLabel.Text = string.Empty;
+                SetBusy(false);
+                _usernameBox.FocusInput();
+            }
+            else
+            {
+                UpdateLockoutMessage();
+            }
+        }
+
+        private void UpdateLockoutMessage()
+        {
+            int min = _lockoutSecondsRemaining / 60;
+            int sec = _lockoutSecondsRemaining % 60;
+            _errorLabel.ForeColor = Theme.Danger;
+            _errorLabel.Text = $"Account locked. Try again in {min}:{sec:00}.";
+        }
+
+        // ============================================================
+        // HELPERS
+        // ============================================================
+
         private void SetBusy(bool busy)
         {
             _isBusy = busy;
-            _signInButton.Enabled = !busy;
+            bool enabled = !busy && !_lockoutActive;
+
+            _signInButton.Enabled = enabled;
             _signInButton.Text = busy ? "Signing in..." : "Sign In";
-            _usernameBox.Enabled = !busy;
-            _passwordBox.Enabled = !busy;
+            _usernameBox.Enabled = enabled;
+            _passwordBox.Enabled = enabled;
         }
 
         private void ShowError(string message)
         {
+            _errorLabel.ForeColor = Theme.Danger;
             _errorLabel.Text = message ?? string.Empty;
         }
     }

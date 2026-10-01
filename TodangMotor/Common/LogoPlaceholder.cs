@@ -3,26 +3,24 @@ using System.ComponentModel;
 using System.Drawing;
 using System.Drawing.Drawing2D;
 using System.IO;
-using System.Reflection;
 using System.Windows.Forms;
 
 namespace TodangMotor.Common
 {
     /// <summary>
     /// The Todang Motor logo mark.
-    /// If a real logo image exists at TodangMotor/Assets/Logo.png, it is drawn.
-    /// Otherwise, a brand-blue rounded tile with a white "T" is shown as a placeholder.
-    /// Drop-in replacement: no code change required when the real logo arrives.
+    /// If a real logo image exists at Assets/Logo.png, it is drawn with
+    /// aspect ratio preserved. Otherwise, a rounded tile with a letter is shown.
+    /// Set ForcePlaceholder = true to always use the letter tile (ignores the image).
     /// </summary>
     public class LogoPlaceholder : Control
     {
         // ============================================================
-        // STATIC HELPERS — where the real logo lives
+        // STATIC HELPERS
         // ============================================================
 
         /// <summary>
-        /// Full path where a real logo PNG is expected.
-        /// Looked up relative to the running assembly so it works in Debug and Release.
+        /// Full path where the real logo PNG is expected.
         /// </summary>
         public static string RealLogoPath
         {
@@ -33,19 +31,19 @@ namespace TodangMotor.Common
             }
         }
 
-        /// <summary>True when a real logo PNG exists on disk.</summary>
         public static bool HasRealLogo => File.Exists(RealLogoPath);
 
         // ============================================================
         // INSTANCE
         // ============================================================
 
-        private int _radius = 10;
-        private Color _backgroundColor = Theme.Primary;
-        private Color _letterColor = Color.White;
+        private int _radius = 12;
+        private Color _backgroundColor = Color.White;
+        private Color _letterColor = Theme.Primary;
         private string _letter = "T";
-        private Image _cachedImage;
+        private Image? _cachedImage;
         private bool _imageLoadAttempted;
+        private bool _forcePlaceholder;
 
         public LogoPlaceholder()
         {
@@ -64,10 +62,6 @@ namespace TodangMotor.Common
             ApplyRegion();
         }
 
-        // ------------------------------------------------------------
-        // PROPERTIES
-        // ------------------------------------------------------------
-
         [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
         public int Radius
         {
@@ -79,7 +73,7 @@ namespace TodangMotor.Common
         public Color TileColor
         {
             get => _backgroundColor;
-            set { _backgroundColor = value; Invalidate(); }
+            set { _backgroundColor = value; ApplyRegion(); Invalidate(); }
         }
 
         [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
@@ -100,45 +94,63 @@ namespace TodangMotor.Common
             }
         }
 
-        // ------------------------------------------------------------
-        // HELPERS
-        // ------------------------------------------------------------
+        /// <summary>
+        /// When true, the control always draws the fallback tile + letter,
+        /// ignoring any real logo file on disk. Used by sidebars that want
+        /// the compact monogram instead of the full brand lockup.
+        /// </summary>
+        [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
+        public bool ForcePlaceholder
+        {
+            get => _forcePlaceholder;
+            set
+            {
+                if (_forcePlaceholder == value) return;
+                _forcePlaceholder = value;
+                Invalidate();
+            }
+        }
 
         private void ApplyRegion()
         {
             if (Width <= 0 || Height <= 0) return;
+
+            // No clipping region when the tile is transparent.
+            if (_backgroundColor.A == 0 || _radius <= 0)
+            {
+                var old = Region;
+                Region = null;
+                old?.Dispose();
+                return;
+            }
+
             Theme.ApplyRoundedRegion(this, _radius);
         }
 
-        /// <summary>
-        /// Loads the real logo once and caches it. Returns null when no real logo exists.
-        /// </summary>
-        private Image TryGetCachedImage()
+        private Image? TryGetCachedImage()
         {
+            if (_forcePlaceholder) return null;
             if (_imageLoadAttempted) return _cachedImage;
             _imageLoadAttempted = true;
 
             try
             {
-                if (File.Exists(RealLogoPath))
+                string path = RealLogoPath;
+                if (File.Exists(path))
                 {
-                    // Copy into memory so the file is not locked on disk.
-                    using (var fs = new FileStream(RealLogoPath, FileMode.Open, FileAccess.Read))
-                    {
-                        _cachedImage = Image.FromStream(fs);
-                    }
+                    using var fs = new FileStream(path, FileMode.Open, FileAccess.Read);
+                    _cachedImage = Image.FromStream(fs);
                 }
             }
             catch
             {
-                // If the file is corrupt or unreadable, silently fall back to the placeholder letter.
                 _cachedImage = null;
             }
             return _cachedImage;
         }
 
         // ------------------------------------------------------------
-        // PAINTING
+        // PAINT
         // ------------------------------------------------------------
 
         protected override void OnPaint(PaintEventArgs e)
@@ -147,55 +159,55 @@ namespace TodangMotor.Common
             e.Graphics.InterpolationMode = InterpolationMode.HighQualityBicubic;
             e.Graphics.PixelOffsetMode = PixelOffsetMode.HighQuality;
 
-            // Clear to parent background so rounded corners blend in.
             e.Graphics.Clear(Parent?.BackColor ?? Color.Transparent);
 
             var rect = new Rectangle(0, 0, Width - 1, Height - 1);
             using (var path = Theme.RoundedRect(rect, _radius))
             {
-                // 1. Base tile fill.
-                using (var brush = new SolidBrush(_backgroundColor))
+                // Tile fill (skipped when TileColor is transparent).
+                if (_backgroundColor.A > 0)
+                {
+                    using var brush = new SolidBrush(_backgroundColor);
                     e.Graphics.FillPath(brush, path);
+                }
 
-                // 2. Real logo, if present.
                 var img = TryGetCachedImage();
                 if (img != null)
                 {
-                    // Draw the logo centered, scaled to fit inside the tile with 3px inner padding.
-                    int pad = 3;
-                    var target = new Rectangle(
-                        pad, pad,
-                        Math.Max(1, Width - pad * 2),
-                        Math.Max(1, Height - pad * 2));
+                    // Aspect-preserving fit inside the tile with minimal padding.
+                    int pad = 1;
+                    int innerW = Math.Max(1, Width - pad * 2);
+                    int innerH = Math.Max(1, Height - pad * 2);
 
-                    e.Graphics.DrawImage(img, target);
+                    float scaleX = (float)innerW / img.Width;
+                    float scaleY = (float)innerH / img.Height;
+                    float scale = Math.Min(scaleX, scaleY);
+
+                    int drawW = Math.Max(1, (int)(img.Width * scale));
+                    int drawH = Math.Max(1, (int)(img.Height * scale));
+                    int drawX = (Width - drawW) / 2;
+                    int drawY = (Height - drawH) / 2;
+
+                    e.Graphics.DrawImage(img, drawX, drawY, drawW, drawH);
                 }
                 else
                 {
-                    // 3. Placeholder letter, centered.
+                    // Fallback: rounded tile with a bold letter.
                     using (var brush = new SolidBrush(_letterColor))
+                    using (var fmt = new StringFormat
                     {
-                        using (var fmt = new StringFormat
-                        {
-                            Alignment = StringAlignment.Center,
-                            LineAlignment = StringAlignment.Center
-                        })
-                        {
-                            // Size the letter relative to tile size.
-                            float fontSize = Math.Max(12f, Width * 0.45f);
-                            using (var font = new Font("Segoe UI", fontSize, FontStyle.Bold, GraphicsUnit.Pixel))
-                            {
-                                e.Graphics.DrawString(_letter, font, brush, new RectangleF(0, 0, Width, Height), fmt);
-                            }
-                        }
+                        Alignment = StringAlignment.Center,
+                        LineAlignment = StringAlignment.Center
+                    })
+                    {
+                        float fontSize = Math.Max(12f, Math.Min(Width, Height) * 0.45f);
+                        using var font = new Font("Segoe UI", fontSize, FontStyle.Bold, GraphicsUnit.Pixel);
+                        e.Graphics.DrawString(_letter, font, brush,
+                            new RectangleF(0, 0, Width, Height), fmt);
                     }
                 }
             }
         }
-
-        // ------------------------------------------------------------
-        // DISPOSE
-        // ------------------------------------------------------------
 
         protected override void Dispose(bool disposing)
         {

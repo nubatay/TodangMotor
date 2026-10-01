@@ -24,4 +24,10 @@
     <None Include="C:\Users\Acer\source\repos\TodangMotor\TodangMotor\Controls\.editorconfig" />
   </ItemGroup>
 
+  <ItemGroup>
+    <None Update="Assets\Logo.png">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
+
 </Project>

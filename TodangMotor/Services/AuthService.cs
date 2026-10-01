@@ -1,40 +1,44 @@
-﻿using BCrypt.Net;
+﻿using System;
+using BCrypt.Net;
 using TodangMotor.Data;
 using TodangMotor.Models;
 
 namespace TodangMotor.Services
 {
     /// <summary>
-    /// This is a small "traffic light" label that tells the LoginForm
-    /// WHY a login attempt succeeded or failed, so it can show the
-    /// right message to the user.
+    /// The "traffic light" that tells the LoginForm WHY a login attempt
+    /// succeeded or failed, so it can show the right message.
     /// </summary>
     public enum LoginResult
     {
         Success,
         InvalidCredentials,
-        AccountDisabled
+        AccountDisabled,
+        LockedOut
     }
 
     /// <summary>
-    /// This class is the "brain" of login logic.
-    /// It decides what counts as a valid login, and handles creating
-    /// the very first Owner account automatically.
+    /// The "brain" of login logic. Decides what counts as a valid login,
+    /// seeds the initial Owner on first run, and enforces the lockout
+    /// policy for repeated failed attempts.
     /// </summary>
     public class AuthService
     {
         private readonly UserRepository _userRepository;
+
+        // Lockout policy — locked decisions from Module 9 planning.
+        private const int MaxFailedAttempts = 3;
+        private const int LockoutDurationSecs = 500;
 
         public AuthService()
         {
             _userRepository = new UserRepository();
         }
 
-        /// <summary>
-        /// Checks if the Users table is completely empty.
-        /// If it is, creates the default Owner account automatically.
-        /// This should run once, when the app starts up.
-        /// </summary>
+        // ============================================================
+        // FIRST-RUN OWNER SEED
+        // ============================================================
+
         public async Task SeedOwnerIfNeededAsync()
         {
             bool usersExist = await _userRepository.AnyUsersExistAsync();
@@ -52,59 +56,62 @@ namespace TodangMotor.Services
             }
         }
 
-        /// <summary>
-        /// TEMPORARY SCAFFOLDING (remove once Module 9 / User Management exists).
-        /// Checks if a user named "cashier" already exists. If not, creates a
-        /// default test Cashier account so Cashier-side access restrictions can
-        /// be tested before the real "Add User" screen is built.
-        /// Password is BCrypt-hashed, never stored as plaintext.
-        /// </summary>
-        public async Task SeedTestCashierIfNeededAsync()
-        {
-            User? existingCashier = await _userRepository.GetByUsernameAsync("cashier");
+        // ============================================================
+        // LOGIN
+        // ============================================================
 
-            if (existingCashier == null)
-            {
-                string hashedPassword = BCrypt.Net.BCrypt.HashPassword("cashier123");
-
-                await _userRepository.InsertAsync(
-                    username: "cashier",
-                    passwordHash: hashedPassword,
-                    fullName: "Test Cashier",
-                    role: "Cashier"
-                );
-            }
-        }
-
-        /// <summary>
-        /// Tries to log a user in.
-        /// Returns a LoginResult (Success / InvalidCredentials / AccountDisabled)
-        /// and the User object if login succeeded (null otherwise).
-        /// </summary>
-        public async Task<(LoginResult Result, User? User)> LoginAsync(string username, string password)
+        public async Task<(LoginResult Result, User? UserRecord, int LockoutSecondsRemaining)> LoginAsync(
+            string username, string password)
         {
             string trimmedUsername = username.Trim();
 
             User? user = await _userRepository.GetByUsernameAsync(trimmedUsername);
 
+            // ---- Unknown username: no counter, no lockout (L3 = B) ----
             if (user == null)
             {
-                return (LoginResult.InvalidCredentials, null);
+                return (LoginResult.InvalidCredentials, null, 0);
             }
 
+            // ---- Already locked out? ----
+            if (user.LockoutUntil.HasValue && user.LockoutUntil.Value > DateTime.Now)
+            {
+                int secondsLeft = (int)Math.Ceiling(
+                    (user.LockoutUntil.Value - DateTime.Now).TotalSeconds);
+
+                if (secondsLeft < 0) secondsLeft = 0;
+
+                return (LoginResult.LockedOut, null, secondsLeft);
+            }
+
+            // ---- Verify password ----
             bool passwordMatches = BCrypt.Net.BCrypt.Verify(password, user.PasswordHash);
 
             if (!passwordMatches)
             {
-                return (LoginResult.InvalidCredentials, null);
+                int newCount = await _userRepository.IncrementFailedAttemptsAsync(user.UserId);
+
+                if (newCount >= MaxFailedAttempts)
+                {
+                    var until = DateTime.Now.AddSeconds(LockoutDurationSecs);
+                    await _userRepository.SetLockoutUntilAsync(user.UserId, until);
+
+                    return (LoginResult.LockedOut, null, LockoutDurationSecs);
+                }
+
+                return (LoginResult.InvalidCredentials, null, 0);
             }
 
+            // ---- Account disabled? ----
             if (!user.IsActive)
             {
-                return (LoginResult.AccountDisabled, null);
+                return (LoginResult.AccountDisabled, null, 0);
             }
 
-            return (LoginResult.Success, user);
+            // ---- Success: clear any accumulated attempts ----
+            await _userRepository.ResetLoginAttemptsAsync(user.UserId);
+
+            return (LoginResult.Success, user, 0);
         }
     }
 }

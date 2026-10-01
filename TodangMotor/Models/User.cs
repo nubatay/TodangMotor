@@ -16,5 +16,17 @@ namespace TodangMotor.Models
         public string Role { get; set; } = string.Empty;
         public bool IsActive { get; set; }
         public DateTime CreatedAt { get; set; }
+
+        /// <summary>
+        /// Number of consecutive failed login attempts.
+        /// Resets to 0 on successful login or when a lockout starts.
+        /// </summary>
+        public int FailedLoginAttempts { get; set; }
+
+        /// <summary>
+        /// When the account is currently locked out, this holds the
+        /// timestamp when the lockout expires. Null = not locked.
+        /// </summary>
+        public DateTime? LockoutUntil { get; set; }
     }
 }

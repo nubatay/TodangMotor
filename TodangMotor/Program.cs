@@ -27,7 +27,7 @@ namespace TodangMotor
                 // exists, so Cashier-side access restrictions can be tested
                 // before Module 9 (User Management) is built. Remove this call
                 // once there's a real "Add User" screen for creating Cashiers.
-                authService.SeedTestCashierIfNeededAsync().GetAwaiter().GetResult();
+                
             }
             catch (Exception ex)
             {
