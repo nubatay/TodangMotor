@@ -1,4 +1,8 @@
-﻿using System.Globalization;
+﻿using System;
+using System.Collections.Generic;
+using System.Globalization;
+using System.Linq;
+using System.Text.RegularExpressions;
 using TodangMotor.Common;
 using TodangMotor.Data;
 using TodangMotor.Models;
@@ -9,16 +13,24 @@ namespace TodangMotor.Services
     {
         private readonly ProductRepository _productRepository;
         private readonly CategoryRepository _categoryRepository;
+        private readonly SupplierRepository _supplierRepository;
 
         private const int ProductNameMaxLength = 150;
         private const int BrandMaxLength = 100;
         private const int UnitMaxLength = 20;
         private const int NotesMaxLength = 500;
+        private const int SkuMaxLength = 50;
+        private const int DescriptionMaxLength = 500;
+
+        // SKU allowed characters: letters, digits, dash, underscore, dot.
+        private static readonly Regex SkuPattern = new(
+            @"^[A-Za-z0-9\-_.]+$", RegexOptions.Compiled);
 
         public ProductService()
         {
             _productRepository = new ProductRepository();
             _categoryRepository = new CategoryRepository();
+            _supplierRepository = new SupplierRepository();
         }
 
         // ==================== READ ====================
@@ -58,19 +70,49 @@ namespace TodangMotor.Services
             }
         }
 
+        /// <summary>
+        /// Active products supplied by the given supplier — used by Stock-In.
+        /// </summary>
+        public async Task<(bool Success, string ErrorMessage, List<Product> Products)>
+            GetBySupplierAsync(int supplierId)
+        {
+            if (!SessionManager.IsOwner)
+                return (false, "Access denied.", new List<Product>());
+
+            if (supplierId <= 0)
+                return (false, "Please select a supplier.", new List<Product>());
+
+            try
+            {
+                var products = await _productRepository.GetBySupplierIdAsync(supplierId);
+                return (true, string.Empty, products);
+            }
+            catch (Exception)
+            {
+                return (false, "Could not load products for this supplier.", new List<Product>());
+            }
+        }
+
         // ==================== ADD ====================
 
         public async Task<(bool Success, string ErrorMessage, int NewProductId)> AddAsync(
             int categoryId, string productName, string brand, string unit,
             string costPriceText, string sellingPriceText, string reorderLevelText,
-            string notes)
+            string notes,
+            string? sku = null,
+            DateTime? expirationDate = null,
+            string? description = null,
+            int? supplierId = null,
+            List<int>? alternateSupplierIds = null)
         {
             if (!SessionManager.IsOwner)
                 return (false, "Access denied. Only the Owner can manage products.", 0);
 
             var (valid, errorMessage, cleanProduct) = await ValidateAndBuildAsync(
-                categoryId, productName, brand, unit, costPriceText, sellingPriceText, reorderLevelText,
-                notes, excludingProductId: null);
+                categoryId, productName, brand, unit,
+                costPriceText, sellingPriceText, reorderLevelText, notes,
+                sku, expirationDate, description, supplierId,
+                excludingProductId: null);
 
             if (!valid)
                 return (false, errorMessage, 0);
@@ -78,11 +120,24 @@ namespace TodangMotor.Services
             try
             {
                 var newId = await _productRepository.InsertAsync(cleanProduct!);
+
+                // Save alternate suppliers (Phase 2 will pass these; Phase 1 callers
+                // leave them null).
+                if (alternateSupplierIds != null && alternateSupplierIds.Count > 0)
+                {
+                    // Validate alternates before saving.
+                    var (altsValid, altsError) = await ValidateAlternateSuppliersAsync(alternateSupplierIds);
+                    if (!altsValid)
+                        return (false, altsError, newId);
+
+                    await _productRepository.SetAlternateSuppliersAsync(newId, alternateSupplierIds);
+                }
+
                 return (true, string.Empty, newId);
             }
             catch (Microsoft.Data.SqlClient.SqlException ex) when (ex.Number == 2627 || ex.Number == 2601)
             {
-                return (false, "A product with this name and brand already exists.", 0);
+                return (false, "A product with this name and brand already exists, or the SKU is already used.", 0);
             }
             catch (Exception)
             {
@@ -95,7 +150,12 @@ namespace TodangMotor.Services
         public async Task<(bool Success, string ErrorMessage)> UpdateAsync(
             int productId, int categoryId, string productName, string brand, string unit,
             string costPriceText, string sellingPriceText, string reorderLevelText,
-            string notes)
+            string notes,
+            string? sku = null,
+            DateTime? expirationDate = null,
+            string? description = null,
+            int? supplierId = null,
+            List<int>? alternateSupplierIds = null)
         {
             if (!SessionManager.IsOwner)
                 return (false, "Access denied. Only the Owner can manage products.");
@@ -105,8 +165,10 @@ namespace TodangMotor.Services
                 return (false, "Product not found.");
 
             var (valid, errorMessage, cleanProduct) = await ValidateAndBuildAsync(
-                categoryId, productName, brand, unit, costPriceText, sellingPriceText, reorderLevelText,
-                notes, excludingProductId: productId);
+                categoryId, productName, brand, unit,
+                costPriceText, sellingPriceText, reorderLevelText, notes,
+                sku, expirationDate, description, supplierId,
+                excludingProductId: productId);
 
             if (!valid)
                 return (false, errorMessage);
@@ -119,11 +181,21 @@ namespace TodangMotor.Services
                 if (!updated)
                     return (false, "Product not found.");
 
+                // Replace alternate suppliers if provided.
+                if (alternateSupplierIds != null)
+                {
+                    var (altsValid, altsError) = await ValidateAlternateSuppliersAsync(alternateSupplierIds);
+                    if (!altsValid)
+                        return (false, altsError);
+
+                    await _productRepository.SetAlternateSuppliersAsync(productId, alternateSupplierIds);
+                }
+
                 return (true, string.Empty);
             }
             catch (Microsoft.Data.SqlClient.SqlException ex) when (ex.Number == 2627 || ex.Number == 2601)
             {
-                return (false, "A product with this name and brand already exists.");
+                return (false, "A product with this name and brand already exists, or the SKU is already used.");
             }
             catch (Exception)
             {
@@ -185,13 +257,6 @@ namespace TodangMotor.Services
 
         // ==================== UPDATE COST PRICE (Stock-In prompt) ====================
 
-        /// <summary>
-        /// Batch-updates CostPrice for multiple products.
-        /// Called by StockInForm after the Owner accepts the prompt-after-save.
-        /// Skips any product whose new cost would exceed its current SellingPrice —
-        /// a second safety net against violating the locked rule.
-        /// Returns the number of products actually updated.
-        /// </summary>
         public async Task<(bool Success, string ErrorMessage, int UpdatedCount)> UpdateCostPricesAsync(
             List<(int ProductId, decimal NewCost)> updates)
         {
@@ -212,10 +277,7 @@ namespace TodangMotor.Services
                     var product = await _productRepository.GetByIdAsync(productId);
                     if (product == null) continue;
 
-                    // Safety net: never allow CostPrice to exceed SellingPrice.
                     if (newCost > product.SellingPrice) continue;
-
-                    // No-op: skip if unchanged.
                     if (newCost == product.CostPrice) continue;
 
                     await _productRepository.UpdateCostPriceAsync(productId, newCost);
@@ -293,7 +355,9 @@ namespace TodangMotor.Services
         private async Task<(bool Valid, string ErrorMessage, Product? Product)> ValidateAndBuildAsync(
             int categoryId, string productName, string brand, string unit,
             string costPriceText, string sellingPriceText, string reorderLevelText,
-            string notes, int? excludingProductId)
+            string notes,
+            string? sku, DateTime? expirationDate, string? description, int? supplierId,
+            int? excludingProductId)
         {
             // ---- ProductName ----
             if (string.IsNullOrWhiteSpace(productName))
@@ -362,6 +426,42 @@ namespace TodangMotor.Services
                     return (false, $"Notes cannot exceed {NotesMaxLength} characters.", null);
             }
 
+            // ---- SKU (optional, unique when provided) ----
+            string? cleanSku = string.IsNullOrWhiteSpace(sku) ? null : sku.Trim();
+
+            if (cleanSku != null)
+            {
+                if (cleanSku.Length > SkuMaxLength)
+                    return (false, $"SKU cannot exceed {SkuMaxLength} characters.", null);
+
+                if (!SkuPattern.IsMatch(cleanSku))
+                    return (false, "SKU may only contain letters, digits, dash, underscore, and dot.", null);
+
+                var existingSku = await _productRepository.GetBySkuAsync(cleanSku);
+                if (existingSku != null && existingSku.ProductId != excludingProductId)
+                    return (false, $"SKU \"{cleanSku}\" is already in use.", null);
+            }
+
+            // ---- ExpirationDate (optional, must be in the future) ----
+            if (expirationDate.HasValue && expirationDate.Value.Date < DateTime.Now.Date)
+                return (false, "Expiration date cannot be in the past.", null);
+
+            // ---- Description (optional) ----
+            string? cleanDescription = string.IsNullOrWhiteSpace(description) ? null : description.Trim();
+            if (cleanDescription != null && cleanDescription.Length > DescriptionMaxLength)
+                return (false, $"Description cannot exceed {DescriptionMaxLength} characters.", null);
+
+            // ---- SupplierId (Phase 1: optional. Phase 2: required when ProductForm is updated.) ----
+            if (supplierId.HasValue && supplierId.Value > 0)
+            {
+                var supplier = await _supplierRepository.GetByIdAsync(supplierId.Value);
+                if (supplier == null)
+                    return (false, "The selected supplier no longer exists.", null);
+
+                if (!supplier.IsActive)
+                    return (false, "The selected supplier is inactive.", null);
+            }
+
             // ---- Duplicate check: ProductName + Brand (case-sensitive) ----
             var existingMatch = await _productRepository.GetByNameAndBrandAsync(productName, brand);
             if (existingMatch != null && existingMatch.ProductId != excludingProductId)
@@ -376,10 +476,35 @@ namespace TodangMotor.Services
                 CostPrice = costPrice,
                 SellingPrice = sellingPrice,
                 ReorderLevel = reorderLevel,
-                Notes = string.IsNullOrWhiteSpace(notes) ? null : notes
+                Notes = string.IsNullOrWhiteSpace(notes) ? null : notes,
+                SKU = cleanSku,
+                ExpirationDate = expirationDate,
+                Description = cleanDescription,
+                SupplierId = (supplierId.HasValue && supplierId.Value > 0) ? supplierId.Value : null
             };
 
             return (true, string.Empty, product);
+        }
+
+        private async Task<(bool Valid, string ErrorMessage)> ValidateAlternateSuppliersAsync(List<int> supplierIds)
+        {
+            if (supplierIds == null || supplierIds.Count == 0)
+                return (true, string.Empty);
+
+            foreach (var id in supplierIds.Distinct())
+            {
+                if (id <= 0)
+                    return (false, "One of the alternate suppliers is invalid.");
+
+                var supplier = await _supplierRepository.GetByIdAsync(id);
+                if (supplier == null)
+                    return (false, $"An alternate supplier (ID {id}) no longer exists.");
+
+                if (!supplier.IsActive)
+                    return (false, $"Alternate supplier \"{supplier.SupplierName}\" is inactive.");
+            }
+
+            return (true, string.Empty);
         }
     }
 }

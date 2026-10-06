@@ -2,25 +2,13 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
+using TodangMotor.Common;
 using TodangMotor.Data;
 using TodangMotor.Models;
 
 namespace TodangMotor.Services
 {
-    // ================================================================
-    // PUBLIC TYPES
-    // ================================================================
-
-    /// <summary>Which period the dashboard is showing.</summary>
-    public enum DashboardRange
-    {
-        Today,
-        ThisWeek,
-        ThisMonth,
-        AllTime
-    }
-
-    /// <summary>One bar of the dashboard chart.</summary>
+    /// <summary>One bar of the dashboard sales chart.</summary>
     public class ChartBucket
     {
         public string Label { get; set; } = string.Empty;
@@ -35,20 +23,30 @@ namespace TodangMotor.Services
         public decimal CostTotal { get; set; }
         public decimal NetProfit { get; set; }
         public int TransactionCount { get; set; }
+        public int ItemsSold { get; set; }
+        public decimal AverageTransaction { get; set; }
 
-        // Trend percentages (null when AllTime or previous = 0)
+        // ---- Trend percentages vs. previous equal-length period ----
         public decimal? SalesTrendPct { get; set; }
         public decimal? NetProfitTrendPct { get; set; }
         public decimal? TransactionsTrendPct { get; set; }
 
-        // ---- Always-current stats ----
+        // ---- Always-current product stats ----
         public int TotalProducts { get; set; }
+
+        /// <summary>Products with 0 &lt; OnHand &lt;= ReorderLevel.</summary>
         public int LowStockCount { get; set; }
+
+        /// <summary>Products with OnHand == 0.</summary>
         public int OutOfStockCount { get; set; }
 
         // ---- Chart ----
         public List<ChartBucket> ChartBuckets { get; set; } = new();
         public string ChartTitle { get; set; } = string.Empty;
+
+        // ---- New charts (Phase 6B) ----
+        public List<CategoryRevenueRow> SalesByCategory { get; set; } = new();
+        public PaymentSplitRow PaymentSplit { get; set; } = new();
 
         // ---- Lists ----
         public List<TopProductRow> TopProducts { get; set; } = new();
@@ -56,10 +54,10 @@ namespace TodangMotor.Services
         public List<Product> LowStockAlerts { get; set; } = new();
     }
 
-    // ================================================================
-    // SERVICE
-    // ================================================================
-
+    /// <summary>
+    /// Dashboard data provider. All range-dependent data is driven by
+    /// explicit From/To dates (To is exclusive).
+    /// </summary>
     public class DashboardService
     {
         private readonly ProductRepository _productRepository;
@@ -76,27 +74,32 @@ namespace TodangMotor.Services
         // ============================================================
 
         /// <summary>
-        /// Builds a full dashboard snapshot for the given range.
+        /// Builds the full dashboard snapshot for the given date range.
+        /// To is exclusive — pass To = end date + 1 day to include the whole end day.
         /// Never throws — returns an empty snapshot on failure.
         /// </summary>
-        public async Task<DashboardSnapshot> GetSnapshotAsync(DashboardRange range)
+        public async Task<DashboardSnapshot> GetSnapshotAsync(DateTime from, DateTime toExclusive)
         {
             var snapshot = new DashboardSnapshot();
 
             try
             {
-                var (from, to) = GetRange(range);
-                snapshot.ChartTitle = GetChartTitle(range);
+                if (toExclusive <= from)
+                    toExclusive = from.AddDays(1);
 
-                // ---- Range-dependent stats (from sale lines) ----
-                var currentLines = await _saleRepository.GetFlatSaleLinesAsync(from, to);
+                snapshot.ChartTitle = BuildChartTitle(from, toExclusive);
 
-                                snapshot.SalesTotal = currentLines.Sum(l => l.LineTotal);
+                // ---- Range-dependent stats ----
+                var currentLines = await _saleRepository.GetFlatSaleLinesAsync(from, toExclusive);
+
+                snapshot.SalesTotal = currentLines.Sum(l => l.LineTotal);
                 snapshot.TransactionCount = currentLines.Select(l => l.SaleId).Distinct().Count();
+                snapshot.ItemsSold = currentLines.Sum(l => l.Quantity);
+                snapshot.AverageTransaction = snapshot.TransactionCount > 0
+                    ? Math.Round(snapshot.SalesTotal / snapshot.TransactionCount, 2)
+                    : 0m;
 
-                // Cost and profit are Owner-only. Cashier never sees cost data —
-                // don't even compute it.
-                if (TodangMotor.Common.SessionManager.IsOwner)
+                if (SessionManager.IsOwner)
                 {
                     snapshot.CostTotal = currentLines
                         .Where(l => l.UnitCost.HasValue)
@@ -105,37 +108,41 @@ namespace TodangMotor.Services
                 }
 
                 // ---- Chart buckets ----
-                snapshot.ChartBuckets = BuildChartBuckets(range, from, to, currentLines);
+                snapshot.ChartBuckets = BuildChartBuckets(from, toExclusive, currentLines);
 
-                // ---- Trend vs. previous equivalent period ----
-                if (range != DashboardRange.AllTime)
+                // ---- Trend vs. previous equal-length period ----
+                var length = toExclusive - from;
+                var prevFrom = from - length;
+                var prevTo = from;
+
+                var prevLines = await _saleRepository.GetFlatSaleLinesAsync(prevFrom, prevTo);
+
+                decimal prevSales = prevLines.Sum(l => l.LineTotal);
+                int prevTx = prevLines.Select(l => l.SaleId).Distinct().Count();
+
+                snapshot.SalesTrendPct = ComputeTrend(snapshot.SalesTotal, prevSales);
+                snapshot.TransactionsTrendPct = ComputeTrend(snapshot.TransactionCount, prevTx);
+
+                if (SessionManager.IsOwner)
                 {
-                    var (prevFrom, prevTo) = GetPreviousRange(range);
-                    var prevLines = await _saleRepository.GetFlatSaleLinesAsync(prevFrom, prevTo);
-
-                    decimal prevSales = prevLines.Sum(l => l.LineTotal);
-                    int prevTx = prevLines.Select(l => l.SaleId).Distinct().Count();
-
-                    snapshot.SalesTrendPct = ComputeTrend(snapshot.SalesTotal, prevSales);
-                    snapshot.TransactionsTrendPct = ComputeTrend(snapshot.TransactionCount, prevTx);
-
-                    if (TodangMotor.Common.SessionManager.IsOwner)
-                    {
-                        decimal prevCost = prevLines
-                            .Where(l => l.UnitCost.HasValue)
-                            .Sum(l => l.UnitCost!.Value * l.Quantity);
-                        decimal prevProfit = prevSales - prevCost;
-                        snapshot.NetProfitTrendPct = ComputeTrend(snapshot.NetProfit, prevProfit);
-                    }
+                    decimal prevCost = prevLines
+                        .Where(l => l.UnitCost.HasValue)
+                        .Sum(l => l.UnitCost!.Value * l.Quantity);
+                    decimal prevProfit = prevSales - prevCost;
+                    snapshot.NetProfitTrendPct = ComputeTrend(snapshot.NetProfit, prevProfit);
                 }
 
-                // ---- Top products (range-dependent) ----
-                snapshot.TopProducts = await _saleRepository.GetTopProductsAsync(from, to, 5);
+                // ---- Top products (existing horizontal list, still used by legacy view) ----
+                snapshot.TopProducts = await _saleRepository.GetTopProductsAsync(from, toExclusive, 5);
 
-                // ---- Recent sales (range-dependent) ----
+                // ---- New chart data (Phase 6B) ----
+                snapshot.SalesByCategory = await _saleRepository.GetSalesByCategoryAsync(from, toExclusive);
+                snapshot.PaymentSplit = await _saleRepository.GetPaymentMethodSplitAsync(from, toExclusive);
+
+                // ---- Recent sales in range ----
                 var allSales = await _saleRepository.GetAllAsync();
                 snapshot.RecentSales = allSales
-                    .Where(s => s.SaleDate >= from && s.SaleDate < to)
+                    .Where(s => s.SaleDate >= from && s.SaleDate < toExclusive)
                     .OrderByDescending(s => s.SaleDate)
                     .ThenByDescending(s => s.SaleId)
                     .Take(5)
@@ -146,177 +153,131 @@ namespace TodangMotor.Services
                 var activeProducts = allProducts.Where(p => p.IsActive).ToList();
 
                 snapshot.TotalProducts = activeProducts.Count;
-                snapshot.LowStockCount = activeProducts.Count(p => p.QuantityOnHand <= p.ReorderLevel);
+                snapshot.LowStockCount = activeProducts.Count(p => p.QuantityOnHand > 0
+                                                                  && p.QuantityOnHand <= p.ReorderLevel);
                 snapshot.OutOfStockCount = activeProducts.Count(p => p.QuantityOnHand == 0);
 
+                // Low stock alerts — items below or at reorder (excludes 0-stock which are handled separately below).
+                // We merge them here in the raw list and let the UI split them.
                 snapshot.LowStockAlerts = activeProducts
                     .Where(p => p.QuantityOnHand <= p.ReorderLevel)
                     .OrderBy(p => p.QuantityOnHand - p.ReorderLevel)
                     .ThenBy(p => p.ProductName)
-                    .Take(5)
+                    .Take(8)
                     .ToList();
             }
             catch
             {
-                // Return empty snapshot on any DB error — the UI shows zeros.
+                // Return whatever we have — UI shows zeros.
             }
 
             return snapshot;
         }
 
         // ============================================================
-        // RANGE HELPERS
+        // CHART TITLE
         // ============================================================
 
-        private static (DateTime From, DateTime ToExclusive) GetRange(DashboardRange range)
+        private static string BuildChartTitle(DateTime from, DateTime toExclusive)
         {
-            var now = DateTime.Now;
-            var today = now.Date;
+            var span = toExclusive - from;
 
-            switch (range)
-            {
-                case DashboardRange.Today:
-                    return (today, today.AddDays(1));
+            string label = from.Date == toExclusive.AddDays(-1).Date
+                ? from.ToString("MMMM d, yyyy")
+                : $"{from:MMM d, yyyy} to {toExclusive.AddDays(-1):MMM d, yyyy}";
 
-                case DashboardRange.ThisWeek:
-                    {
-                        // Monday 00:00 → next Monday 00:00
-                        int diff = ((int)today.DayOfWeek + 6) % 7; // Mon=0 ... Sun=6
-                        var monday = today.AddDays(-diff);
-                        return (monday, monday.AddDays(7));
-                    }
+            if (span.TotalDays <= 1.5)
+                return $"Sales — {label} (by hour)";
 
-                case DashboardRange.ThisMonth:
-                    {
-                        var firstOfMonth = new DateTime(today.Year, today.Month, 1);
-                        return (firstOfMonth, firstOfMonth.AddMonths(1));
-                    }
-
-                case DashboardRange.AllTime:
-                default:
-                    return (new DateTime(2000, 1, 1), today.AddDays(1));
-            }
-        }
-
-        private static (DateTime From, DateTime ToExclusive) GetPreviousRange(DashboardRange range)
-        {
-            var (from, to) = GetRange(range);
-            var length = to - from;
-            return (from - length, from);
-        }
-
-        private static string GetChartTitle(DashboardRange range)
-        {
-            return range switch
-            {
-                DashboardRange.Today => "Sales — Today (by hour)",
-                DashboardRange.ThisWeek => "Sales — This Week",
-                DashboardRange.ThisMonth => "Sales — This Month",
-                DashboardRange.AllTime => "Sales — Last 12 Months",
-                _ => "Sales"
-            };
+            return $"Sales — {label}";
         }
 
         // ============================================================
-        // CHART BUCKETS
+        // CHART BUCKETS (span-driven)
         // ============================================================
 
         private static List<ChartBucket> BuildChartBuckets(
-            DashboardRange range,
             DateTime from,
-            DateTime to,
+            DateTime toExclusive,
             List<SaleLineFlat> lines)
         {
             var buckets = new List<ChartBucket>();
+            var span = toExclusive - from;
 
-            switch (range)
+            if (span.TotalDays <= 1.5)
             {
-                case DashboardRange.Today:
-                    {
-                        // 13 hourly buckets: 8 AM through 8 PM.
-                        for (int h = 8; h <= 20; h++)
-                        {
-                            var start = from.Date.AddHours(h);
-                            var end = start.AddHours(1);
-                            decimal sum = lines
-                                .Where(l => l.SaleDate >= start && l.SaleDate < end)
-                                .Sum(l => l.LineTotal);
-                            buckets.Add(new ChartBucket
-                            {
-                                Label = $"{h:00}",
-                                Value = sum
-                            });
-                        }
-                        return buckets;
-                    }
-
-                case DashboardRange.ThisWeek:
-                    {
-                        // 7 daily buckets: Mon..Sun.
-                        for (int i = 0; i < 7; i++)
-                        {
-                            var start = from.Date.AddDays(i);
-                            var end = start.AddDays(1);
-                            decimal sum = lines
-                                .Where(l => l.SaleDate >= start && l.SaleDate < end)
-                                .Sum(l => l.LineTotal);
-                            buckets.Add(new ChartBucket
-                            {
-                                Label = start.ToString("ddd"),
-                                Value = sum
-                            });
-                        }
-                        return buckets;
-                    }
-
-                case DashboardRange.ThisMonth:
-                    {
-                        // 7-day buckets starting from day 1 (W1..W5).
-                        var firstOfMonth = from.Date;
-                        int daysInMonth = DateTime.DaysInMonth(firstOfMonth.Year, firstOfMonth.Month);
-
-                        int weekNum = 1;
-                        for (int dayOfMonth = 1; dayOfMonth <= daysInMonth; dayOfMonth += 7, weekNum++)
-                        {
-                            var start = firstOfMonth.AddDays(dayOfMonth - 1);
-                            var end = start.AddDays(7);
-                            if (end > to) end = to;
-
-                            decimal sum = lines
-                                .Where(l => l.SaleDate >= start && l.SaleDate < end)
-                                .Sum(l => l.LineTotal);
-                            buckets.Add(new ChartBucket
-                            {
-                                Label = $"W{weekNum}",
-                                Value = sum
-                            });
-                        }
-                        return buckets;
-                    }
-
-                case DashboardRange.AllTime:
-                default:
-                    {
-                        // 12 monthly buckets ending with the current month.
-                        var now = DateTime.Now.Date;
-                        var firstOfThisMonth = new DateTime(now.Year, now.Month, 1);
-
-                        for (int i = 11; i >= 0; i--)
-                        {
-                            var mStart = firstOfThisMonth.AddMonths(-i);
-                            var mEnd = mStart.AddMonths(1);
-                            decimal sum = lines
-                                .Where(l => l.SaleDate >= mStart && l.SaleDate < mEnd)
-                                .Sum(l => l.LineTotal);
-                            buckets.Add(new ChartBucket
-                            {
-                                Label = mStart.ToString("MMM"),
-                                Value = sum
-                            });
-                        }
-                        return buckets;
-                    }
+                // Hourly — 8 AM to 8 PM (13 buckets)
+                var day = from.Date;
+                for (int h = 8; h <= 20; h++)
+                {
+                    var start = day.AddHours(h);
+                    var end = start.AddHours(1);
+                    decimal sum = lines
+                        .Where(l => l.SaleDate >= start && l.SaleDate < end)
+                        .Sum(l => l.LineTotal);
+                    buckets.Add(new ChartBucket { Label = $"{h:00}", Value = sum });
+                }
             }
+            else if (span.TotalDays <= 31)
+            {
+                int days = (int)Math.Ceiling(span.TotalDays);
+                for (int i = 0; i < days; i++)
+                {
+                    var start = from.Date.AddDays(i);
+                    var end = start.AddDays(1);
+                    if (end > toExclusive) end = toExclusive;
+
+                    decimal sum = lines
+                        .Where(l => l.SaleDate >= start && l.SaleDate < end)
+                        .Sum(l => l.LineTotal);
+
+                    buckets.Add(new ChartBucket
+                    {
+                        Label = start.ToString("MMM d"),
+                        Value = sum
+                    });
+                }
+            }
+            else if (span.TotalDays <= 180)
+            {
+                var cursor = from.Date;
+                int weekNum = 1;
+                while (cursor < toExclusive)
+                {
+                    var end = cursor.AddDays(7);
+                    if (end > toExclusive) end = toExclusive;
+
+                    decimal sum = lines
+                        .Where(l => l.SaleDate >= cursor && l.SaleDate < end)
+                        .Sum(l => l.LineTotal);
+
+                    buckets.Add(new ChartBucket { Label = $"W{weekNum}", Value = sum });
+                    cursor = end;
+                    weekNum++;
+                }
+            }
+            else
+            {
+                var cursor = new DateTime(from.Year, from.Month, 1);
+                while (cursor < toExclusive)
+                {
+                    var end = cursor.AddMonths(1);
+                    if (end > toExclusive) end = toExclusive;
+
+                    decimal sum = lines
+                        .Where(l => l.SaleDate >= cursor && l.SaleDate < end)
+                        .Sum(l => l.LineTotal);
+
+                    buckets.Add(new ChartBucket
+                    {
+                        Label = cursor.ToString("MMM yy"),
+                        Value = sum
+                    });
+                    cursor = cursor.AddMonths(1);
+                }
+            }
+
+            return buckets;
         }
 
         // ============================================================

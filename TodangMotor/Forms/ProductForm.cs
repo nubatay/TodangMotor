@@ -1,6 +1,7 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.Drawing;
-using System.Drawing.Drawing2D;
+using System.Linq;
 using System.Threading.Tasks;
 using System.Windows.Forms;
 using TodangMotor.Common;
@@ -11,44 +12,74 @@ using TodangMotor.Services;
 namespace TodangMotor.Forms
 {
     /// <summary>
-    /// Add / Edit product popup.
-    /// Owner-only, single-record editor.
-    /// - Add mode: Owner can enter initial stock (logged as an Adjustment movement).
-    /// - Edit mode: Owner can adjust stock (also logged).
+    /// Add / Edit product popup. Owner-only.
+    /// Two-column layout. Includes SKU, Expiration Date, Description,
+    /// Primary Supplier, and Alternate Suppliers.
+    /// No Current Stock field — that is managed via Inventory.
     /// </summary>
     public class ProductForm : ShellForm
     {
-        private readonly ProductService _productService;
-        private readonly CategoryRepository _categoryRepository;
+        // ============================================================
+        // SERVICES
+        // ============================================================
+
+        private readonly ProductService _productService = new();
+        private readonly CategoryService _categoryService = new(new CategoryRepository());
+        private readonly SupplierService _supplierService = new();
+
+        // ============================================================
+        // STATE
+        // ============================================================
 
         private readonly Product? _productToEdit;
         private bool IsEditMode => _productToEdit != null;
 
-        private int _originalQuantity;
+        private List<Supplier> _allSuppliers = new();
+        private List<Category> _allCategories = new();
 
-        // ---- Layout constants ----
-        private const int RowStep = 58;
-        private const int LeftX = 32;
-        private const int LeftLabelW = 110;
-        private const int LeftFieldX = 148;
-        private const int LeftFieldW = 260;
+        // Display-name → object lookups (RoundedComboBox works with strings only).
+        private readonly Dictionary<string, Supplier> _supplierByDisplay = new();
+        private readonly Dictionary<string, Category> _categoryByDisplay = new();
 
-        private const int RightX = 440;
-        private const int RightLabelW = 100;
-        private const int RightFieldX = 548;
-        private const int RightFieldW = 200;
+        /// <summary>Wrapper for checkbox-list items so we can store the SupplierId.</summary>
+        private class SupplierCheckItem
+        {
+            public int SupplierId { get; set; }
+            public string DisplayName { get; set; } = string.Empty;
+            public override string ToString() => DisplayName;
+        }
 
-        // ---- Fields ----
+        // ============================================================
+        // LAYOUT CONSTANTS
+        // ============================================================
+
+        private const int PadX = 32;
+        private const int LabelW = 120;
+        private const int LeftFieldX = 152;
+        private const int RightLabelX = 412;
+        private const int RightFieldX = 532;
+        private const int HalfFieldW = 240;
+        private const int FullFieldW = 616;
+        private const int RowStep = 52;
+
+        // ============================================================
+        // UI CONTROLS
+        // ============================================================
+
         private RoundedTextBox _txtProductName;
         private RoundedTextBox _txtBrand;
-        private ComboBox _cmbCategory;
+        private RoundedTextBox _txtSku;
+        private RoundedComboBox _cmbCategory;
         private RoundedTextBox _txtUnit;
         private RoundedTextBox _txtCostPrice;
         private RoundedTextBox _txtSellingPrice;
         private RoundedTextBox _txtReorderLevel;
-        private RoundedTextBox _txtQuantityOnHand;
-        private Panel _notesWrapper;
-        private TextBox _txtNotes;
+        private DateTimePicker _dtpExpiration;
+        private RoundedComboBox _cmbSupplier;
+        private CheckedListBox _alternateSuppliersList;
+        private Panel _alternateSuppliersWrapper;
+        private Panel _descriptionWrapper;
+        private TextBox _txtDescription;
 
         private Button _btnSave;
         private Button _btnCancel;
@@ -60,16 +91,14 @@ namespace TodangMotor.Forms
 
         public ProductForm(Product? productToEdit = null)
         {
-            _productService = new ProductService();
-            _categoryRepository = new CategoryRepository();
             _productToEdit = productToEdit;
 
-            HeaderTitle = IsEditMode ? "Edit Product" : "Add Product";
+            HeaderTitle = IsEditMode ? "Edit Item" : "Add Item";
             ShowMaximizeButton = false;
             ShowMinimizeButton = true;
             StartPosition = FormStartPosition.CenterParent;
-            ClientSize = new Size(780, 560);
-            MinimumSize = new Size(740, 540);
+            ClientSize = new Size(800, 740);
+            MinimumSize = new Size(780, 720);
             BackColor = Theme.Background;
             KeyPreview = true;
 
@@ -85,139 +114,195 @@ namespace TodangMotor.Forms
 
         private void BuildLayout()
         {
-            int y = 24;
+            // ---- Footer (docked bottom) ----
+            var footer = new Panel
+            {
+                Dock = DockStyle.Bottom,
+                Height = 76,
+                BackColor = Theme.Background
+            };
 
-            // ---- Row 1: Product Name (left) | Brand (right) ----
-            AddLabel("Product Name:", LeftX, y, LeftLabelW);
-            _txtProductName = UiFactory.CreateTextBox(LeftFieldW);
-            _txtProductName.Location = new Point(LeftFieldX, y - 8);
+            const int btnW = 130;
+            const int btnH = 44;
+
+            _btnSave = UiFactory.CreateButton("Save", UiFactory.ButtonStyle.Primary, btnW, btnH);
+            _btnSave.Anchor = AnchorStyles.Top | AnchorStyles.Right;
+            _btnSave.Click += async (s, e) => await SaveAsync();
+
+            _btnCancel = UiFactory.CreateButton("Cancel", UiFactory.ButtonStyle.Ghost, btnW, btnH);
+            _btnCancel.Anchor = AnchorStyles.Top | AnchorStyles.Right;
+            _btnCancel.Click += (s, e) => { DialogResult = DialogResult.Cancel; Close(); };
+
+            footer.Controls.Add(_btnSave);
+            footer.Controls.Add(_btnCancel);
+
+            footer.Resize += (s, e) =>
+            {
+                _btnSave.Location = new Point(footer.ClientSize.Width - PadX - btnW, 16);
+                _btnCancel.Location = new Point(footer.ClientSize.Width - PadX - btnW - 10 - btnW, 16);
+            };
+
+            ContentPanel.Controls.Add(footer);
+
+            // ---- Form fields (absolute positions) ----
+            int y = 16;
+
+            // Row 1: Product Name (full width)
+            AddLabel("Product Name:", PadX, y);
+            _txtProductName = UiFactory.CreateTextBox(FullFieldW);
+            _txtProductName.Location = new Point(LeftFieldX, y);
             _txtProductName.MaxLength = 150;
             ContentPanel.Controls.Add(_txtProductName);
-
-            AddLabel("Brand:", RightX, y, RightLabelW);
-            _txtBrand = UiFactory.CreateTextBox(RightFieldW);
-            _txtBrand.Location = new Point(RightFieldX, y - 8);
-            _txtBrand.MaxLength = 100;
-            ContentPanel.Controls.Add(_txtBrand);
             y += RowStep;
 
-            // ---- Row 2: Category (left) | Unit (right) ----
-            AddLabel("Category:", LeftX, y, LeftLabelW);
-            _cmbCategory = UiFactory.CreateComboBox(LeftFieldW);
-            _cmbCategory.Location = new Point(LeftFieldX, y - 6);
-            _cmbCategory.DisplayMember = "CategoryName";
-            _cmbCategory.ValueMember = "CategoryId";
+            // Row 2: Brand | SKU
+            AddLabel("Brand:", PadX, y);
+            _txtBrand = UiFactory.CreateTextBox(HalfFieldW);
+            _txtBrand.Location = new Point(LeftFieldX, y);
+            _txtBrand.MaxLength = 100;
+            ContentPanel.Controls.Add(_txtBrand);
+
+            AddLabel("SKU:", RightLabelX, y);
+            _txtSku = UiFactory.CreateTextBox(HalfFieldW);
+            _txtSku.Location = new Point(RightFieldX, y);
+            _txtSku.MaxLength = 50;
+            _txtSku.Placeholder = "Optional";
+            ContentPanel.Controls.Add(_txtSku);
+            y += RowStep;
+
+            // Row 3: Category | Unit
+            AddLabel("Category:", PadX, y);
+            _cmbCategory = new RoundedComboBox
+            {
+                Width = HalfFieldW,
+                Location = new Point(LeftFieldX, y)
+            };
             ContentPanel.Controls.Add(_cmbCategory);
 
-            AddLabel("Unit:", RightX, y, RightLabelW);
-            _txtUnit = UiFactory.CreateTextBox(RightFieldW);
-            _txtUnit.Location = new Point(RightFieldX, y - 8);
+            AddLabel("Unit:", RightLabelX, y);
+            _txtUnit = UiFactory.CreateTextBox(HalfFieldW);
+            _txtUnit.Location = new Point(RightFieldX, y);
             _txtUnit.MaxLength = 20;
             ContentPanel.Controls.Add(_txtUnit);
             y += RowStep;
 
-            // ---- Row 3: Cost Price (left) | Selling Price (right) ----
-            AddLabel("Cost Price (PHP):", LeftX, y, LeftLabelW);
-            _txtCostPrice = UiFactory.CreateTextBox(LeftFieldW);
-            _txtCostPrice.Location = new Point(LeftFieldX, y - 8);
+            // Row 4: Cost Price | Selling Price
+            AddLabel("Cost Price (PHP):", PadX, y);
+            _txtCostPrice = UiFactory.CreateTextBox(HalfFieldW);
+            _txtCostPrice.Location = new Point(LeftFieldX, y);
             _txtCostPrice.MaxLength = 12;
             ContentPanel.Controls.Add(_txtCostPrice);
 
-            AddLabel("Selling Price (PHP):", RightX, y, RightLabelW);
-            _txtSellingPrice = UiFactory.CreateTextBox(RightFieldW);
-            _txtSellingPrice.Location = new Point(RightFieldX, y - 8);
+            AddLabel("Selling Price (PHP):", RightLabelX, y);
+            _txtSellingPrice = UiFactory.CreateTextBox(HalfFieldW);
+            _txtSellingPrice.Location = new Point(RightFieldX, y);
             _txtSellingPrice.MaxLength = 12;
             ContentPanel.Controls.Add(_txtSellingPrice);
             y += RowStep;
 
-            // ---- Row 4: Reorder Level (left) | Current Stock (right) ----
-            AddLabel("Reorder Level:", LeftX, y, LeftLabelW);
-            _txtReorderLevel = UiFactory.CreateTextBox(LeftFieldW);
-            _txtReorderLevel.Location = new Point(LeftFieldX, y - 8);
+            // Row 5: Reorder Level | Expiration Date
+            AddLabel("Reorder Level:", PadX, y);
+            _txtReorderLevel = UiFactory.CreateTextBox(HalfFieldW);
+            _txtReorderLevel.Location = new Point(LeftFieldX, y);
             _txtReorderLevel.MaxLength = 6;
             ContentPanel.Controls.Add(_txtReorderLevel);
 
-            AddLabel("Current Stock:", RightX, y, RightLabelW);
-            _txtQuantityOnHand = UiFactory.CreateTextBox(RightFieldW);
-            _txtQuantityOnHand.Location = new Point(RightFieldX, y - 8);
-            _txtQuantityOnHand.MaxLength = 9;
-            ContentPanel.Controls.Add(_txtQuantityOnHand);
+            AddLabel("Expiration Date:", RightLabelX, y);
+            _dtpExpiration = new DateTimePicker
+            {
+                Format = DateTimePickerFormat.Custom,
+                CustomFormat = "MMM d, yyyy",
+                ShowCheckBox = true,
+                Checked = false,
+                Font = Theme.FontBody,
+                Location = new Point(RightFieldX, y + 4),
+                Size = new Size(HalfFieldW, 32)
+            };
+            ContentPanel.Controls.Add(_dtpExpiration);
             y += RowStep;
 
-            // ---- Row 5: Notes (full width) ----
-            AddLabel("Notes:", LeftX, y, LeftLabelW);
-
-            _notesWrapper = new Panel
+            // Row 6: Primary Supplier (full width)
+            AddLabel("Primary Supplier:", PadX, y);
+            _cmbSupplier = new RoundedComboBox
             {
-                Location = new Point(LeftFieldX, y - 8),
-                Size = new Size(RightFieldX + RightFieldW - LeftFieldX, 100),
-                BackColor = Theme.InputBackground,
-                Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right
+                Width = FullFieldW,
+                Location = new Point(LeftFieldX, y)
             };
-            _notesWrapper.Paint += NotesWrapper_Paint;
+            ContentPanel.Controls.Add(_cmbSupplier);
+            y += RowStep;
 
-            _txtNotes = new TextBox
+            // Row 7: Alternate Suppliers | Description
+            AddLabel("Alternate Suppliers:", PadX, y);
+
+            _alternateSuppliersWrapper = new Panel
             {
-                Location = new Point(12, 10),
-                Size = new Size(_notesWrapper.Width - 28, _notesWrapper.Height - 20),
+                Location = new Point(LeftFieldX, y + 24),
+                Size = new Size(HalfFieldW, 120),
+                BackColor = Theme.InputBackground
+            };
+            _alternateSuppliersWrapper.Paint += AlternateWrapper_Paint;
+
+            _alternateSuppliersList = new CheckedListBox
+            {
+                Location = new Point(4, 4),
+                Size = new Size(HalfFieldW - 8, 112),
+                Font = Theme.FontBody,
+                BackColor = Theme.InputBackground,
+                ForeColor = Theme.TextPrimary,
+                BorderStyle = BorderStyle.None,
+                CheckOnClick = true,
+                IntegralHeight = false,
+                HorizontalScrollbar = false
+            };
+            _alternateSuppliersWrapper.Controls.Add(_alternateSuppliersList);
+            ContentPanel.Controls.Add(_alternateSuppliersWrapper);
+
+            AddLabel("Description:", RightLabelX, y);
+
+            _descriptionWrapper = new Panel
+            {
+                Location = new Point(RightFieldX, y + 24),
+                Size = new Size(HalfFieldW, 120),
+                BackColor = Theme.InputBackground
+            };
+            _descriptionWrapper.Paint += DescriptionWrapper_Paint;
+
+            _txtDescription = new TextBox
+            {
+                Location = new Point(8, 8),
+                Size = new Size(HalfFieldW - 16, 104),
                 Multiline = true,
                 ScrollBars = ScrollBars.Vertical,
                 BorderStyle = BorderStyle.None,
                 BackColor = Theme.InputBackground,
                 ForeColor = Theme.TextPrimary,
                 Font = Theme.FontBody,
-                MaxLength = 500,
-                Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right
+                MaxLength = 500
             };
-            _txtNotes.Enter += (s, e) => _notesWrapper.Invalidate();
-            _txtNotes.Leave += (s, e) => _notesWrapper.Invalidate();
-            _notesWrapper.Controls.Add(_txtNotes);
-            _notesWrapper.Resize += (s, e) =>
-            {
-                _txtNotes.Size = new Size(
-                    Math.Max(20, _notesWrapper.Width - 28),
-                    Math.Max(20, _notesWrapper.Height - 20));
-            };
+            _txtDescription.Enter += (s, e) => _descriptionWrapper.Invalidate();
+            _txtDescription.Leave += (s, e) => _descriptionWrapper.Invalidate();
+            _descriptionWrapper.Controls.Add(_txtDescription);
+            ContentPanel.Controls.Add(_descriptionWrapper);
 
-            ContentPanel.Controls.Add(_notesWrapper);
-            y += 100 + 20;
+            y += 152;
 
-            // ---- Status ----
+            // ---- Status label ----
             _lblStatus = new Label
             {
                 Text = string.Empty,
                 Font = Theme.FontSmall,
                 ForeColor = Theme.Danger,
                 AutoSize = false,
-                Location = new Point(LeftX, y),
-                Size = new Size(ClientSize.Width - LeftX - 32, 22),
+                Location = new Point(PadX, y),
+                Size = new Size(ClientSize.Width - PadX * 2, 24),
                 TextAlign = ContentAlignment.MiddleLeft,
                 BackColor = Color.Transparent,
                 Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right
             };
             ContentPanel.Controls.Add(_lblStatus);
-            y += 30;
-
-            // ---- Buttons (bottom-right) ----
-            int btnW = 120;
-            int btnH = 42;
-            int btnY = y;
-
-            _btnSave = UiFactory.CreateButton("Save", UiFactory.ButtonStyle.Primary, btnW, btnH);
-            _btnSave.Location = new Point(ClientSize.Width - 32 - btnW, btnY);
-            _btnSave.Anchor = AnchorStyles.Top | AnchorStyles.Right;
-            _btnSave.Click += async (s, e) => await SaveAsync();
-
-            _btnCancel = UiFactory.CreateButton("Cancel", UiFactory.ButtonStyle.Ghost, btnW, btnH);
-            _btnCancel.Location = new Point(ClientSize.Width - 32 - btnW - 8 - btnW, btnY);
-            _btnCancel.Anchor = AnchorStyles.Top | AnchorStyles.Right;
-            _btnCancel.Click += (s, e) => { DialogResult = DialogResult.Cancel; Close(); };
-
-            ContentPanel.Controls.Add(_btnSave);
-            ContentPanel.Controls.Add(_btnCancel);
         }
 
-        private void AddLabel(string text, int x, int y, int width)
+        private void AddLabel(string text, int x, int y)
         {
             var lbl = new Label
             {
@@ -225,7 +310,7 @@ namespace TodangMotor.Forms
                 Font = Theme.FontSmall,
                 ForeColor = Theme.TextSecondary,
                 AutoSize = false,
-                Size = new Size(width, 20),
+                Size = new Size(LabelW, 40),
                 Location = new Point(x, y),
                 TextAlign = ContentAlignment.MiddleLeft,
                 BackColor = Color.Transparent
@@ -233,13 +318,30 @@ namespace TodangMotor.Forms
             ContentPanel.Controls.Add(lbl);
         }
 
-        private void NotesWrapper_Paint(object? sender, PaintEventArgs e)
+        private void AlternateWrapper_Paint(object? sender, PaintEventArgs e)
         {
-            if (_notesWrapper == null) return;
-            bool focused = _txtNotes != null && _txtNotes.Focused;
-            e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
+            if (_alternateSuppliersWrapper == null) return;
+            e.Graphics.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
 
-            var rect = new Rectangle(0, 0, _notesWrapper.Width - 1, _notesWrapper.Height - 1);
+            var rect = new Rectangle(0, 0,
+                _alternateSuppliersWrapper.Width - 1,
+                _alternateSuppliersWrapper.Height - 1);
+
+            using var path = Theme.RoundedRect(rect, Theme.RadiusSmall);
+            using var pen = new Pen(Theme.InputBorder, 1f);
+            e.Graphics.DrawPath(pen, path);
+        }
+
+        private void DescriptionWrapper_Paint(object? sender, PaintEventArgs e)
+        {
+            if (_descriptionWrapper == null) return;
+            bool focused = _txtDescription != null && _txtDescription.Focused;
+            e.Graphics.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
+
+            var rect = new Rectangle(0, 0,
+                _descriptionWrapper.Width - 1,
+                _descriptionWrapper.Height - 1);
+
             using var path = Theme.RoundedRect(rect, Theme.RadiusSmall);
             using var pen = new Pen(focused ? Theme.FocusBorder : Theme.InputBorder, focused ? 2f : 1f);
             e.Graphics.DrawPath(pen, path);
@@ -253,44 +355,143 @@ namespace TodangMotor.Forms
         {
             Animator.SlideFadeInForm(this, 180, 12);
 
-            try
-            {
-                var categories = await _categoryRepository.GetActiveAsync();
-                _cmbCategory.DataSource = categories;
-            }
-            catch (Exception)
-            {
-                ShowError("Could not load categories. Please check your database connection.");
-                return;
-            }
+            await LoadCategoriesAsync();
+            await LoadSuppliersAsync();
 
             if (IsEditMode)
             {
-                var p = _productToEdit!;
-                _txtProductName.Text = p.ProductName ?? string.Empty;
-                _txtBrand.Text = p.Brand ?? string.Empty;
-                _txtUnit.Text = p.Unit ?? "pcs";
-                _txtCostPrice.Text = p.CostPrice.ToString("0.00");
-                _txtSellingPrice.Text = p.SellingPrice.ToString("0.00");
-                _txtReorderLevel.Text = p.ReorderLevel.ToString();
-                _txtQuantityOnHand.Text = p.QuantityOnHand.ToString();
-                _txtNotes.Text = p.Notes ?? string.Empty;
-                _cmbCategory.SelectedValue = p.CategoryId;
-
-                _originalQuantity = p.QuantityOnHand;
+                PopulateFromProduct(_productToEdit!);
             }
             else
             {
                 _txtUnit.Text = "pcs";
                 _txtCostPrice.Text = "0";
                 _txtReorderLevel.Text = "5";
-                _txtQuantityOnHand.Text = "0";
 
                 if (_cmbCategory.Items.Count > 0)
                     _cmbCategory.SelectedIndex = 0;
 
-                _originalQuantity = 0;
+                if (_cmbSupplier.Items.Count > 0)
+                    _cmbSupplier.SelectedIndex = 0;
+
+                _txtProductName.FocusInput();
             }
+        }
+
+        private async Task LoadCategoriesAsync()
+        {
+            try
+            {
+                var cats = await _categoryService.GetActiveCategoriesAsync();
+                _allCategories = cats?.ToList() ?? new List<Category>();
+
+                _categoryByDisplay.Clear();
+                _cmbCategory.Items.Clear();
+                foreach (var c in _allCategories)
+                {
+                    _categoryByDisplay[c.CategoryName] = c;
+                    _cmbCategory.Items.Add(c.CategoryName);
+                }
+            }
+            catch
+            {
+                ShowError("Could not load categories. Please check your database connection.");
+            }
+        }
+
+        private async Task LoadSuppliersAsync()
+        {
+            try
+            {
+                var (success, error, suppliers) = await _supplierService.GetActiveAsync();
+                if (!success)
+                {
+                    ShowError(error);
+                    return;
+                }
+
+                _allSuppliers = suppliers ?? new List<Supplier>();
+
+                // Primary supplier dropdown — items are display names,
+                // mapped back to Supplier objects via dictionary.
+                _supplierByDisplay.Clear();
+                _cmbSupplier.Items.Clear();
+                foreach (var s in _allSuppliers)
+                {
+                    _supplierByDisplay[s.SupplierName] = s;
+                    _cmbSupplier.Items.Add(s.SupplierName);
+                }
+
+                // Alternate suppliers checkbox list.
+                _alternateSuppliersList.Items.Clear();
+                foreach (var s in _allSuppliers)
+                {
+                    _alternateSuppliersList.Items.Add(new SupplierCheckItem
+                    {
+                        SupplierId = s.SupplierId,
+                        DisplayName = s.SupplierName
+                    });
+                }
+            }
+            catch
+            {
+                ShowError("Could not load suppliers. Please check your database connection.");
+            }
+        }
+
+        private void PopulateFromProduct(Product p)
+        {
+            _txtProductName.Text = p.ProductName ?? string.Empty;
+            _txtBrand.Text = p.Brand ?? string.Empty;
+            _txtSku.Text = p.SKU ?? string.Empty;
+            _txtUnit.Text = p.Unit ?? "pcs";
+            _txtCostPrice.Text = p.CostPrice.ToString("0.00");
+            _txtSellingPrice.Text = p.SellingPrice.ToString("0.00");
+            _txtReorderLevel.Text = p.ReorderLevel.ToString();
+            _txtDescription.Text = p.Description ?? string.Empty;
+
+            // Category — select by name.
+            if (p.CategoryId > 0 && _cmbCategory.Items.Count > 0)
+            {
+                var cat = _allCategories.FirstOrDefault(c => c.CategoryId == p.CategoryId);
+                if (cat != null)
+                    _cmbCategory.SelectedItem = cat.CategoryName;
+            }
+
+            // Primary Supplier — select by name.
+            if (p.SupplierId.HasValue && p.SupplierId.Value > 0)
+            {
+                var sup = _allSuppliers.FirstOrDefault(s => s.SupplierId == p.SupplierId.Value);
+                if (sup != null)
+                    _cmbSupplier.SelectedItem = sup.SupplierName;
+            }
+
+            // Expiration Date
+            if (p.ExpirationDate.HasValue)
+            {
+                _dtpExpiration.Value = p.ExpirationDate.Value;
+                _dtpExpiration.Checked = true;
+            }
+            else
+            {
+                _dtpExpiration.Checked = false;
+            }
+
+            // Alternate Suppliers — check the ones that match.
+            if (p.AlternateSupplierIds != null && p.AlternateSupplierIds.Count > 0)
+            {
+                for (int i = 0; i < _alternateSuppliersList.Items.Count; i++)
+                {
+                    if (_alternateSuppliersList.Items[i] is SupplierCheckItem item
+                        && p.AlternateSupplierIds.Contains(item.SupplierId))
+                    {
+                        _alternateSuppliersList.SetItemChecked(i, true);
+                    }
+                }
+            }
+
+            _txtProductName.FocusInput();
+            _txtProductName.SelectAll();
         }
 
         // ============================================================
@@ -299,21 +500,48 @@ namespace TodangMotor.Forms
 
         private async Task SaveAsync()
         {
-            if (_cmbCategory.SelectedValue == null)
+            // ---- Read selected category ----
+            string? selectedCatName = _cmbCategory.SelectedItem as string;
+            if (string.IsNullOrEmpty(selectedCatName)
+                || !_categoryByDisplay.TryGetValue(selectedCatName, out var selectedCategory))
             {
                 ShowError("Please select a category.");
                 return;
             }
 
-            int categoryId = (int)_cmbCategory.SelectedValue;
+            // ---- Read selected supplier ----
+            string? selectedSupName = _cmbSupplier.SelectedItem as string;
+            if (string.IsNullOrEmpty(selectedSupName)
+                || !_supplierByDisplay.TryGetValue(selectedSupName, out var selectedSupplier))
+            {
+                ShowError("Please select a primary supplier.");
+                return;
+            }
+
+            int categoryId = selectedCategory.CategoryId;
+            int supplierId = selectedSupplier.SupplierId;
+
+            DateTime? expiration = _dtpExpiration.Checked
+                ? _dtpExpiration.Value.Date
+                : (DateTime?)null;
+
+            // Gather alternate supplier IDs (excluding the primary one).
+            var alternateIds = new List<int>();
+            foreach (var obj in _alternateSuppliersList.CheckedItems)
+            {
+                if (obj is SupplierCheckItem item)
+                {
+                    if (item.SupplierId != supplierId)
+                        alternateIds.Add(item.SupplierId);
+                }
+            }
 
             SetBusy(true);
             try
             {
                 if (IsEditMode)
                 {
-                    // 1. Save editable fields (and Notes).
-                    var update = await _productService.UpdateAsync(
+                    var result = await _productService.UpdateAsync(
                         _productToEdit!.ProductId,
                         categoryId,
                         _txtProductName.Text,
@@ -322,37 +550,22 @@ namespace TodangMotor.Forms
                         _txtCostPrice.Text,
                         _txtSellingPrice.Text,
                         _txtReorderLevel.Text,
-                        _txtNotes.Text);
+                        string.Empty, // Notes — hidden in UI
+                        _txtSku.Text,
+                        expiration,
+                        _txtDescription.Text,
+                        supplierId,
+                        alternateIds);
 
-                    if (!update.Success)
+                    if (!result.Success)
                     {
-                        ShowError(update.ErrorMessage);
+                        ShowError(result.ErrorMessage);
                         return;
                     }
-
-                    // 2. If stock changed, log an adjustment.
-                    if (int.TryParse(_txtQuantityOnHand.Text.Trim(), out int newQty)
-                        && newQty != _originalQuantity)
-                    {
-                        var stockResult = await _productService.UpdateStockAsync(
-                            _productToEdit.ProductId,
-                            newQty,
-                            _txtNotes.Text);
-
-                        if (!stockResult.Success)
-                        {
-                            ShowError(stockResult.ErrorMessage);
-                            return;
-                        }
-                    }
-
-                    DialogResult = DialogResult.OK;
-                    Close();
                 }
                 else
                 {
-                    // Add mode: create the product.
-                    var add = await _productService.AddAsync(
+                    var result = await _productService.AddAsync(
                         categoryId,
                         _txtProductName.Text,
                         _txtBrand.Text,
@@ -360,33 +573,22 @@ namespace TodangMotor.Forms
                         _txtCostPrice.Text,
                         _txtSellingPrice.Text,
                         _txtReorderLevel.Text,
-                        _txtNotes.Text);
+                        string.Empty, // Notes
+                        _txtSku.Text,
+                        expiration,
+                        _txtDescription.Text,
+                        supplierId,
+                        alternateIds);
 
-                    if (!add.Success)
+                    if (!result.Success)
                     {
-                        ShowError(add.ErrorMessage);
+                        ShowError(result.ErrorMessage);
                         return;
                     }
-
-                    // If Owner entered initial stock, log it as an adjustment.
-                    if (int.TryParse(_txtQuantityOnHand.Text.Trim(), out int initialQty)
-                        && initialQty > 0)
-                    {
-                        var stockResult = await _productService.UpdateStockAsync(
-                            add.NewProductId,
-                            initialQty,
-                            _txtNotes.Text);
-
-                        if (!stockResult.Success)
-                        {
-                            ShowError("Product created, but stock could not be set: " + stockResult.ErrorMessage);
-                            return;
-                        }
-                    }
-
-                    DialogResult = DialogResult.OK;
-                    Close();
                 }
+
+                DialogResult = DialogResult.OK;
+                Close();
             }
             finally
             {
@@ -417,13 +619,16 @@ namespace TodangMotor.Forms
             _btnCancel.Enabled = !busy;
             _txtProductName.Enabled = !busy;
             _txtBrand.Enabled = !busy;
+            _txtSku.Enabled = !busy;
             _cmbCategory.Enabled = !busy;
             _txtUnit.Enabled = !busy;
             _txtCostPrice.Enabled = !busy;
             _txtSellingPrice.Enabled = !busy;
             _txtReorderLevel.Enabled = !busy;
-            _txtQuantityOnHand.Enabled = !busy;
-            _txtNotes.Enabled = !busy;
+            _dtpExpiration.Enabled = !busy;
+            _cmbSupplier.Enabled = !busy;
+            _alternateSuppliersList.Enabled = !busy;
+            _txtDescription.Enabled = !busy;
         }
 
         private void ShowError(string message)

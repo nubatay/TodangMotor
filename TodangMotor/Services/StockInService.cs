@@ -104,6 +104,42 @@ namespace TodangMotor.Services
             }
         }
 
+        /// <summary>
+        /// Active products supplied by the given supplier — either as the
+        /// primary supplier or as an alternate.
+        /// Pass supplierId = 0 for ALL active products.
+        /// Used by the Stock-In product picker.
+        /// </summary>
+        public async Task<List<Product>> GetActiveProductsBySupplierAsync(int supplierId)
+        {
+            if (!SessionManager.IsOwner) return new List<Product>();
+
+            try
+            {
+                if (supplierId <= 0)
+                {
+                    // All suppliers — return every active product.
+                    var all = await _productRepository.GetAllAsync();
+                    return all
+                        .Where(p => p.IsActive)
+                        .OrderBy(p => p.ProductName)
+                        .ThenBy(p => p.Brand)
+                        .ToList();
+                }
+
+                // Filter to this supplier (primary or alternate).
+                var filtered = await _productRepository.GetBySupplierIdAsync(supplierId);
+                return filtered
+                    .OrderBy(p => p.ProductName)
+                    .ThenBy(p => p.Brand)
+                    .ToList();
+            }
+            catch
+            {
+                return new List<Product>();
+            }
+        }
+
         // ============================================================
         // COMPLETE STOCK-IN
         // ============================================================

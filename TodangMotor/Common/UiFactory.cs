@@ -210,8 +210,9 @@ namespace TodangMotor.Common
             {
                 BackColor = Theme.Surface,
                 Radius = radius,
-                BorderColor = withBorder ? Theme.Divider : Color.Transparent,
+                BorderColor = withBorder ? Theme.PanelBorder : Color.Transparent,
                 BorderSize = withBorder ? 1 : 0,
+                ShadowEnabled = true,
                 Padding = new Padding(Theme.SpacingMd)
             };
         }
@@ -546,11 +547,6 @@ namespace TodangMotor.Common
     // ROUNDED COMBOBOX
     // ================================================================
 
-    /// <summary>
-    /// Flat, rounded dropdown that matches RoundedTextBox.
-    /// The native ComboBox arrow is clipped off the right edge; a small
-    /// overlay panel on top of the ComboBox paints our custom chevron.
-    /// </summary>
     public class RoundedComboBox : Panel
     {
         private readonly ComboBox _inner;
@@ -588,8 +584,6 @@ namespace TodangMotor.Common
             _inner.GotFocus += (s, e) =>
             {
                 _focused = true;
-                // Windows overrides BackColor with white when a ComboBox gets
-                // focus. Force it back on the next message pump cycle.
                 BeginInvoke(new Action(() =>
                 {
                     if (!_inner.IsDisposed)
@@ -606,8 +600,6 @@ namespace TodangMotor.Common
 
             Controls.Add(_inner);
 
-            // Arrow overlay: sits on top of the ComboBox's right side,
-            // matching its background and painting our chevron.
             _arrowOverlay = new Panel
             {
                 BackColor = Theme.InputBackground,
@@ -631,11 +623,6 @@ namespace TodangMotor.Common
             LayoutInner();
         }
 
-        /// <summary>
-        /// Positions the inner ComboBox so its native dropdown arrow is
-        /// clipped past the right edge, and pins the arrow overlay just
-        /// inside the panel's right border.
-        /// </summary>
         private void LayoutInner()
         {
             if (_inner == null || _arrowOverlay == null) return;
@@ -645,12 +632,9 @@ namespace TodangMotor.Common
             int y = Math.Max(0, (Height - comboH) / 2);
 
             _inner.Location = new Point(12, y);
-            // Extra 30 px pushes the native arrow off the panel.
             _inner.Width = Width - 12 + 30;
             _inner.DropDownWidth = Math.Max(120, Width - 12);
 
-            // Arrow overlay: 32 px wide, inset 3 px from the right edge so
-            // it doesn't cover the panel's rounded border.
             const int overlayW = 32;
             int overlayH = Math.Max(comboH, 20);
             int overlayX = Width - overlayW - 3;
@@ -713,14 +697,21 @@ namespace TodangMotor.Common
     }
 
     // ================================================================
-    // ROUNDED PANEL
+    // ROUNDED PANEL — with soft drop shadow
     // ================================================================
 
+    /// <summary>
+    /// Panel with rounded corners, optional border, and optional soft
+    /// drop shadow. Uses ControlStyles.Opaque so WinForms does not
+    /// paint its own background first — eliminates double-painting
+    /// and flicker.
+    /// </summary>
     public class RoundedPanel : Panel
     {
         private int _radius = Theme.RadiusCard;
-        private Color _borderColor = Theme.Divider;
+        private Color _borderColor = Theme.PanelBorder;
         private int _borderSize = 1;
+        private bool _shadowEnabled = true;
 
         public RoundedPanel()
         {
@@ -729,6 +720,7 @@ namespace TodangMotor.Common
                      ControlStyles.UserPaint |
                      ControlStyles.ResizeRedraw, true);
 
+            DoubleBuffered = true;
             BackColor = Theme.Surface;
             Resize += (s, e) => ApplyRegion();
         }
@@ -737,7 +729,7 @@ namespace TodangMotor.Common
         public int Radius
         {
             get => _radius;
-            set { _radius = value; ApplyRegion(); Invalidate(); }
+            set { _radius = Math.Max(0, value); ApplyRegion(); Invalidate(); }
         }
 
         [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
@@ -751,11 +743,50 @@ namespace TodangMotor.Common
         public int BorderSize
         {
             get => _borderSize;
-            set { _borderSize = value; Invalidate(); }
+            set { _borderSize = Math.Max(0, value); Invalidate(); }
+        }
+
+        [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
+        public bool ShadowEnabled
+        {
+            get => _shadowEnabled;
+            set
+            {
+                if (_shadowEnabled == value) return;
+                _shadowEnabled = value;
+
+                // Adjust padding so children don't overlap the shadow area.
+                Padding = value
+                    ? new Padding(Theme.ShadowPadding + 12)
+                    : new Padding(12);
+
+                ApplyRegion();
+                Invalidate();
+            }
+        }
+
+        /// <summary>
+        /// Skip WinForms' default background paint — OnPaint handles
+        /// everything. With WS_EX_COMPOSITED on the top-level form,
+        /// this is safe.
+        /// </summary>
+        protected override void OnPaintBackground(PaintEventArgs e)
+        {
+            // Intentionally empty.
         }
 
         private void ApplyRegion()
         {
+            // With shadow enabled we do NOT clip the panel to a rounded
+            // region — the shadow extends past the card edges.
+            if (_shadowEnabled)
+            {
+                var old = Region;
+                Region = null;
+                old?.Dispose();
+                return;
+            }
+
             if (Width <= 0 || Height <= 0) return;
             Theme.ApplyRoundedRegion(this, _radius);
         }
@@ -763,10 +794,26 @@ namespace TodangMotor.Common
         protected override void OnPaint(PaintEventArgs e)
         {
             e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
+
+            // Clear to the parent background so the shadow blends cleanly.
             e.Graphics.Clear(Parent?.BackColor ?? Theme.Background);
 
-            var rect = new Rectangle(0, 0, Width - 1, Height - 1);
-            using (var path = Theme.RoundedRect(rect, _radius))
+            int pad = _shadowEnabled ? Theme.ShadowPadding : 0;
+            var cardRect = new Rectangle(
+                pad, pad,
+                Width - pad * 2 - 1,
+                Height - pad * 2 - 1);
+
+            if (cardRect.Width <= 0 || cardRect.Height <= 0) return;
+
+            // 1. Soft shadow behind the card.
+            if (_shadowEnabled)
+            {
+                Theme.DrawShadow(e.Graphics, cardRect, _radius);
+            }
+
+            // 2. Card fill + border.
+            using (var path = Theme.RoundedRect(cardRect, _radius))
             {
                 using (var brush = new SolidBrush(BackColor))
                     e.Graphics.FillPath(brush, path);

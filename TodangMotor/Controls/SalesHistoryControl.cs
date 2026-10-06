@@ -1,7 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Drawing;
-using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
 using System.Windows.Forms;
@@ -12,6 +11,11 @@ using TodangMotor.Services;
 
 namespace TodangMotor.Controls
 {
+    /// <summary>
+    /// Sales History — filterable list of sales with From/To date pickers.
+    /// View and void actions only. Revenue report generation lives in the
+    /// Reports Hub (Owner-only).
+    /// </summary>
     public class SalesHistoryControl : UserControl
     {
         // ============================================================
@@ -35,9 +39,7 @@ namespace TodangMotor.Controls
 
         private RoundedTextBox _searchBox;
         private DateTimePicker _dtpFrom;
-        private RoundedComboBox _periodCombo;
-        private Button _btnPdf;
-        private Button _btnExcel;
+        private DateTimePicker _dtpTo;
         private Label _countLabel;
 
         private DataGridView _grid;
@@ -75,9 +77,9 @@ namespace TodangMotor.Controls
 
         private void BuildLayout()
         {
-            Controls.Add(BuildGrid());        // Fill
-            Controls.Add(BuildBottomBar());   // Bottom
-            Controls.Add(BuildFilterBar());   // Top
+            Controls.Add(BuildGrid());
+            Controls.Add(BuildBottomBar());
+            Controls.Add(BuildFilterBar());
         }
 
         private Panel BuildFilterBar()
@@ -95,14 +97,13 @@ namespace TodangMotor.Controls
             _searchBox.MaxLength = 100;
             _searchBox.TextChanged += (s, e) => ApplyFilters();
 
-            // ---- From date picker ----
             var lblFrom = new Label
             {
                 Text = "From:",
                 Font = Theme.FontSmall,
                 ForeColor = Theme.TextSecondary,
                 AutoSize = false,
-                Size = new Size(50, 20),
+                Size = new Size(46, 20),
                 Location = new Point(276, 24),
                 TextAlign = ContentAlignment.MiddleLeft,
                 BackColor = Color.Transparent
@@ -113,47 +114,36 @@ namespace TodangMotor.Controls
                 Format = DateTimePickerFormat.Custom,
                 CustomFormat = "MMM d, yyyy",
                 Font = Theme.FontBody,
-                Location = new Point(328, 14),
-                Size = new Size(170, 32),
+                Location = new Point(324, 14),
+                Size = new Size(160, 32),
                 MaxDate = DateTime.Today,
                 Value = DateTime.Today
             };
             _dtpFrom.ValueChanged += (s, e) => ApplyFilters();
 
-            // ---- Period dropdown ----
-            var lblPeriod = new Label
+            var lblTo = new Label
             {
-                Text = "Period:",
+                Text = "To:",
                 Font = Theme.FontSmall,
                 ForeColor = Theme.TextSecondary,
                 AutoSize = false,
-                Size = new Size(56, 20),
-                Location = new Point(510, 24),
+                Size = new Size(28, 20),
+                Location = new Point(496, 24),
                 TextAlign = ContentAlignment.MiddleLeft,
                 BackColor = Color.Transparent
             };
 
-            _periodCombo = new RoundedComboBox
+            _dtpTo = new DateTimePicker
             {
-                Width = 130,
-                Location = new Point(570, 12)
+                Format = DateTimePickerFormat.Custom,
+                CustomFormat = "MMM d, yyyy",
+                Font = Theme.FontBody,
+                Location = new Point(526, 14),
+                Size = new Size(160, 32),
+                MaxDate = DateTime.Today,
+                Value = DateTime.Today
             };
-            _periodCombo.Items.Add("Day");
-            _periodCombo.Items.Add("Week");
-            _periodCombo.Items.Add("Month");
-            _periodCombo.SelectedIndex = 0;
-            _periodCombo.SelectedIndexChanged += (s, e) => ApplyFilters();
-
-            // ---- PDF / Excel (right-aligned, Owner-only) ----
-            _btnPdf = UiFactory.CreateButton("PDF", UiFactory.ButtonStyle.Secondary, 80, 36);
-            _btnPdf.Click += async (s, e) => await GenerateReportAsync("PDF");
-
-            _btnExcel = UiFactory.CreateButton("Excel", UiFactory.ButtonStyle.Secondary, 80, 36);
-            _btnExcel.Click += async (s, e) => await GenerateReportAsync("Excel");
-
-            // Owner-only export buttons.
-            _btnPdf.Visible = SessionManager.IsOwner;
-            _btnExcel.Visible = SessionManager.IsOwner;
+            _dtpTo.ValueChanged += (s, e) => ApplyFilters();
 
             _countLabel = new Label
             {
@@ -172,27 +162,9 @@ namespace TodangMotor.Controls
             bar.Controls.Add(_searchBox);
             bar.Controls.Add(lblFrom);
             bar.Controls.Add(_dtpFrom);
-            bar.Controls.Add(lblPeriod);
-            bar.Controls.Add(_periodCombo);
-            bar.Controls.Add(_btnPdf);
-            bar.Controls.Add(_btnExcel);
+            bar.Controls.Add(lblTo);
+            bar.Controls.Add(_dtpTo);
             bar.Controls.Add(_countLabel);
-
-            // Pin PDF/Excel to the right edge.
-            bar.Resize += (s, e) =>
-            {
-                if (bar.ClientSize.Width <= 0) return;
-                const int rightPad = 4;
-                const int gap = 6;
-
-                int x = bar.ClientSize.Width - rightPad;
-                x -= _btnExcel.Width;
-                _btnExcel.Location = new Point(x, 14);
-
-                x -= gap;
-                x -= _btnPdf.Width;
-                _btnPdf.Location = new Point(x, 14);
-            };
 
             return bar;
         }
@@ -206,9 +178,7 @@ namespace TodangMotor.Controls
             };
             UiFactory.StyleGrid(_grid);
             _grid.AlternatingRowsDefaultCellStyle.BackColor = Color.FromArgb(248, 249, 251);
-
             _grid.CellFormatting += Grid_CellFormatting;
-
             _grid.CellDoubleClick += (s, e) =>
             {
                 if (e.RowIndex < 0) return;
@@ -229,11 +199,9 @@ namespace TodangMotor.Controls
         {
             if (e.RowIndex < 0 || e.ColumnIndex < 0) return;
             if (e.RowIndex >= _grid.Rows.Count) return;
-
-            var row = _grid.Rows[e.RowIndex];
             if (!_grid.Columns.Contains("Status")) return;
 
-            var statusVal = row.Cells["Status"].Value?.ToString();
+            var statusVal = _grid.Rows[e.RowIndex].Cells["Status"].Value?.ToString();
             if (statusVal == "Void")
             {
                 e.CellStyle.BackColor = Color.FromArgb(255, 235, 235);
@@ -255,6 +223,7 @@ namespace TodangMotor.Controls
                 BackColor = Theme.Background
             };
 
+            // ---- Left group: view / void ----
             _btnView = UiFactory.CreateButton("View Detail", UiFactory.ButtonStyle.Secondary, 120, 40);
             _btnView.Location = new Point(4, 14);
             _btnView.Click += (s, e) => OpenDetailForSelected();
@@ -263,28 +232,38 @@ namespace TodangMotor.Controls
             _btnVoid.Location = new Point(132, 14);
             _btnVoid.Click += (s, e) => OpenDetailForSelected();
 
-            _btnRefresh = UiFactory.CreateButton("Refresh", UiFactory.ButtonStyle.Ghost, 100, 40);
-            _btnRefresh.Location = new Point(250, 14);
-            _btnRefresh.Click += async (s, e) => await ReloadAllAsync();
-
+            // ---- Center: status ----
             _statusLabel = new Label
             {
                 Text = string.Empty,
                 Font = Theme.FontSmall,
                 ForeColor = Theme.TextSecondary,
                 AutoSize = false,
-                Location = new Point(360, 14),
+                Location = new Point(250, 14),
                 Height = 40,
-                Width = 500,
+                Width = 300,
                 TextAlign = ContentAlignment.MiddleLeft,
                 Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right,
                 BackColor = Color.Transparent
             };
 
+            // ---- Right: refresh ----
+            _btnRefresh = UiFactory.CreateButton("Refresh", UiFactory.ButtonStyle.Ghost, 100, 40);
+            _btnRefresh.Anchor = AnchorStyles.Top | AnchorStyles.Right;
+            _btnRefresh.Click += async (s, e) => await ReloadAllAsync();
+
             bar.Controls.Add(_btnView);
             bar.Controls.Add(_btnVoid);
-            bar.Controls.Add(_btnRefresh);
             bar.Controls.Add(_statusLabel);
+            bar.Controls.Add(_btnRefresh);
+
+            // Position the Refresh button on the right edge.
+            bar.Resize += (s, e) =>
+            {
+                _btnRefresh.Left = bar.ClientSize.Width - _btnRefresh.Width - 4;
+                _statusLabel.Width = Math.Max(100,
+                    _btnRefresh.Left - _statusLabel.Left - 12);
+            };
 
             return bar;
         }
@@ -320,35 +299,18 @@ namespace TodangMotor.Controls
         // RANGE HELPER
         // ============================================================
 
-        /// <summary>
-        /// Reads the anchor date and period dropdown, computes
-        /// (fromInclusive, toExclusive, label).
-        /// Anchor is exactly what the user picked — never auto-snapped.
-        /// </summary>
         private (DateTime From, DateTime ToExclusive, string Label) GetSelectedRange()
         {
-            DateTime anchor = _dtpFrom.Value.Date;
-            string period = _periodCombo?.SelectedItem as string ?? "Day";
+            DateTime from = _dtpFrom.Value.Date;
+            DateTime to = _dtpTo.Value.Date;
 
-            switch (period)
-            {
-                case "Week":
-                    {
-                        var to = anchor.AddDays(7);
-                        return (anchor, to, $"Week starting {anchor:MMM d, yyyy}");
-                    }
-                case "Month":
-                    {
-                        var to = anchor.AddMonths(1);
-                        return (anchor, to, $"Month starting {anchor:MMM d, yyyy}");
-                    }
-                case "Day":
-                default:
-                    {
-                        var to = anchor.AddDays(1);
-                        return (anchor, to, anchor.ToString("MMMM d, yyyy"));
-                    }
-            }
+            if (to < from) to = from;
+
+            string label = from == to
+                ? from.ToString("MMMM d, yyyy")
+                : $"{from:MMM d, yyyy} to {to:MMM d, yyyy}";
+
+            return (from, to.AddDays(1), label);
         }
 
         // ============================================================
@@ -361,12 +323,9 @@ namespace TodangMotor.Controls
 
             var (from, to, _) = GetSelectedRange();
 
-            IEnumerable<Sale> filtered = _allSales;
+            IEnumerable<Sale> filtered = _allSales
+                .Where(s => s.SaleDate >= from && s.SaleDate < to);
 
-            // Date filter
-            filtered = filtered.Where(s => s.SaleDate >= from && s.SaleDate < to);
-
-            // Search filter
             string search = (_searchBox?.Text ?? string.Empty).Trim();
             if (search.Length > 0)
             {
@@ -460,168 +419,6 @@ namespace TodangMotor.Controls
         }
 
         // ============================================================
-        // REVENUE REPORT EXPORT
-        // ============================================================
-
-        private async Task GenerateReportAsync(string format)
-        {
-            if (_isBusy) return;
-
-            if (!SessionManager.IsOwner)
-            {
-                MessageBox.Show(
-                    "Only the Owner can generate revenue reports.",
-                    "Access Denied",
-                    MessageBoxButtons.OK,
-                    MessageBoxIcon.Warning);
-                return;
-            }
-
-            SetBusy(true);
-            try
-            {
-                var (from, to, rangeLabel) = GetSelectedRange();
-
-                var result = await _salesService.GenerateRevenueReportAsync(from, to, rangeLabel);
-
-                if (!result.Success)
-                {
-                    MessageBox.Show(
-                        result.ErrorMessage,
-                        "Report Failed",
-                        MessageBoxButtons.OK,
-                        MessageBoxIcon.Warning);
-                    return;
-                }
-
-                if (result.DailyRows.Count == 0)
-                {
-                    MessageBox.Show(
-                        "No sales found in the selected period.",
-                        "No Data",
-                        MessageBoxButtons.OK,
-                        MessageBoxIcon.Information);
-                    return;
-                }
-
-                // Build report table.
-                var table = new ReportTable
-                {
-                    Title = "Sales Revenue Report",
-                    Subtitle = $"{rangeLabel}   ·   " +
-                               $"{from:MMM d, yyyy} to {to.AddDays(-1):MMM d, yyyy}   ·   " +
-                               $"Generated {DateTime.Now:MMM d, yyyy h:mm tt}",
-                    FooterNote = result.IsCostComplete
-                        ? "All rows have complete cost data. Net Income is exact."
-                        : $"{result.DaysWithMissingCost} day(s) have incomplete cost data " +
-                          "(sales made before cost tracking was enabled). " +
-                          "Their Net Income is not calculated.",
-                    SummaryItems = new List<(string Label, string Value)>
-                    {
-                        ("Total Revenue",   "₱ " + result.TotalRevenue.ToString("N2")),
-                        ("Total Cost",      "₱ " + result.TotalCost.ToString("N2")),
-                        ("Net Income",      "₱ " + result.TotalNetIncome.ToString("N2")),
-                        ("Transactions",    result.TotalTransactions.ToString("N0")),
-                        ("Voided (excl.)",  result.VoidedTransactions.ToString("N0"))
-                    },
-                    Headers = new List<string>
-                    {
-                        "Date", "Transactions", "Revenue (PHP)", "Cost (PHP)", "Net Income (PHP)"
-                    }
-                };
-
-                // Rows — newest first.
-                foreach (var row in result.DailyRows.OrderByDescending(r => r.SaleDay))
-                {
-                    string netIncome = row.HasCompleteCost
-                        ? row.NetIncome!.Value.ToString("N2")
-                        : "—";
-
-                    table.Rows.Add(new List<string>
-                    {
-                        row.SaleDay.ToString("MMM d, yyyy"),
-                        row.TransactionCount.ToString(),
-                        row.Revenue.ToString("N2"),
-                        row.HasCompleteCost ? row.KnownCost.ToString("N2") : "—",
-                        netIncome
-                    });
-                }
-
-                // Save dialog.
-                string ext = format == "PDF" ? ".pdf" : ".xlsx";
-                string filter = format == "PDF"
-                    ? "PDF files (*.pdf)|*.pdf"
-                    : "Excel files (*.xlsx)|*.xlsx";
-
-                using var sfd = new SaveFileDialog
-                {
-                    Filter = filter,
-                    DefaultExt = ext,
-                    AddExtension = true,
-                    FileName = $"SalesRevenue_{DateTime.Now:yyyyMMdd_HHmmss}{ext}",
-                    InitialDirectory = GetDefaultReportFolder()
-                };
-
-                if (sfd.ShowDialog(FindForm()) != DialogResult.OK) return;
-
-                string path = sfd.FileName;
-
-                await Task.Run(() =>
-                {
-                    if (format == "PDF")
-                        ReportService.ExportPdf(table, path);
-                    else
-                        ReportService.ExportExcel(table, path);
-                });
-
-                var openIt = MessageBox.Show(
-                    $"Report saved to:\n{path}\n\nOpen the folder?",
-                    "Report Saved",
-                    MessageBoxButtons.YesNo,
-                    MessageBoxIcon.Information);
-
-                if (openIt == DialogResult.Yes)
-                {
-                    try
-                    {
-                        System.Diagnostics.Process.Start("explorer.exe", $"/select,\"{path}\"");
-                    }
-                    catch { /* ignore */ }
-                }
-
-                ShowStatus($"Report saved: {Path.GetFileName(path)}", isError: false);
-            }
-            catch (Exception ex)
-            {
-                MessageBox.Show(
-                    $"Could not generate report:\n\n{ex.Message}",
-                    "Report Error",
-                    MessageBoxButtons.OK,
-                    MessageBoxIcon.Error);
-            }
-            finally
-            {
-                SetBusy(false);
-            }
-        }
-
-        private static string GetDefaultReportFolder()
-        {
-            try
-            {
-                string docs = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
-                string folder = Path.Combine(docs, "TodangMotor", "Reports");
-                if (!Directory.Exists(folder))
-                    Directory.CreateDirectory(folder);
-                return folder;
-            }
-            catch
-            {
-                return Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
-            }
-        }
-
-        // ============================================================
         // HELPERS
         // ============================================================
 
@@ -631,8 +428,6 @@ namespace TodangMotor.Controls
             _btnView.Enabled = !busy;
             _btnVoid.Enabled = !busy;
             _btnRefresh.Enabled = !busy;
-            _btnPdf.Enabled = !busy;
-            _btnExcel.Enabled = !busy;
         }
 
         private void ShowStatus(string message, bool isError)

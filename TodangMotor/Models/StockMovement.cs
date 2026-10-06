@@ -3,7 +3,7 @@
     /// <summary>
     /// One row of the StockMovements table.
     /// Records a single change to a product's QuantityOnHand.
-    /// MovementType is one of: "Sale", "StockIn", "Adjustment", "Initial".
+    /// MovementType is one of: "Sale", "StockIn", "Adjustment", "Initial", "Void".
     /// Pure data container — no logic, no validation here.
     /// </summary>
     public class StockMovement
@@ -16,7 +16,7 @@
 
         /// <summary>
         /// Why the stock changed. One of:
-        /// "Sale", "StockIn", "Adjustment", "Initial".
+        /// "Sale", "StockIn", "Adjustment", "Initial", "Void".
         /// </summary>
         public string MovementType { get; set; } = string.Empty;
 
@@ -49,5 +49,21 @@
         /// typically null for automatic movements.
         /// </summary>
         public string? Notes { get; set; }
+
+        // ============================================================
+        // READ-ONLY HELPERS (populated by queries, not stored)
+        // ============================================================
+
+        /// <summary>
+        /// Product name — filled by the repository on read via a JOIN.
+        /// Never written back to the DB.
+        /// </summary>
+        public string? ProductName { get; set; }
+
+        /// <summary>
+        /// Product brand — filled by the repository on read via a JOIN.
+        /// Never written back to the DB.
+        /// </summary>
+        public string? ProductBrand { get; set; }
     }
 }

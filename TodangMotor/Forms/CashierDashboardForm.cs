@@ -1,6 +1,8 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Drawing;
+using System.Drawing.Drawing2D;
+using System.Linq;
 using System.Windows.Forms;
 using TodangMotor.Common;
 using TodangMotor.Controls;
@@ -8,10 +10,10 @@ using TodangMotor.Controls;
 namespace TodangMotor.Forms
 {
     /// <summary>
-    /// Cashier dashboard shell. Full-height sidebar on the left, header
-    /// bar over the content area on the right.
-    /// Sidebar items limited to cashier-safe modules:
+    /// Cashier dashboard shell.
+    /// Same visual design as the Owner dashboard but with a shorter sidebar:
     /// Dashboard, POS, Sales History, Inventory, Logout.
+    /// Header shows page title + user chip (Change Password dropdown).
     /// </summary>
     public class CashierDashboardForm : ShellForm
     {
@@ -23,13 +25,14 @@ namespace TodangMotor.Forms
         private const string KeyPos = "pos";
         private const string KeySalesHistory = "saleshistory";
         private const string KeyInventory = "inventory";
-        private const string KeyLogout = "logout";
 
         private const string IconDashboard = "\uE80F";
         private const string IconPos = "\uE719";
         private const string IconSalesHistory = "\uE81C";
         private const string IconInventory = "\uE7B8";
         private const string IconLogout = "\uE7E8";
+        private const string IconPerson = "\uE77B";
+        private const string IconChevronDown = "\uE70D";
 
         // ============================================================
         // FIELDS
@@ -41,6 +44,8 @@ namespace TodangMotor.Forms
         private Panel _contentHost;
         private FlowLayoutPanel _navList;
         private Dictionary<string, NavItemControl> _navItems = new();
+
+        private ContextMenuStrip _chipMenu;
 
         private Control _currentContent;
         private string _currentKey = KeyDashboard;
@@ -60,6 +65,16 @@ namespace TodangMotor.Forms
 
             HeaderTitleLabel.Padding = new Padding(20, 0, 0, 0);
 
+            // ---- Add user chip to the header bar ----
+            var chipPanel = BuildUserChipPanel();
+
+            HeaderPanel.Controls.Remove(ChromeContainer);
+            HeaderPanel.Controls.Remove(HeaderTitleLabel);
+
+            HeaderPanel.Controls.Add(HeaderTitleLabel);   // docks Left
+            HeaderPanel.Controls.Add(chipPanel);           // docks Right
+            HeaderPanel.Controls.Add(ChromeContainer);     // docks Right (rightmost)
+
             RestructureLayout();
 
             BuildSidebar();
@@ -70,6 +85,137 @@ namespace TodangMotor.Forms
 
             Shown += CashierDashboardForm_Shown;
         }
+
+        // ============================================================
+        // USER CHIP (header)
+        // ============================================================
+
+        private Panel BuildUserChipPanel()
+        {
+            var panel = new Panel
+            {
+                Dock = DockStyle.Right,
+                Width = 300,
+                BackColor = Color.Transparent
+            };
+
+            _chipMenu = new ContextMenuStrip
+            {
+                Font = Theme.FontBody,
+                ShowImageMargin = false
+            };
+
+            var changePasswordItem = new ToolStripMenuItem("Change Password");
+            changePasswordItem.Click += (s, e) => OpenChangePassword();
+            _chipMenu.Items.Add(changePasswordItem);
+
+            var chip = new Panel
+            {
+                Width = 280,
+                Height = 40,
+                Location = new Point(10, 8),
+                BackColor = Theme.Surface,
+                Cursor = Cursors.Hand
+            };
+            Theme.ApplyRoundedRegion(chip, 8);
+
+            chip.Paint += (s, e) =>
+            {
+                e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
+                using var path = Theme.RoundedRect(
+                    new Rectangle(0, 0, chip.Width - 1, chip.Height - 1), 8);
+                using var pen = new Pen(Theme.Divider, 1f);
+                e.Graphics.DrawPath(pen, path);
+            };
+
+            string fullName = SessionManager.CurrentUser?.FullName ?? "User";
+            string firstName = fullName.Split(' ').FirstOrDefault() ?? "User";
+            string greeting = GetGreeting() + ", " + firstName;
+
+            var iconLabel = new Label
+            {
+                Text = IconPerson,
+                Font = new Font(Theme.IconFontFamily, 12F),
+                ForeColor = Theme.TextSecondary,
+                AutoSize = false,
+                Size = new Size(28, 40),
+                Location = new Point(10, 0),
+                TextAlign = ContentAlignment.MiddleCenter,
+                BackColor = Color.Transparent,
+                Cursor = Cursors.Hand
+            };
+
+            var textLabel = new Label
+            {
+                Text = greeting,
+                Font = Theme.FontBodyBold,
+                ForeColor = Theme.TextPrimary,
+                AutoSize = false,
+                Size = new Size(210, 40),
+                Location = new Point(40, 0),
+                TextAlign = ContentAlignment.MiddleLeft,
+                BackColor = Color.Transparent,
+                Cursor = Cursors.Hand,
+                AutoEllipsis = true
+            };
+
+            var chevronLabel = new Label
+            {
+                Text = IconChevronDown,
+                Font = new Font(Theme.IconFontFamily, 8F),
+                ForeColor = Theme.TextMuted,
+                AutoSize = false,
+                Size = new Size(14, 40),
+                Location = new Point(256, 0),
+                TextAlign = ContentAlignment.MiddleCenter,
+                BackColor = Color.Transparent,
+                Cursor = Cursors.Hand
+            };
+
+            chip.Controls.Add(iconLabel);
+            chip.Controls.Add(textLabel);
+            chip.Controls.Add(chevronLabel);
+
+            EventHandler click = (s, e) =>
+                _chipMenu.Show(chip, new Point(0, chip.Height + 4));
+            chip.Click += click;
+            iconLabel.Click += click;
+            textLabel.Click += click;
+            chevronLabel.Click += click;
+
+            EventHandler enter = (s, e) => chip.BackColor = Color.FromArgb(232, 238, 255);
+            EventHandler leave = (s, e) => chip.BackColor = Theme.Surface;
+
+            chip.MouseEnter += enter;
+            chip.MouseLeave += leave;
+            iconLabel.MouseEnter += enter;
+            iconLabel.MouseLeave += leave;
+            textLabel.MouseEnter += enter;
+            textLabel.MouseLeave += leave;
+            chevronLabel.MouseEnter += enter;
+            chevronLabel.MouseLeave += leave;
+
+            panel.Controls.Add(chip);
+            return panel;
+        }
+
+        private void OpenChangePassword()
+        {
+            using var form = new ChangePasswordForm();
+            form.ShowDialog(this);
+        }
+
+        private static string GetGreeting()
+        {
+            int hour = DateTime.Now.Hour;
+            if (hour < 12) return "Good morning";
+            if (hour < 18) return "Good afternoon";
+            return "Good evening";
+        }
+
+        // ============================================================
+        // CHROME BUTTONS
+        // ============================================================
 
         private void EnsureChromeButtons()
         {
@@ -153,49 +299,48 @@ namespace TodangMotor.Forms
                 BackColor = Theme.SidebarBg
             };
 
+            var rightBorder = new Panel
+            {
+                Dock = DockStyle.Right,
+                Width = 1,
+                BackColor = Theme.SidebarBorder
+            };
+
             _navList = new FlowLayoutPanel
             {
                 Dock = DockStyle.Fill,
                 FlowDirection = FlowDirection.TopDown,
                 WrapContents = false,
-                AutoScroll = false,
+                AutoScroll = true,
                 BackColor = Theme.SidebarBg,
-                Padding = new Padding(0, 6, 0, 6)
+                Padding = new Padding(0, 4, 0, 4)
             };
 
             var footer = new Panel
             {
                 Dock = DockStyle.Bottom,
-                Height = 74,
+                Height = 56,
                 BackColor = Theme.SidebarBg
             };
 
-            var divider = new Panel
-            {
-                Dock = DockStyle.Top,
-                Height = 1,
-                BackColor = Theme.DividerDark
-            };
-
-            var logout = new NavItemControl(
-                KeyLogout, IconLogout, "Logout",
-                Theme.SidebarBg, Theme.SidebarHover, Theme.SidebarHover);
+            var logout = new NavItemControl("logout", IconLogout, "Logout");
             logout.Dock = DockStyle.Fill;
             logout.ItemClicked += (s, e) => Logout();
-
             footer.Controls.Add(logout);
-            footer.Controls.Add(divider);
 
             var header = BuildSidebarHeader();
 
-            _sidebar.Controls.Add(_navList);
-            _sidebar.Controls.Add(footer);
-            _sidebar.Controls.Add(header);
-
+            // Sections
+            AddSectionHeader("Main");
             AddNavItem(KeyDashboard, IconDashboard, "Dashboard");
             AddNavItem(KeyPos, IconPos, "POS");
             AddNavItem(KeySalesHistory, IconSalesHistory, "Sales History");
             AddNavItem(KeyInventory, IconInventory, "Inventory");
+
+            _sidebar.Controls.Add(_navList);
+            _sidebar.Controls.Add(footer);
+            _sidebar.Controls.Add(header);
+            _sidebar.Controls.Add(rightBorder);
 
             _rootLayout.Controls.Add(_sidebar, 0, 0);
         }
@@ -205,66 +350,56 @@ namespace TodangMotor.Forms
             var header = new Panel
             {
                 Dock = DockStyle.Top,
-                Height = 132,
+                Height = 130,
                 BackColor = Theme.SidebarBg
             };
 
+            // Real logo drawn directly on the light sidebar — no tile,
+            // no border. Aspect ratio is preserved automatically.
+            // Widened to fill nearly the whole sidebar width.
             var logo = new LogoPlaceholder
             {
-                Width = 48,
-                Height = 48,
-                Radius = 12,
-                Location = new Point(20, 32),
-                TileColor = Theme.Primary,
-                LetterColor = Color.White,
+                Width = 205,
+                Height = 110,
+                Radius = 0,
+                TileColor = Color.Transparent,
+                LetterColor = Theme.Primary,
                 Letter = "T",
-                ForcePlaceholder = true
+                ForcePlaceholder = false
             };
 
-            var cashierName = new Label
+            header.Resize += (s, e) =>
             {
-                Text = SessionManager.CurrentUser?.FullName ?? "Cashier",
-                Font = new Font(Theme.UiFontFamily, 12F, FontStyle.Bold),
-                ForeColor = Color.White,
-                AutoSize = false,
-                Location = new Point(80, 30),
-                Size = new Size(128, 30),
-                TextAlign = ContentAlignment.MiddleLeft,
-                BackColor = Color.Transparent,
-                AutoEllipsis = false
-            };
-
-            var roleLabel = new Label
-            {
-                Text = "Cashier",
-                Font = Theme.FontSmall,
-                ForeColor = Color.FromArgb(170, 182, 215),
-                AutoSize = false,
-                Location = new Point(80, 60),
-                Size = new Size(128, 18),
-                TextAlign = ContentAlignment.MiddleLeft,
-                BackColor = Color.Transparent
-            };
-
-            var divider = new Panel
-            {
-                Dock = DockStyle.Bottom,
-                Height = 1,
-                BackColor = Theme.DividerDark
+                logo.Location = new Point(
+                    (header.ClientSize.Width - logo.Width) / 2,
+                    (header.ClientSize.Height - logo.Height) / 2);
             };
 
             header.Controls.Add(logo);
-            header.Controls.Add(cashierName);
-            header.Controls.Add(roleLabel);
-            header.Controls.Add(divider);
-
             return header;
+        }
+
+        private void AddSectionHeader(string text)
+        {
+            var label = new Label
+            {
+                Text = text.ToUpperInvariant(),
+                Font = new Font(Theme.UiFontFamily, 8F, FontStyle.Bold),
+                ForeColor = Theme.SidebarSectionHeader,
+                AutoSize = false,
+                Width = Theme.SidebarWidth,
+                Height = 24,
+                Padding = new Padding(20, 0, 0, 0),
+                TextAlign = ContentAlignment.MiddleLeft,
+                BackColor = Color.Transparent,
+                Margin = new Padding(0, 12, 0, 4)
+            };
+            _navList.Controls.Add(label);
         }
 
         private void AddNavItem(string key, string icon, string label)
         {
-            var item = new NavItemControl(key, icon, label,
-                Theme.SidebarBg, Theme.SidebarHover, Theme.SidebarActive);
+            var item = new NavItemControl(key, icon, label);
             item.ItemClicked += (s, e) => NavigateTo(key);
 
             _navList.Controls.Add(item);
@@ -369,7 +504,7 @@ namespace TodangMotor.Forms
         }
 
         // ============================================================
-        // NAV ITEM CONTROL
+        // NAV ITEM CONTROL (light theme)
         // ============================================================
 
         private class NavItemControl : Panel
@@ -379,33 +514,26 @@ namespace TodangMotor.Forms
 
             private readonly Label _iconLabel;
             private readonly Label _textLabel;
-            private readonly Color _bgNormal;
-            private readonly Color _bgHover;
-            private readonly Color _bgActive;
             private bool _isActive;
 
-            public NavItemControl(string key, string icon, string text,
-                Color bgNormal, Color bgHover, Color bgActive)
+            public NavItemControl(string key, string icon, string text)
             {
                 Key = key;
-                _bgNormal = bgNormal;
-                _bgHover = bgHover;
-                _bgActive = bgActive;
 
-                Height = 46;
+                Height = 42;
                 Width = Theme.SidebarWidth;
                 Margin = new Padding(0);
-                BackColor = bgNormal;
+                BackColor = Theme.SidebarBg;
                 Cursor = Cursors.Hand;
 
                 _iconLabel = new Label
                 {
                     Text = icon,
-                    Font = new Font(Theme.IconFontFamily, 12F, FontStyle.Regular),
-                    ForeColor = Theme.TextOnSidebar,
+                    Font = new Font(Theme.IconFontFamily, 11F, FontStyle.Regular),
+                    ForeColor = Theme.SidebarNavIcon,
                     AutoSize = false,
-                    Size = new Size(36, 46),
-                    Location = new Point(18, 0),
+                    Size = new Size(28, 42),
+                    Location = new Point(20, 0),
                     TextAlign = ContentAlignment.MiddleCenter,
                     BackColor = Color.Transparent,
                     Cursor = Cursors.Hand
@@ -415,11 +543,11 @@ namespace TodangMotor.Forms
                 {
                     Text = text,
                     Font = Theme.FontBody,
-                    ForeColor = Theme.TextOnSidebar,
+                    ForeColor = Theme.SidebarNavText,
                     AutoSize = false,
-                    Height = 46,
-                    Location = new Point(58, 0),
-                    Width = Theme.SidebarWidth - 58 - 12,
+                    Height = 42,
+                    Location = new Point(54, 0),
+                    Width = Theme.SidebarWidth - 54 - 8,
                     TextAlign = ContentAlignment.MiddleLeft,
                     BackColor = Color.Transparent,
                     Cursor = Cursors.Hand,
@@ -431,7 +559,7 @@ namespace TodangMotor.Forms
 
                 Resize += (s, e) =>
                 {
-                    _textLabel.Width = Math.Max(0, Width - _textLabel.Left - 12);
+                    _textLabel.Width = Math.Max(0, Width - _textLabel.Left - 8);
                 };
 
                 MouseEnter += (s, e) => ApplyHover(true);
@@ -456,14 +584,26 @@ namespace TodangMotor.Forms
                 {
                     if (_isActive == value) return;
                     _isActive = value;
-                    BackColor = _isActive ? _bgActive : _bgNormal;
+
+                    if (_isActive)
+                    {
+                        BackColor = Theme.SidebarActive;
+                        _iconLabel.ForeColor = Theme.SidebarActiveText;
+                        _textLabel.ForeColor = Theme.SidebarActiveText;
+                    }
+                    else
+                    {
+                        BackColor = Theme.SidebarBg;
+                        _iconLabel.ForeColor = Theme.SidebarNavIcon;
+                        _textLabel.ForeColor = Theme.SidebarNavText;
+                    }
                 }
             }
 
             private void ApplyHover(bool hover)
             {
                 if (_isActive) return;
-                BackColor = hover ? _bgHover : _bgNormal;
+                BackColor = hover ? Theme.SidebarHover : Theme.SidebarBg;
             }
         }
     }

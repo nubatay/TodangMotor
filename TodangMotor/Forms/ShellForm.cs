@@ -366,6 +366,21 @@ namespace TodangMotor.Forms
         }
 
         // ============================================================
+        // WS_EX_COMPOSITED — eliminates flicker across the whole form
+        // ============================================================
+
+        protected override CreateParams CreateParams
+        {
+            get
+            {
+                var cp = base.CreateParams;
+                // 0x02000000 = WS_EX_COMPOSITED
+                cp.ExStyle |= 0x02000000;
+                return cp;
+            }
+        }
+
+        // ============================================================
         // PAINT (frame border for borderless window)
         // ============================================================
 

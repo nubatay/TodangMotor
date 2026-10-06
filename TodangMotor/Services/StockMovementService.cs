@@ -9,7 +9,7 @@ namespace TodangMotor.Services
     /// <summary>
     /// Orchestrates stock movement logging. Validates and constructs
     /// movement rows, saves them (single or inside a caller's transaction),
-    /// and reads them back for reports.
+    /// and reads them back for reports and the Movement History view.
     /// Does NOT touch Products.QuantityOnHand — that belongs to ProductService.
     /// </summary>
     public class StockMovementService
@@ -22,10 +22,11 @@ namespace TodangMotor.Services
         public const string TypeStockIn = "StockIn";
         public const string TypeSale = "Sale";
         public const string TypeInitial = "Initial";
+        public const string TypeVoid = "Void";
 
         private static readonly string[] ValidTypes =
         {
-            TypeAdjustment, TypeStockIn, TypeSale, TypeInitial
+            TypeAdjustment, TypeStockIn, TypeSale, TypeInitial, TypeVoid
         };
 
         private readonly StockMovementRepository _repo;
@@ -44,10 +45,6 @@ namespace TodangMotor.Services
         // FACTORIES
         // ============================================================
 
-        /// <summary>
-        /// Manual stock adjustment by the Owner.
-        /// Example: Owner recounts and corrects 30 to 25.
-        /// </summary>
         public static StockMovement CreateAdjustment(
             int productId,
             int quantityBefore,
@@ -61,9 +58,6 @@ namespace TodangMotor.Services
                 referenceId: null, userId, notes);
         }
 
-        /// <summary>
-        /// Initial stock load. Reserved for future use — not called anywhere yet.
-        /// </summary>
         public static StockMovement CreateInitial(
             int productId,
             int quantityAfter,
@@ -76,9 +70,6 @@ namespace TodangMotor.Services
                 referenceId: null, userId, notes);
         }
 
-        /// <summary>
-        /// Stock added via a completed Stock-In delivery (4B).
-        /// </summary>
         public static StockMovement CreateStockIn(
             int productId,
             int quantityAdded,
@@ -93,9 +84,6 @@ namespace TodangMotor.Services
                 referenceId: stockInId, userId, notes: null);
         }
 
-        /// <summary>
-        /// Stock removed by a completed Sale (Module 6).
-        /// </summary>
         public static StockMovement CreateSale(
             int productId,
             int quantitySold,
@@ -110,25 +98,31 @@ namespace TodangMotor.Services
                 referenceId: saleId, userId, notes: null);
         }
 
+        public static StockMovement CreateVoid(
+            int productId,
+            int quantityRestored,
+            int quantityBefore,
+            int saleId,
+            int userId,
+            string? notes)
+        {
+            int after = quantityBefore + quantityRestored;
+            return BuildMovement(
+                productId, TypeVoid,
+                quantityBefore, after,
+                referenceId: saleId, userId, notes);
+        }
+
         // ============================================================
         // SAVE
         // ============================================================
 
-        /// <summary>
-        /// Save one movement using its own connection.
-        /// Use this only for standalone adjustments (ProductForm Save).
-        /// </summary>
         public async Task<int> SaveAsync(StockMovement movement)
         {
             Validate(movement);
             return await _repo.InsertAsync(movement);
         }
 
-        /// <summary>
-        /// Save many movements on a connection and transaction the caller
-        /// already opened. Used by 4B Stock-In and Module 6 Sales so all
-        /// writes commit or roll back together.
-        /// </summary>
         public async Task<int> SaveManyAsync(
             IEnumerable<StockMovement> movements,
             IDbConnection connection,
@@ -146,12 +140,46 @@ namespace TodangMotor.Services
         // READS
         // ============================================================
 
-        /// <summary>All movements between two dates. For the daily report.</summary>
+        /// <summary>
+        /// All movements between two dates. For the daily report.
+        /// Inclusive of 'from', exclusive of 'to'.
+        /// </summary>
         public async Task<List<StockMovement>> GetMovementsInRangeAsync(
             DateTime fromInclusive,
             DateTime toExclusive)
         {
             return await _repo.GetByDateRangeAsync(fromInclusive, toExclusive);
+        }
+
+        /// <summary>
+        /// Filtered movements for the Movement History tab.
+        /// Owner-only (CostPrice-adjacent data).
+        /// </summary>
+        public async Task<(bool Success, string ErrorMessage, List<StockMovement> Movements)>
+            GetFilteredAsync(
+                DateTime fromInclusive,
+                DateTime toExclusive,
+                string? productSearch,
+                string? movementType)
+        {
+            if (!TodangMotor.Common.SessionManager.IsOwner)
+                return (false, "Access denied. Only the Owner can view stock movements.", new List<StockMovement>());
+
+            if (toExclusive <= fromInclusive)
+                return (false, "The end date must come after the start date.", new List<StockMovement>());
+
+            try
+            {
+                var rows = await _repo.GetFilteredAsync(
+                    fromInclusive, toExclusive, productSearch, movementType);
+
+                return (true, string.Empty, rows);
+            }
+            catch (Exception)
+            {
+                return (false, "Could not load stock movements. Please check your database connection.",
+                    new List<StockMovement>());
+            }
         }
 
         // ============================================================
@@ -215,7 +243,6 @@ namespace TodangMotor.Services
             if (movement.QuantityAfter < 0)
                 throw new ArgumentException("Quantity after would be negative. Stock cannot go below zero.");
 
-            // Before + change must equal after. This catches factory mistakes.
             if (movement.QuantityBefore + movement.QuantityChange != movement.QuantityAfter)
                 throw new ArgumentException(
                     "Movement is inconsistent: QuantityBefore + QuantityChange != QuantityAfter.");

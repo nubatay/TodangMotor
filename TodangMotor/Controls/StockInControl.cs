@@ -13,8 +13,8 @@ namespace TodangMotor.Controls
 {
     /// <summary>
     /// Stock-In entry, live inside the dashboard content area.
-    /// Same workflow as the old popup, but as a UserControl so it fits
-    /// the uniform sidebar navigation.
+    /// The product dropdown filters by the selected supplier
+    /// (products whose primary OR alternate supplier matches).
     /// </summary>
     public class StockInControl : UserControl
     {
@@ -31,11 +31,17 @@ namespace TodangMotor.Controls
 
         private List<Supplier> _suppliers = new();
         private List<Product> _products = new();
+
         private readonly Dictionary<string, Product> _productByDisplay = new();
+        private readonly Dictionary<string, Supplier> _supplierByDisplay = new();
+
         private readonly List<WorkingLine> _lines = new();
 
         private bool _isLoaded;
         private bool _isBusy;
+        private bool _suppressSupplierChange;
+
+        private const string AllSuppliersDisplay = "(All Suppliers)";
 
         private class WorkingLine
         {
@@ -71,7 +77,10 @@ namespace TodangMotor.Controls
         private Button _btnComplete;
         private Label _lblStatus;
 
-        // ---- Layout constants ----
+        // ============================================================
+        // LAYOUT CONSTANTS
+        // ============================================================
+
         private const int PadX = 24;
         private const int LabelCol = 120;
         private const int FieldCol = PadX + LabelCol + 12;
@@ -106,14 +115,11 @@ namespace TodangMotor.Controls
 
         private void BuildLayout()
         {
-            // Docking order: Fill first, then Bottom, then Top.
-            Controls.Add(BuildGridBlock());        // Fill
-            Controls.Add(BuildBottomBar());        // Bottom
-            Controls.Add(BuildBuilderBlock());     // Top (lower)
-            Controls.Add(BuildHeaderBlock());      // Top (upper, added last)
+            Controls.Add(BuildGridBlock());
+            Controls.Add(BuildBottomBar());
+            Controls.Add(BuildBuilderBlock());
+            Controls.Add(BuildHeaderBlock());
         }
-
-        // ---------------- HEADER (DELIVERY DETAILS) ----------------
 
         private Panel BuildHeaderBlock()
         {
@@ -128,7 +134,6 @@ namespace TodangMotor.Controls
 
             int y = 42;
 
-            // Row 1: Supplier (left) + Delivery Date (right)
             block.Controls.Add(MakeRowLabel("Supplier:", PadX, y, LabelCol));
 
             _cmbSupplier = new RoundedComboBox
@@ -136,6 +141,7 @@ namespace TodangMotor.Controls
                 Width = 320,
                 Location = new Point(FieldCol, y)
             };
+            _cmbSupplier.SelectedIndexChanged += async (s, e) => await OnSupplierChangedAsync();
             block.Controls.Add(_cmbSupplier);
 
             var lblDate = MakeRowLabel("Delivery Date:", 0, y, 120);
@@ -155,7 +161,6 @@ namespace TodangMotor.Controls
 
             y += RowH;
 
-            // Row 2: Reference No (full width)
             block.Controls.Add(MakeRowLabel("Reference No:", PadX, y, LabelCol));
 
             _txtReferenceNo = UiFactory.CreateTextBox(400);
@@ -166,7 +171,6 @@ namespace TodangMotor.Controls
 
             y += RowH;
 
-            // Row 3: Notes (full width)
             block.Controls.Add(MakeRowLabel("Notes:", PadX, y, LabelCol));
 
             _txtNotes = UiFactory.CreateTextBox(400);
@@ -175,7 +179,6 @@ namespace TodangMotor.Controls
             _txtNotes.MaxLength = 250;
             block.Controls.Add(_txtNotes);
 
-            // Responsive widths: fields stretch, date pins right.
             block.Resize += (s, e) =>
             {
                 int right = block.ClientSize.Width - PadX;
@@ -189,8 +192,6 @@ namespace TodangMotor.Controls
 
             return block;
         }
-
-        // ---------------- BUILDER (ADD LINE ITEM) ----------------
 
         private Panel BuildBuilderBlock()
         {
@@ -248,8 +249,6 @@ namespace TodangMotor.Controls
             return block;
         }
 
-        // ---------------- GRID (LINE ITEMS) ----------------
-
         private Panel BuildGridBlock()
         {
             var block = new Panel
@@ -258,7 +257,6 @@ namespace TodangMotor.Controls
                 BackColor = Theme.Background
             };
 
-            // Top: section title + totals
             var topRow = new Panel
             {
                 Dock = DockStyle.Top,
@@ -287,7 +285,6 @@ namespace TodangMotor.Controls
                 _lblTotals.Left = topRow.ClientSize.Width - _lblTotals.Width - PadX;
             };
 
-            // Bottom: warning text (only shows when cost exceeds selling)
             var bottomRow = new Panel
             {
                 Dock = DockStyle.Bottom,
@@ -314,7 +311,6 @@ namespace TodangMotor.Controls
                 _lblWarning.Width = Math.Max(200, bottomRow.ClientSize.Width - PadX * 2);
             };
 
-            // Grid
             var gridWrapper = new Panel
             {
                 Dock = DockStyle.Fill,
@@ -333,14 +329,12 @@ namespace TodangMotor.Controls
             PrimeGridColumns();
             gridWrapper.Controls.Add(_grid);
 
-            block.Controls.Add(gridWrapper);   // Fill
-            block.Controls.Add(bottomRow);     // Bottom
-            block.Controls.Add(topRow);        // Top
+            block.Controls.Add(gridWrapper);
+            block.Controls.Add(bottomRow);
+            block.Controls.Add(topRow);
 
             return block;
         }
-
-        // ---------------- BOTTOM BAR ----------------
 
         private Panel BuildBottomBar()
         {
@@ -386,8 +380,7 @@ namespace TodangMotor.Controls
             bar.Resize += (s, e) =>
             {
                 _btnComplete.Left = bar.ClientSize.Width - _btnComplete.Width - PadX;
-                _lblStatus.Width = Math.Max(
-                    100,
+                _lblStatus.Width = Math.Max(100,
                     bar.ClientSize.Width - PadX - _btnComplete.Width - 20 - _lblStatus.Left);
             };
 
@@ -395,7 +388,7 @@ namespace TodangMotor.Controls
         }
 
         // ============================================================
-        // SMALL LABEL HELPERS
+        // SMALL HELPERS
         // ============================================================
 
         private Label MakeSectionTitle(string text, int x, int y)
@@ -431,25 +424,13 @@ namespace TodangMotor.Controls
             _grid.AutoGenerateColumns = false;
             _grid.Columns.Clear();
 
-            void AddCol(string prop, string header, int weight, bool visible = true)
-            {
-                _grid.Columns.Add(new DataGridViewTextBoxColumn
-                {
-                    Name = prop,
-                    DataPropertyName = prop,
-                    HeaderText = header,
-                    FillWeight = weight,
-                    Visible = visible
-                });
-            }
-
-            AddCol("Product", "Product", 240);
-            AddCol("Brand", "Brand", 140);
-            AddCol("Unit", "Unit", 60);
-            AddCol("Quantity", "Qty", 70);
-            AddCol("UnitCost", "Unit Cost (PHP)", 110);
-            AddCol("Total", "Line Total (PHP)", 130);
-            AddCol("ProductId", "ProductId", 100, visible: false);
+            _grid.Columns.Add(new DataGridViewTextBoxColumn { Name = "Product", HeaderText = "Product", FillWeight = 240 });
+            _grid.Columns.Add(new DataGridViewTextBoxColumn { Name = "Brand", HeaderText = "Brand", FillWeight = 140 });
+            _grid.Columns.Add(new DataGridViewTextBoxColumn { Name = "Unit", HeaderText = "Unit", FillWeight = 60 });
+            _grid.Columns.Add(new DataGridViewTextBoxColumn { Name = "Quantity", HeaderText = "Qty", FillWeight = 70 });
+            _grid.Columns.Add(new DataGridViewTextBoxColumn { Name = "UnitCost", HeaderText = "Unit Cost (PHP)", FillWeight = 110 });
+            _grid.Columns.Add(new DataGridViewTextBoxColumn { Name = "Total", HeaderText = "Line Total (PHP)", FillWeight = 130 });
+            _grid.Columns.Add(new DataGridViewTextBoxColumn { Name = "ProductId", Visible = false });
         }
 
         // ============================================================
@@ -462,29 +443,30 @@ namespace TodangMotor.Controls
             try
             {
                 _suppliers = await _stockInService.GetActiveSuppliersAsync();
-                _products = await _stockInService.GetActiveProductsAsync();
 
+                // Build supplier dropdown — "(All Suppliers)" first.
+                _supplierByDisplay.Clear();
                 _cmbSupplier.Items.Clear();
-                foreach (var s in _suppliers)
-                    _cmbSupplier.Items.Add(s.SupplierName);
-                if (_cmbSupplier.Items.Count > 0)
-                    _cmbSupplier.SelectedIndex = 0;
+                _cmbSupplier.Items.Add(AllSuppliersDisplay);
 
-                _productByDisplay.Clear();
-                _cmbProduct.Items.Clear();
-                foreach (var p in _products)
+                foreach (var s in _suppliers)
                 {
-                    string display = $"{p.ProductName} — {p.Brand}";
-                    _productByDisplay[display] = p;
-                    _cmbProduct.Items.Add(display);
+                    _supplierByDisplay[s.SupplierName] = s;
+                    _cmbSupplier.Items.Add(s.SupplierName);
                 }
-                if (_cmbProduct.Items.Count > 0)
-                    _cmbProduct.SelectedIndex = 0;
+
+                _suppressSupplierChange = true;
+                if (_cmbSupplier.Items.Count > 0)
+                    _cmbSupplier.SelectedIndex = 0; // (All Suppliers)
+                _suppressSupplierChange = false;
+
+                // Load all products initially.
+                await ReloadProductsForCurrentSupplierAsync();
 
                 if (_suppliers.Count == 0)
                     ShowError("No active suppliers available. Add or reactivate a supplier first.");
                 else if (_products.Count == 0)
-                    ShowError("No active products available. Add or reactivate a product first.");
+                    ShowError("No active products available for this supplier. Add or reactivate an item first.");
 
                 RefreshGrid();
             }
@@ -492,6 +474,39 @@ namespace TodangMotor.Controls
             {
                 SetBusy(false);
             }
+        }
+
+        // ============================================================
+        // SUPPLIER → PRODUCT FILTER
+        // ============================================================
+
+        private async Task OnSupplierChangedAsync()
+        {
+            if (_suppressSupplierChange) return;
+            await ReloadProductsForCurrentSupplierAsync();
+        }
+
+        private async Task ReloadProductsForCurrentSupplierAsync()
+        {
+            int supplierId = GetSelectedSupplierId();
+            _products = await _stockInService.GetActiveProductsBySupplierAsync(supplierId);
+
+            _productByDisplay.Clear();
+            _cmbProduct.Items.Clear();
+
+            foreach (var p in _products)
+            {
+                string display = $"{p.ProductName} — {p.Brand}";
+                _productByDisplay[display] = p;
+                _cmbProduct.Items.Add(display);
+            }
+
+            if (_cmbProduct.Items.Count > 0)
+                _cmbProduct.SelectedIndex = 0;
+
+            // Reset line-builder fields because the previous product may not be in the new list.
+            _txtQty.Text = string.Empty;
+            _txtUnitCost.Text = string.Empty;
         }
 
         // ============================================================
@@ -611,10 +626,12 @@ namespace TodangMotor.Controls
             _txtQty.Text = string.Empty;
             _txtUnitCost.Text = string.Empty;
 
+            _suppressSupplierChange = true;
             if (_cmbSupplier.Items.Count > 0)
                 _cmbSupplier.SelectedIndex = 0;
-            if (_cmbProduct.Items.Count > 0)
-                _cmbProduct.SelectedIndex = 0;
+            _suppressSupplierChange = false;
+
+            _ = ReloadProductsForCurrentSupplierAsync();
 
             RefreshGrid();
             ShowInfo("Form cleared.");
@@ -650,9 +667,7 @@ namespace TodangMotor.Controls
 
             _lblTotals.Text = $"Total items: {totalQty}   ·   Total cost: PHP {totalCost:N2}";
             if (_lblTotals.Parent != null)
-            {
                 _lblTotals.Left = _lblTotals.Parent.ClientSize.Width - _lblTotals.Width - PadX;
-            }
 
             var overpriced = new List<string>();
             foreach (var line in _lines)
@@ -686,7 +701,7 @@ namespace TodangMotor.Controls
             int supplierId = GetSelectedSupplierId();
             if (supplierId <= 0)
             {
-                ShowError("Please select a supplier.");
+                ShowError("Please select a specific supplier (not \"All Suppliers\") before completing.");
                 return;
             }
 
@@ -716,7 +731,6 @@ namespace TodangMotor.Controls
                     return;
                 }
 
-                // Prompt-after-save for cost updates.
                 var changes = result.CostComparisons.Where(c => c.HasChange).ToList();
                 var skipped = result.CostComparisons.Where(c => !c.CanUpdate).ToList();
 
@@ -742,7 +756,6 @@ namespace TodangMotor.Controls
                     }
                 }
 
-                // Success: show message, clear form for the next delivery.
                 ShowInfo($"Stock-In #{result.StockInId} saved. " +
                          $"{savedLineCount} item(s), {savedUnitCount} unit(s) added. Inventory updated.");
 
@@ -753,10 +766,12 @@ namespace TodangMotor.Controls
                 _txtQty.Text = string.Empty;
                 _txtUnitCost.Text = string.Empty;
 
+                _suppressSupplierChange = true;
                 if (_cmbSupplier.Items.Count > 0)
                     _cmbSupplier.SelectedIndex = 0;
-                if (_cmbProduct.Items.Count > 0)
-                    _cmbProduct.SelectedIndex = 0;
+                _suppressSupplierChange = false;
+
+                await ReloadProductsForCurrentSupplierAsync();
 
                 RefreshGrid();
             }
@@ -770,9 +785,9 @@ namespace TodangMotor.Controls
         {
             var name = _cmbSupplier.SelectedItem as string;
             if (string.IsNullOrEmpty(name)) return 0;
-            var s = _suppliers.FirstOrDefault(x =>
-                string.Equals(x.SupplierName, name, StringComparison.OrdinalIgnoreCase));
-            return s?.SupplierId ?? 0;
+            if (name == AllSuppliersDisplay) return 0;
+
+            return _supplierByDisplay.TryGetValue(name, out var s) ? s.SupplierId : 0;
         }
 
         // ============================================================

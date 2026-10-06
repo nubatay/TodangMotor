@@ -314,6 +314,67 @@ namespace TodangMotor.Services
         }
 
         // ============================================================
+        // CHANGE OWN PASSWORD
+        // ============================================================
+
+        /// <summary>
+        /// Lets the currently-logged-in user change their own password.
+        /// Verifies the old password with BCrypt before hashing the new one.
+        /// Also clears any lockout state as a bonus.
+        /// </summary>
+        public async Task<(bool Success, string ErrorMessage)> ChangeOwnPasswordAsync(
+            string? oldPassword,
+            string? newPassword,
+            string? confirmPassword)
+        {
+            if (!SessionManager.IsLoggedIn)
+                return (false, "You must be logged in to change your password.");
+
+            int userId = SessionManager.CurrentUser?.UserId ?? 0;
+            if (userId <= 0)
+                return (false, "Could not identify the current user.");
+
+            string oldPw = oldPassword ?? string.Empty;
+            string newPw = newPassword ?? string.Empty;
+            string confirmPw = confirmPassword ?? string.Empty;
+
+            if (oldPw.Length == 0)
+                return (false, "Please enter your current password.");
+
+            if (newPw.Length == 0)
+                return (false, "Please enter a new password.");
+
+            if (newPw.Length < PasswordMinLength)
+                return (false, $"New password must be at least {PasswordMinLength} characters.");
+
+            if (newPw != confirmPw)
+                return (false, "New password and confirmation do not match.");
+
+            if (newPw == oldPw)
+                return (false, "New password must be different from the current password.");
+
+            try
+            {
+                var user = await _userRepository.GetByIdAsync(userId);
+                if (user == null)
+                    return (false, "Your account could not be found.");
+
+                bool oldMatches = BCrypt.Net.BCrypt.Verify(oldPw, user.PasswordHash);
+                if (!oldMatches)
+                    return (false, "Current password is incorrect.");
+
+                string newHash = BCrypt.Net.BCrypt.HashPassword(newPw);
+                await _userRepository.UpdatePasswordHashAsync(userId, newHash);
+
+                return (true, string.Empty);
+            }
+            catch (Exception)
+            {
+                return (false, DbErrorMessage);
+            }
+        }
+
+        // ============================================================
         // SHARED VALIDATION
         // ============================================================
 

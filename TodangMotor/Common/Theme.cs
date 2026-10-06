@@ -31,12 +31,18 @@ namespace TodangMotor.Common
         /// <summary>Pure white — cards, panels, popup surfaces.</summary>
         public static readonly Color Surface = Color.FromArgb(255, 255, 255);
 
-        /// <summary>Deep navy sidebar background.</summary>
-        public static readonly Color SidebarBg = Color.FromArgb(31, 42, 68);
-        public static readonly Color SidebarHover = Color.FromArgb(42, 56, 84);
+        // ============================================================
+        // SIDEBAR (light theme)
+        // ============================================================
 
-        /// <summary>Active sidebar item — uses the brand blue.</summary>
+        public static readonly Color SidebarBg = Color.FromArgb(250, 250, 252);
+        public static readonly Color SidebarBorder = Color.FromArgb(208, 213, 221); // darker for projector contrast
+        public static readonly Color SidebarHover = Color.FromArgb(240, 242, 247);
         public static readonly Color SidebarActive = Primary;
+        public static readonly Color SidebarNavText = Color.FromArgb(26, 26, 26);
+        public static readonly Color SidebarNavIcon = Color.FromArgb(107, 114, 128);
+        public static readonly Color SidebarActiveText = Color.FromArgb(255, 255, 255);
+        public static readonly Color SidebarSectionHeader = Color.FromArgb(156, 163, 175);
 
         // ============================================================
         // TEXT
@@ -46,6 +52,8 @@ namespace TodangMotor.Common
         public static readonly Color TextSecondary = Color.FromArgb(107, 114, 128);
         public static readonly Color TextMuted = Color.FromArgb(160, 166, 178);
         public static readonly Color TextOnPrimary = Color.FromArgb(255, 255, 255);
+
+        /// <summary>Kept for backward compatibility with older code.</summary>
         public static readonly Color TextOnSidebar = Color.FromArgb(230, 233, 244);
 
         // ============================================================
@@ -69,12 +77,67 @@ namespace TodangMotor.Common
         // DIVIDERS / BORDERS
         // ============================================================
 
+        /// <summary>Generic divider line inside forms — light gray.</summary>
         public static readonly Color Divider = Color.FromArgb(230, 233, 240);
-        public static readonly Color DividerDark = Color.FromArgb(50, 62, 90);
+
+        /// <summary>
+        /// Sidebar/footer divider. Now that the sidebar is light,
+        /// this matches the divider tone (used only rarely).
+        /// </summary>
+        public static readonly Color DividerDark = Color.FromArgb(229, 231, 235);
+
+        /// <summary>
+        /// Panel / card outer border — darker than Divider so panels
+        /// remain distinguishable on projectors and bright displays.
+        /// </summary>
+        public static readonly Color PanelBorder = Color.FromArgb(208, 213, 221); // #D0D5DD
+
+        // ============================================================
+        // PANEL SHADOW (for card elevation)
+        // ============================================================
+
+        /// <summary>
+        /// Base color of the drop shadow. A dark navy tone gives a warmer
+        /// shadow than pure black; works well on light backgrounds.
+        /// </summary>
+        public static readonly Color ShadowBase = Color.FromArgb(31, 42, 68);
+
+        /// <summary>Shadow opacity out of 255. Lower = softer.</summary>
+        public const int ShadowAlpha = 28;
+
+        /// <summary>Vertical offset in pixels. Positive moves shadow down.</summary>
+        public const int ShadowOffsetY = 3;
+
+        /// <summary>Shadow blur radius in pixels. Multi-layer drawn.</summary>
+        public const int ShadowBlur = 8;
+
+        /// <summary>Extra transparent border around the panel bounds to make room for shadow.</summary>
+        public const int ShadowPadding = 4;
+
+        // ============================================================
+        // CHART PALETTE (for donut slices, category charts, etc.)
+        // ============================================================
+
+        /// <summary>
+        /// Reusable accent palette for charts. Blends brand blue with
+        /// complementary tones for clear slice distinction.
+        /// </summary>
+        public static readonly Color[] ChartPalette =
+        {
+            Color.FromArgb(77, 107, 254),   // brand blue
+            Color.FromArgb(46, 160, 67),    // green
+            Color.FromArgb(240, 173, 78),   // amber
+            Color.FromArgb(229, 72, 77),    // red
+            Color.FromArgb(139, 92, 246),   // violet
+            Color.FromArgb(20, 184, 166),   // teal
+            Color.FromArgb(234, 88, 12),    // orange
+            Color.FromArgb(99, 102, 241),   // indigo
+            Color.FromArgb(236, 72, 153),   // pink
+            Color.FromArgb(132, 204, 22)    // lime
+        };
 
         // ============================================================
         // FONTS
-        // Segoe UI for normal text. Segoe MDL2 Assets for icons.
         // ============================================================
 
         public const string UiFontFamily = "Segoe UI";
@@ -169,15 +232,44 @@ namespace TodangMotor.Common
                 (int)(a.B + (b.B - a.B) * t));
         }
 
-        /// <summary>
-        /// Same color, but with a custom transparency (0 = invisible, 255 = solid).
-        /// Used for shadows and overlays.
-        /// </summary>
+        /// <summary>Same color, but with a custom transparency (0–255).</summary>
         public static Color WithAlpha(Color c, int alpha)
         {
             if (alpha < 0) alpha = 0;
             if (alpha > 255) alpha = 255;
             return Color.FromArgb(alpha, c.R, c.G, c.B);
+        }
+
+        /// <summary>
+        /// Draws a soft drop shadow inside the given rectangle.
+        /// Caller must have already cleared the background.
+        /// Multiple concentric semi-transparent rectangles create a
+        /// pseudo-blur effect — cheap and no external library needed.
+        /// </summary>
+        public static void DrawShadow(Graphics g, Rectangle bounds, int radius)
+        {
+            if (bounds.Width <= 0 || bounds.Height <= 0) return;
+
+            g.SmoothingMode = SmoothingMode.AntiAlias;
+
+            // Draw from largest (most transparent) to smallest (least transparent).
+            for (int i = ShadowBlur; i >= 1; i--)
+            {
+                // Opacity tapers off as we move outward.
+                double factor = 1.0 - ((double)i / (ShadowBlur + 1));
+                int alpha = (int)(ShadowAlpha * factor);
+                if (alpha <= 0) continue;
+
+                var shadowRect = new Rectangle(
+                    bounds.X - i + 1,
+                    bounds.Y - i + 1 + ShadowOffsetY,
+                    bounds.Width + i * 2 - 2,
+                    bounds.Height + i * 2 - 2);
+
+                using var path = RoundedRect(shadowRect, radius + i);
+                using var brush = new SolidBrush(WithAlpha(ShadowBase, alpha));
+                g.FillPath(brush, path);
+            }
         }
     }
 }

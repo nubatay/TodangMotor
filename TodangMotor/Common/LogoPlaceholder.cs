@@ -12,6 +12,7 @@ namespace TodangMotor.Common
     /// If a real logo image exists at Assets/Logo.png, it is drawn with
     /// aspect ratio preserved. Otherwise, a rounded tile with a letter is shown.
     /// Set ForcePlaceholder = true to always use the letter tile (ignores the image).
+    /// Optionally draws a thin border around the tile — useful on light backgrounds.
     /// </summary>
     public class LogoPlaceholder : Control
     {
@@ -40,6 +41,8 @@ namespace TodangMotor.Common
         private int _radius = 12;
         private Color _backgroundColor = Color.White;
         private Color _letterColor = Theme.Primary;
+        private Color _borderColor = Color.Transparent;
+        private int _borderSize = 1;
         private string _letter = "T";
         private Image? _cachedImage;
         private bool _imageLoadAttempted;
@@ -62,6 +65,10 @@ namespace TodangMotor.Common
             ApplyRegion();
         }
 
+        // ============================================================
+        // PROPERTIES
+        // ============================================================
+
         [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
         public int Radius
         {
@@ -83,6 +90,25 @@ namespace TodangMotor.Common
             set { _letterColor = value; Invalidate(); }
         }
 
+        /// <summary>
+        /// Optional border around the tile. Default is transparent (no border).
+        /// Set to a light gray (e.g. #E5E7EB) when the tile sits on a
+        /// similarly-bright background and needs definition.
+        /// </summary>
+        [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
+        public Color BorderColor
+        {
+            get => _borderColor;
+            set { _borderColor = value; Invalidate(); }
+        }
+
+        [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
+        public int BorderSize
+        {
+            get => _borderSize;
+            set { _borderSize = Math.Max(0, value); Invalidate(); }
+        }
+
         [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
         public string Letter
         {
@@ -96,8 +122,7 @@ namespace TodangMotor.Common
 
         /// <summary>
         /// When true, the control always draws the fallback tile + letter,
-        /// ignoring any real logo file on disk. Used by sidebars that want
-        /// the compact monogram instead of the full brand lockup.
+        /// ignoring any real logo file on disk.
         /// </summary>
         [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
         public bool ForcePlaceholder
@@ -111,11 +136,14 @@ namespace TodangMotor.Common
             }
         }
 
+        // ============================================================
+        // INTERNAL
+        // ============================================================
+
         private void ApplyRegion()
         {
             if (Width <= 0 || Height <= 0) return;
 
-            // No clipping region when the tile is transparent.
             if (_backgroundColor.A == 0 || _radius <= 0)
             {
                 var old = Region;
@@ -149,9 +177,9 @@ namespace TodangMotor.Common
             return _cachedImage;
         }
 
-        // ------------------------------------------------------------
+        // ============================================================
         // PAINT
-        // ------------------------------------------------------------
+        // ============================================================
 
         protected override void OnPaint(PaintEventArgs e)
         {
@@ -171,10 +199,17 @@ namespace TodangMotor.Common
                     e.Graphics.FillPath(brush, path);
                 }
 
+                // Optional border.
+                if (_borderSize > 0 && _borderColor.A > 0)
+                {
+                    using var pen = new Pen(_borderColor, _borderSize);
+                    e.Graphics.DrawPath(pen, path);
+                }
+
+                // Logo image or fallback letter.
                 var img = TryGetCachedImage();
                 if (img != null)
                 {
-                    // Aspect-preserving fit inside the tile with minimal padding.
                     int pad = 1;
                     int innerW = Math.Max(1, Width - pad * 2);
                     int innerH = Math.Max(1, Height - pad * 2);
@@ -192,7 +227,6 @@ namespace TodangMotor.Common
                 }
                 else
                 {
-                    // Fallback: rounded tile with a bold letter.
                     using (var brush = new SolidBrush(_letterColor))
                     using (var fmt = new StringFormat
                     {

@@ -22,10 +22,13 @@ namespace TodangMotor.Controls
         private int _hoverIndex = -1;
 
         // Layout constants.
-        private const int TopPadding = 22;   // room for value labels above bars
-        private const int BottomPadding = 30;   // room for bucket labels
+        private const int TopPadding = 22;
+        private const int BottomPadding = 30;
         private const int SidePadding = 10;
         private const int BarGapPx = 6;
+
+        /// <summary>Fired when a bar is clicked. Payload is the bucket's label.</summary>
+        public event Action<string>? BarClicked;
 
         public SalesBarChart()
         {
@@ -40,13 +43,19 @@ namespace TodangMotor.Controls
 
             MouseMove += (s, e) => UpdateHover(e.X, e.Y);
             MouseLeave += (s, e) => { _hoverIndex = -1; Invalidate(); };
+            MouseClick += (s, e) =>
+            {
+                int index = ComputeHoverIndex(e.X, e.Y);
+                if (index >= 0 && index < _buckets.Count)
+                    BarClicked?.Invoke(_buckets[index].Label);
+            };
         }
 
         // ============================================================
         // PUBLIC API
         // ============================================================
 
-        public void SetData(List<ChartBucket> buckets)
+        public void SetData(List<ChartBucket>? buckets)
         {
             _buckets = buckets ?? new List<ChartBucket>();
             _hoverIndex = -1;
@@ -70,7 +79,6 @@ namespace TodangMotor.Controls
             e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
             e.Graphics.TextRenderingHint = System.Drawing.Text.TextRenderingHint.ClearTypeGridFit;
 
-            // Clear with parent's background so the rounded card's corners blend.
             e.Graphics.Clear(Parent?.BackColor ?? Theme.Surface);
 
             if (_buckets == null || _buckets.Count == 0)
@@ -84,27 +92,22 @@ namespace TodangMotor.Controls
 
             if (chartWidth <= 20 || chartHeight <= 20) return;
 
-            // Highest bucket value → how tall the tallest bar should be.
             decimal maxValue = _buckets.Max(b => b.Value);
 
-            // Show gridline labels for 0 and max.
+            // Baseline (0-line)
             using (var gridPen = new Pen(Theme.Divider, 1))
             {
-                // Baseline (0-line)
                 int baselineY = TopPadding + chartHeight;
                 e.Graphics.DrawLine(gridPen,
                     SidePadding, baselineY,
                     SidePadding + chartWidth, baselineY);
             }
 
-            // Compute bar width.
             int n = _buckets.Count;
             int totalGaps = BarGapPx * (n - 1);
             float barWidth = (chartWidth - totalGaps) / (float)n;
+            if (barWidth < 4) barWidth = 4;
 
-            if (barWidth < 4) barWidth = 4; // clamp — nobody wants invisible bars
-
-            // Draw each bar.
             for (int i = 0; i < n; i++)
             {
                 var bucket = _buckets[i];
@@ -113,28 +116,24 @@ namespace TodangMotor.Controls
                 float heightRatio = maxValue > 0 ? (float)(bucket.Value / maxValue) : 0f;
                 float barH = chartHeight * heightRatio;
 
-                // Minimum visible height for non-zero values (so tiny values are visible).
                 if (bucket.Value > 0 && barH < 3) barH = 3;
                 if (bucket.Value == 0) barH = 0;
 
                 float y = TopPadding + chartHeight - barH;
-
                 var rect = new RectangleF(x, y, barWidth, barH);
 
-                // Bar color — hovered bar is darker.
                 Color barColor = (i == _hoverIndex)
                     ? Theme.PrimaryPressed
                     : Theme.Primary;
 
                 if (barH > 0)
                 {
-                    // Rounded top corners for a cleaner look.
                     using var path = GetTopRoundedRect(rect, Math.Min(6, (int)(barWidth / 2)));
                     using var brush = new SolidBrush(barColor);
                     e.Graphics.FillPath(brush, path);
                 }
 
-                // Value above the bar (only when hovered, to keep the chart clean).
+                // Value above the bar when hovered.
                 if (i == _hoverIndex && bucket.Value > 0)
                 {
                     string valueText = "₱" + bucket.Value.ToString("N0");
@@ -187,10 +186,6 @@ namespace TodangMotor.Controls
         // HELPERS
         // ============================================================
 
-        /// <summary>
-        /// Produces a rectangle with rounded top corners (bottom stays square).
-        /// Gives the bars a soft, modern look.
-        /// </summary>
         private static GraphicsPath GetTopRoundedRect(RectangleF rect, int radius)
         {
             var path = new GraphicsPath();
@@ -212,39 +207,45 @@ namespace TodangMotor.Controls
             return path;
         }
 
+        // ============================================================
+        // HOVER + CLICK
+        // ============================================================
+
         private void UpdateHover(int mouseX, int mouseY)
         {
-            int newIndex = -1;
-
-            if (_buckets != null && _buckets.Count > 0)
-            {
-                int chartWidth = Width - SidePadding * 2;
-                int chartHeight = Height - TopPadding - BottomPadding;
-
-                if (mouseY >= TopPadding - 10 && mouseY <= TopPadding + chartHeight + 30)
-                {
-                    int n = _buckets.Count;
-                    int totalGaps = BarGapPx * (n - 1);
-                    float barWidth = (chartWidth - totalGaps) / (float)n;
-                    if (barWidth < 4) barWidth = 4;
-
-                    for (int i = 0; i < n; i++)
-                    {
-                        float x = SidePadding + i * (barWidth + BarGapPx);
-                        if (mouseX >= x && mouseX <= x + barWidth)
-                        {
-                            newIndex = i;
-                            break;
-                        }
-                    }
-                }
-            }
+            int newIndex = ComputeHoverIndex(mouseX, mouseY);
 
             if (newIndex != _hoverIndex)
             {
                 _hoverIndex = newIndex;
+                Cursor = newIndex >= 0 ? Cursors.Hand : Cursors.Default;
                 Invalidate();
             }
+        }
+
+        private int ComputeHoverIndex(int mouseX, int mouseY)
+        {
+            if (_buckets == null || _buckets.Count == 0) return -1;
+
+            int chartWidth = Width - SidePadding * 2;
+            int chartHeight = Height - TopPadding - BottomPadding;
+
+            if (mouseY < TopPadding - 10 || mouseY > TopPadding + chartHeight + 30)
+                return -1;
+
+            int n = _buckets.Count;
+            int totalGaps = BarGapPx * (n - 1);
+            float barWidth = (chartWidth - totalGaps) / (float)n;
+            if (barWidth < 4) barWidth = 4;
+
+            for (int i = 0; i < n; i++)
+            {
+                float x = SidePadding + i * (barWidth + BarGapPx);
+                if (mouseX >= x && mouseX <= x + barWidth)
+                    return i;
+            }
+
+            return -1;
         }
     }
 }

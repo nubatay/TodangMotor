@@ -1,6 +1,8 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Drawing;
+using System.Drawing.Drawing2D;
+using System.Linq;
 using System.Windows.Forms;
 using TodangMotor.Common;
 using TodangMotor.Controls;
@@ -8,9 +10,10 @@ using TodangMotor.Controls;
 namespace TodangMotor.Forms
 {
     /// <summary>
-    /// Owner dashboard shell. Full-height sidebar on the left, header bar
-    /// only over the content area on the right.
-    /// All sidebar items swap UserControls into the content area.
+    /// Owner dashboard shell.
+    /// Light sidebar with section headers, right border, logo at top.
+    /// Header bar shows the page title + user chip (with Change Password menu).
+    /// Logout sits at the bottom of the sidebar with no divider above it.
     /// </summary>
     public class OwnerDashboardForm : ShellForm
     {
@@ -19,23 +22,33 @@ namespace TodangMotor.Forms
         // ============================================================
 
         private const string KeyDashboard = "dashboard";
+        private const string KeyPos = "pos";
+        private const string KeySales = "sales";
+        private const string KeyItems = "items";
         private const string KeyInventory = "inventory";
         private const string KeyStockIn = "stockin";
+        private const string KeyPurchaseOrders = "purchaseorders";
         private const string KeySuppliers = "suppliers";
         private const string KeyCategories = "categories";
-        private const string KeySales = "sales";
         private const string KeyUsers = "users";
+        private const string KeyReports = "reports";
         private const string KeySettings = "settings";
 
         private const string IconDashboard = "\uE80F";
+        private const string IconPos = "\uE719";
+        private const string IconSales = "\uE719";
+        private const string IconItems = "\uE8F1";
         private const string IconInventory = "\uE7B8";
         private const string IconStockIn = "\uE710";
+        private const string IconPurchaseOrders = "\uE7BF";
         private const string IconSuppliers = "\uE716";
         private const string IconCategories = "\uE8EC";
-        private const string IconSales = "\uE719";
         private const string IconUsers = "\uE77B";
+        private const string IconReports = "\uE9D9";
         private const string IconSettings = "\uE713";
         private const string IconLogout = "\uE7E8";
+        private const string IconPerson = "\uE77B";
+        private const string IconChevronDown = "\uE70D";
 
         // ============================================================
         // FIELDS
@@ -47,6 +60,8 @@ namespace TodangMotor.Forms
         private Panel _contentHost;
         private FlowLayoutPanel _navList;
         private Dictionary<string, NavItemControl> _navItems = new();
+
+        private ContextMenuStrip _chipMenu;
 
         private Control _currentContent;
         private string _currentKey = KeyDashboard;
@@ -66,6 +81,16 @@ namespace TodangMotor.Forms
 
             HeaderTitleLabel.Padding = new Padding(20, 0, 0, 0);
 
+            // ---- Add user chip to the header bar (between title and chrome buttons) ----
+            var chipPanel = BuildUserChipPanel();
+
+            HeaderPanel.Controls.Remove(ChromeContainer);
+            HeaderPanel.Controls.Remove(HeaderTitleLabel);
+
+            HeaderPanel.Controls.Add(HeaderTitleLabel);   // docks Left
+            HeaderPanel.Controls.Add(chipPanel);           // docks Right
+            HeaderPanel.Controls.Add(ChromeContainer);     // docks Right (rightmost)
+
             RestructureLayout();
 
             BuildSidebar();
@@ -76,6 +101,141 @@ namespace TodangMotor.Forms
 
             Shown += OwnerDashboardForm_Shown;
         }
+
+        // ============================================================
+        // USER CHIP (header)
+        // ============================================================
+
+        private Panel BuildUserChipPanel()
+        {
+            var panel = new Panel
+            {
+                Dock = DockStyle.Right,
+                Width = 300,
+                BackColor = Color.Transparent
+            };
+
+            // Context menu
+            _chipMenu = new ContextMenuStrip
+            {
+                Font = Theme.FontBody,
+                ShowImageMargin = false
+            };
+
+            var changePasswordItem = new ToolStripMenuItem("Change Password");
+            changePasswordItem.Click += (s, e) => OpenChangePassword();
+            _chipMenu.Items.Add(changePasswordItem);
+
+            // Chip
+            var chip = new Panel
+            {
+                Width = 280,
+                Height = 40,
+                Location = new Point(10, 8),
+                BackColor = Theme.Surface,
+                Cursor = Cursors.Hand
+            };
+            Theme.ApplyRoundedRegion(chip, 8);
+
+            chip.Paint += (s, e) =>
+            {
+                e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
+                using var path = Theme.RoundedRect(
+                    new Rectangle(0, 0, chip.Width - 1, chip.Height - 1), 8);
+                using var pen = new Pen(Theme.Divider, 1f);
+                e.Graphics.DrawPath(pen, path);
+            };
+
+            string fullName = SessionManager.CurrentUser?.FullName ?? "User";
+            string firstName = fullName.Split(' ').FirstOrDefault() ?? "User";
+            string greeting = GetGreeting() + ", " + firstName;
+
+            var iconLabel = new Label
+            {
+                Text = IconPerson,
+                Font = new Font(Theme.IconFontFamily, 12F),
+                ForeColor = Theme.TextSecondary,
+                AutoSize = false,
+                Size = new Size(28, 40),
+                Location = new Point(10, 0),
+                TextAlign = ContentAlignment.MiddleCenter,
+                BackColor = Color.Transparent,
+                Cursor = Cursors.Hand
+            };
+
+            var textLabel = new Label
+            {
+                Text = greeting,
+                Font = Theme.FontBodyBold,
+                ForeColor = Theme.TextPrimary,
+                AutoSize = false,
+                Size = new Size(210, 40),
+                Location = new Point(40, 0),
+                TextAlign = ContentAlignment.MiddleLeft,
+                BackColor = Color.Transparent,
+                Cursor = Cursors.Hand,
+                AutoEllipsis = true
+            };
+
+            var chevronLabel = new Label
+            {
+                Text = IconChevronDown,
+                Font = new Font(Theme.IconFontFamily, 8F),
+                ForeColor = Theme.TextMuted,
+                AutoSize = false,
+                Size = new Size(14, 40),
+                Location = new Point(256, 0),
+                TextAlign = ContentAlignment.MiddleCenter,
+                BackColor = Color.Transparent,
+                Cursor = Cursors.Hand
+            };
+
+            chip.Controls.Add(iconLabel);
+            chip.Controls.Add(textLabel);
+            chip.Controls.Add(chevronLabel);
+
+            // Click opens the menu
+            EventHandler click = (s, e) =>
+                _chipMenu.Show(chip, new Point(0, chip.Height + 4));
+            chip.Click += click;
+            iconLabel.Click += click;
+            textLabel.Click += click;
+            chevronLabel.Click += click;
+
+            // Hover state — soft blue tint
+            EventHandler enter = (s, e) => chip.BackColor = Color.FromArgb(232, 238, 255);
+            EventHandler leave = (s, e) => chip.BackColor = Theme.Surface;
+
+            chip.MouseEnter += enter;
+            chip.MouseLeave += leave;
+            iconLabel.MouseEnter += enter;
+            iconLabel.MouseLeave += leave;
+            textLabel.MouseEnter += enter;
+            textLabel.MouseLeave += leave;
+            chevronLabel.MouseEnter += enter;
+            chevronLabel.MouseLeave += leave;
+
+            panel.Controls.Add(chip);
+            return panel;
+        }
+
+        private void OpenChangePassword()
+        {
+            using var form = new ChangePasswordForm();
+            form.ShowDialog(this);
+        }
+
+        private static string GetGreeting()
+        {
+            int hour = DateTime.Now.Hour;
+            if (hour < 12) return "Good morning";
+            if (hour < 18) return "Good afternoon";
+            return "Good evening";
+        }
+
+        // ============================================================
+        // CHROME BUTTONS
+        // ============================================================
 
         private void EnsureChromeButtons()
         {
@@ -159,53 +319,67 @@ namespace TodangMotor.Forms
                 BackColor = Theme.SidebarBg
             };
 
+            // Right border (1px) — added last so it docks first (rightmost).
+            var rightBorder = new Panel
+            {
+                Dock = DockStyle.Right,
+                Width = 1,
+                BackColor = Theme.SidebarBorder
+            };
+
+            // Nav list (Fill)
             _navList = new FlowLayoutPanel
             {
                 Dock = DockStyle.Fill,
                 FlowDirection = FlowDirection.TopDown,
                 WrapContents = false,
-                AutoScroll = false,
+                AutoScroll = true,
                 BackColor = Theme.SidebarBg,
-                Padding = new Padding(0, 6, 0, 6)
+                Padding = new Padding(0, 4, 0, 4)
             };
 
+            // Footer (Bottom) — Logout only, no divider above
             var footer = new Panel
             {
                 Dock = DockStyle.Bottom,
-                Height = 74,
+                Height = 56,
                 BackColor = Theme.SidebarBg
             };
 
-            var divider = new Panel
-            {
-                Dock = DockStyle.Top,
-                Height = 1,
-                BackColor = Theme.DividerDark
-            };
-
-            var logout = new NavItemControl(
-                "logout", IconLogout, "Logout",
-                Theme.SidebarBg, Theme.SidebarHover, Theme.SidebarHover);
+            var logout = new NavItemControl("logout", IconLogout, "Logout");
             logout.Dock = DockStyle.Fill;
             logout.ItemClicked += (s, e) => Logout();
-
             footer.Controls.Add(logout);
-            footer.Controls.Add(divider);
 
+            // Header (Top) — logo only
             var header = BuildSidebarHeader();
 
-            _sidebar.Controls.Add(_navList);
-            _sidebar.Controls.Add(footer);
-            _sidebar.Controls.Add(header);
-
+            // Populate nav sections
+            AddSectionHeader("Main");
             AddNavItem(KeyDashboard, IconDashboard, "Dashboard");
+            AddNavItem(KeyPos, IconPos, "POS");
+            AddNavItem(KeySales, IconSales, "Sales");
+
+            AddSectionHeader("Catalog");
+            AddNavItem(KeyItems, IconItems, "Items");
+            AddNavItem(KeyCategories, IconCategories, "Categories");
+            AddNavItem(KeySuppliers, IconSuppliers, "Suppliers");
+
+            AddSectionHeader("Stock");
             AddNavItem(KeyInventory, IconInventory, "Inventory");
             AddNavItem(KeyStockIn, IconStockIn, "Stock-In");
-            AddNavItem(KeySuppliers, IconSuppliers, "Suppliers");
-            AddNavItem(KeyCategories, IconCategories, "Categories");
-            AddNavItem(KeySales, IconSales, "Sales");
+            AddNavItem(KeyPurchaseOrders, IconPurchaseOrders, "Purchase Orders");
+
+            AddSectionHeader("Admin");
             AddNavItem(KeyUsers, IconUsers, "Users");
+            AddNavItem(KeyReports, IconReports, "Reports");
             AddNavItem(KeySettings, IconSettings, "Settings");
+
+            // Add to sidebar (docking order)
+            _sidebar.Controls.Add(_navList);     // Fill
+            _sidebar.Controls.Add(footer);        // Bottom
+            _sidebar.Controls.Add(header);        // Top
+            _sidebar.Controls.Add(rightBorder);   // Right
 
             _rootLayout.Controls.Add(_sidebar, 0, 0);
         }
@@ -215,67 +389,56 @@ namespace TodangMotor.Forms
             var header = new Panel
             {
                 Dock = DockStyle.Top,
-                Height = 132,
+                Height = 130,
                 BackColor = Theme.SidebarBg
             };
 
-            // Small blue tile with a white "T" — no image loaded.
+            // Real logo drawn directly on the light sidebar — no tile,
+            // no border. Aspect ratio is preserved automatically.
+            // Widened to fill nearly the whole sidebar width.
             var logo = new LogoPlaceholder
             {
-                Width = 48,
-                Height = 48,
-                Radius = 12,
-                Location = new Point(20, 32),
-                TileColor = Theme.Primary,
-                LetterColor = Color.White,
+                Width = 205,
+                Height = 110,
+                Radius = 0,
+                TileColor = Color.Transparent,
+                LetterColor = Theme.Primary,
                 Letter = "T",
-                ForcePlaceholder = true
+                ForcePlaceholder = false
             };
 
-            var ownerName = new Label
+            header.Resize += (s, e) =>
             {
-                Text = SessionManager.CurrentUser?.FullName ?? "Owner",
-                Font = new Font(Theme.UiFontFamily, 12F, FontStyle.Bold),
-                ForeColor = Color.White,
-                AutoSize = false,
-                Location = new Point(80, 30),
-                Size = new Size(128, 30),
-                TextAlign = ContentAlignment.MiddleLeft,
-                BackColor = Color.Transparent,
-                AutoEllipsis = false
-            };
-
-            var roleLabel = new Label
-            {
-                Text = "Owner",
-                Font = Theme.FontSmall,
-                ForeColor = Color.FromArgb(170, 182, 215),
-                AutoSize = false,
-                Location = new Point(80, 60),
-                Size = new Size(128, 18),
-                TextAlign = ContentAlignment.MiddleLeft,
-                BackColor = Color.Transparent
-            };
-
-            var divider = new Panel
-            {
-                Dock = DockStyle.Bottom,
-                Height = 1,
-                BackColor = Theme.DividerDark
+                logo.Location = new Point(
+                    (header.ClientSize.Width - logo.Width) / 2,
+                    (header.ClientSize.Height - logo.Height) / 2);
             };
 
             header.Controls.Add(logo);
-            header.Controls.Add(ownerName);
-            header.Controls.Add(roleLabel);
-            header.Controls.Add(divider);
-
             return header;
+        }
+
+        private void AddSectionHeader(string text)
+        {
+            var label = new Label
+            {
+                Text = text.ToUpperInvariant(),
+                Font = new Font(Theme.UiFontFamily, 8F, FontStyle.Bold),
+                ForeColor = Theme.SidebarSectionHeader,
+                AutoSize = false,
+                Width = Theme.SidebarWidth,
+                Height = 24,
+                Padding = new Padding(20, 0, 0, 0),
+                TextAlign = ContentAlignment.MiddleLeft,
+                BackColor = Color.Transparent,
+                Margin = new Padding(0, 12, 0, 4)
+            };
+            _navList.Controls.Add(label);
         }
 
         private void AddNavItem(string key, string icon, string label)
         {
-            var item = new NavItemControl(key, icon, label,
-                Theme.SidebarBg, Theme.SidebarHover, Theme.SidebarActive);
+            var item = new NavItemControl(key, icon, label);
             item.ItemClicked += (s, e) => NavigateTo(key);
 
             _navList.Controls.Add(item);
@@ -318,6 +481,11 @@ namespace TodangMotor.Forms
                 };
                 ShowContent(home);
             }
+            else if (key == KeyItems)
+            {
+                HeaderTitle = "Items";
+                ShowContent(new ItemsControl());
+            }
             else if (key == KeyInventory)
             {
                 HeaderTitle = "Inventory";
@@ -327,6 +495,11 @@ namespace TodangMotor.Forms
             {
                 HeaderTitle = "Stock-In";
                 ShowContent(new StockInControl());
+            }
+            else if (key == KeyPurchaseOrders)
+            {
+                HeaderTitle = "Purchase Orders";
+                ShowContent(new PurchaseOrdersControl());
             }
             else if (key == KeySuppliers)
             {
@@ -343,10 +516,20 @@ namespace TodangMotor.Forms
                 HeaderTitle = "Sales";
                 ShowContent(new SalesHistoryControl());
             }
+            else if (key == KeyPos)
+            {
+                HeaderTitle = "POS";
+                ShowContent(new PosControl());
+            }
             else if (key == KeyUsers)
             {
                 HeaderTitle = "Users";
                 ShowContent(new UserManagementControl());
+            }
+            else if (key == KeyReports)
+            {
+                HeaderTitle = "Reports";
+                ShowContent(new ReportsControl());
             }
             else if (key == KeySettings)
             {
@@ -400,7 +583,7 @@ namespace TodangMotor.Forms
         }
 
         // ============================================================
-        // NAV ITEM CONTROL
+        // NAV ITEM CONTROL (light theme)
         // ============================================================
 
         private class NavItemControl : Panel
@@ -410,33 +593,26 @@ namespace TodangMotor.Forms
 
             private readonly Label _iconLabel;
             private readonly Label _textLabel;
-            private readonly Color _bgNormal;
-            private readonly Color _bgHover;
-            private readonly Color _bgActive;
             private bool _isActive;
 
-            public NavItemControl(string key, string icon, string text,
-                Color bgNormal, Color bgHover, Color bgActive)
+            public NavItemControl(string key, string icon, string text)
             {
                 Key = key;
-                _bgNormal = bgNormal;
-                _bgHover = bgHover;
-                _bgActive = bgActive;
 
-                Height = 46;
+                Height = 42;
                 Width = Theme.SidebarWidth;
                 Margin = new Padding(0);
-                BackColor = bgNormal;
+                BackColor = Theme.SidebarBg;
                 Cursor = Cursors.Hand;
 
                 _iconLabel = new Label
                 {
                     Text = icon,
-                    Font = new Font(Theme.IconFontFamily, 12F, FontStyle.Regular),
-                    ForeColor = Theme.TextOnSidebar,
+                    Font = new Font(Theme.IconFontFamily, 11F, FontStyle.Regular),
+                    ForeColor = Theme.SidebarNavIcon,
                     AutoSize = false,
-                    Size = new Size(36, 46),
-                    Location = new Point(18, 0),
+                    Size = new Size(28, 42),
+                    Location = new Point(20, 0),
                     TextAlign = ContentAlignment.MiddleCenter,
                     BackColor = Color.Transparent,
                     Cursor = Cursors.Hand
@@ -446,11 +622,11 @@ namespace TodangMotor.Forms
                 {
                     Text = text,
                     Font = Theme.FontBody,
-                    ForeColor = Theme.TextOnSidebar,
+                    ForeColor = Theme.SidebarNavText,
                     AutoSize = false,
-                    Height = 46,
-                    Location = new Point(58, 0),
-                    Width = Theme.SidebarWidth - 58 - 12,
+                    Height = 42,
+                    Location = new Point(54, 0),
+                    Width = Theme.SidebarWidth - 54 - 8,
                     TextAlign = ContentAlignment.MiddleLeft,
                     BackColor = Color.Transparent,
                     Cursor = Cursors.Hand,
@@ -462,7 +638,7 @@ namespace TodangMotor.Forms
 
                 Resize += (s, e) =>
                 {
-                    _textLabel.Width = Math.Max(0, Width - _textLabel.Left - 12);
+                    _textLabel.Width = Math.Max(0, Width - _textLabel.Left - 8);
                 };
 
                 MouseEnter += (s, e) => ApplyHover(true);
@@ -487,14 +663,26 @@ namespace TodangMotor.Forms
                 {
                     if (_isActive == value) return;
                     _isActive = value;
-                    BackColor = _isActive ? _bgActive : _bgNormal;
+
+                    if (_isActive)
+                    {
+                        BackColor = Theme.SidebarActive;
+                        _iconLabel.ForeColor = Theme.SidebarActiveText;
+                        _textLabel.ForeColor = Theme.SidebarActiveText;
+                    }
+                    else
+                    {
+                        BackColor = Theme.SidebarBg;
+                        _iconLabel.ForeColor = Theme.SidebarNavIcon;
+                        _textLabel.ForeColor = Theme.SidebarNavText;
+                    }
                 }
             }
 
             private void ApplyHover(bool hover)
             {
                 if (_isActive) return;
-                BackColor = hover ? _bgHover : _bgNormal;
+                BackColor = hover ? Theme.SidebarHover : Theme.SidebarBg;
             }
         }
     }

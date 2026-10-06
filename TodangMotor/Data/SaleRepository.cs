@@ -11,7 +11,7 @@ namespace TodangMotor.Data
     /// <summary>
     /// Data access for Sales and SaleItems.
     /// All writes happen inside atomic transactions.
-    /// Includes revenue report aggregation for the Owner report module.
+    /// Includes revenue report aggregation and dashboard queries.
     /// </summary>
     public class SaleRepository
     {
@@ -420,13 +420,9 @@ namespace TodangMotor.Data
         }
 
         // ============================================================
-        // TOP PRODUCTS (for dashboard)
+        // TOP PRODUCTS
         // ============================================================
 
-        /// <summary>
-        /// Top N products by revenue within the range.
-        /// Excludes void sales. Includes quantity sold and total revenue.
-        /// </summary>
         public async Task<List<TopProductRow>> GetTopProductsAsync(
             DateTime fromInclusive,
             DateTime toExclusive,
@@ -462,11 +458,10 @@ namespace TodangMotor.Data
             return rows.ToList();
         }
 
-        /// <summary>
-        /// Flat list of every sold line in the range. Used by the dashboard
-        /// to compute stats, chart buckets, and trends in memory.
-        /// Excludes void sales.
-        /// </summary>
+        // ============================================================
+        // FLAT SALE LINES (used by dashboard for in-memory aggregation)
+        // ============================================================
+
         public async Task<List<SaleLineFlat>> GetFlatSaleLinesAsync(
             DateTime fromInclusive,
             DateTime toExclusive)
@@ -489,6 +484,126 @@ namespace TodangMotor.Data
             });
 
             return rows.ToList();
+        }
+
+        // ============================================================
+        // DASHBOARD QUERIES (Phase 6B)
+        // ============================================================
+
+        /// <summary>
+        /// Revenue grouped by category within the range.
+        /// Excludes void sales. Returns descending by revenue.
+        /// </summary>
+        public async Task<List<CategoryRevenueRow>> GetSalesByCategoryAsync(
+            DateTime fromInclusive,
+            DateTime toExclusive)
+        {
+            using var connection = DbConnectionFactory.CreateConnection();
+
+            const string sql = @"
+                SELECT
+                    c.CategoryId,
+                    c.CategoryName,
+                    ISNULL(SUM(si.LineTotal), 0) AS Revenue,
+                    ISNULL(SUM(si.Quantity), 0)  AS UnitsSold
+                FROM SaleItems si
+                INNER JOIN Sales s       ON s.SaleId = si.SaleId
+                INNER JOIN Products p    ON p.ProductId = si.ProductId
+                INNER JOIN Categories c  ON c.CategoryId = p.CategoryId
+                WHERE s.SaleDate >= @From
+                  AND s.SaleDate <  @To
+                  AND s.Status = 'Completed'
+                GROUP BY c.CategoryId, c.CategoryName
+                ORDER BY Revenue DESC;";
+
+            var rows = await connection.QueryAsync<CategoryRevenueRow>(sql, new
+            {
+                From = fromInclusive,
+                To = toExclusive
+            });
+
+            return rows.ToList();
+        }
+
+        /// <summary>
+        /// Total amount tendered split by payment method within the range.
+        /// Excludes void sales.
+        /// </summary>
+        public async Task<PaymentSplitRow> GetPaymentMethodSplitAsync(
+            DateTime fromInclusive,
+            DateTime toExclusive)
+        {
+            using var connection = DbConnectionFactory.CreateConnection();
+
+            const string sql = @"
+                SELECT
+                    ISNULL(SUM(CASE WHEN PaymentMethod = 'Cash'  THEN Subtotal ELSE 0 END), 0) AS CashAmount,
+                    ISNULL(SUM(CASE WHEN PaymentMethod = 'GCash' THEN Subtotal ELSE 0 END), 0) AS GCashAmount,
+                    COUNT(*) AS TransactionCount
+                FROM Sales
+                WHERE SaleDate >= @From
+                  AND SaleDate <  @To
+                  AND Status = 'Completed';";
+
+            var row = await connection.QuerySingleOrDefaultAsync<PaymentSplitRow>(sql, new
+            {
+                From = fromInclusive,
+                To = toExclusive
+            });
+
+            return row ?? new PaymentSplitRow();
+        }
+
+        /// <summary>
+        /// Total units sold (sum of SaleItems.Quantity) in the range.
+        /// Excludes void sales.
+        /// </summary>
+        public async Task<int> GetItemsSoldCountAsync(
+            DateTime fromInclusive,
+            DateTime toExclusive)
+        {
+            using var connection = DbConnectionFactory.CreateConnection();
+
+            const string sql = @"
+                SELECT ISNULL(SUM(si.Quantity), 0)
+                FROM SaleItems si
+                INNER JOIN Sales s ON s.SaleId = si.SaleId
+                WHERE s.SaleDate >= @From
+                  AND s.SaleDate <  @To
+                  AND s.Status = 'Completed';";
+
+            return await connection.ExecuteScalarAsync<int>(sql, new
+            {
+                From = fromInclusive,
+                To = toExclusive
+            });
+        }
+
+        /// <summary>
+        /// Average transaction amount in the range (Subtotal sum / count).
+        /// Returns 0 if no transactions. Excludes void sales.
+        /// </summary>
+        public async Task<decimal> GetAverageTransactionAsync(
+            DateTime fromInclusive,
+            DateTime toExclusive)
+        {
+            using var connection = DbConnectionFactory.CreateConnection();
+
+            const string sql = @"
+                SELECT
+                    CASE WHEN COUNT(*) = 0 THEN 0
+                         ELSE CAST(SUM(Subtotal) AS DECIMAL(10,2)) / COUNT(*)
+                    END
+                FROM Sales
+                WHERE SaleDate >= @From
+                  AND SaleDate <  @To
+                  AND Status = 'Completed';";
+
+            return await connection.ExecuteScalarAsync<decimal>(sql, new
+            {
+                From = fromInclusive,
+                To = toExclusive
+            });
         }
 
         // ============================================================
@@ -529,10 +644,9 @@ namespace TodangMotor.Data
     }
 
     // ================================================================
-    // DTOs (shared across repository and service layers)
+    // DTOs
     // ================================================================
 
-    /// <summary>One day's worth of sales aggregation for the revenue report.</summary>
     public class DailyRevenueRow
     {
         public DateTime SaleDay { get; set; }
@@ -545,7 +659,15 @@ namespace TodangMotor.Data
         public decimal? NetIncome => HasCompleteCost ? Revenue - KnownCost : (decimal?)null;
     }
 
-    /// <summary>One sold line, used by the dashboard for in-memory aggregation.</summary>
+    public class TopProductRow
+    {
+        public int ProductId { get; set; }
+        public string ProductName { get; set; } = string.Empty;
+        public string Brand { get; set; } = string.Empty;
+        public int QuantitySold { get; set; }
+        public decimal Revenue { get; set; }
+    }
+
     public class SaleLineFlat
     {
         public int SaleId { get; set; }
@@ -556,13 +678,20 @@ namespace TodangMotor.Data
         public decimal? UnitCost { get; set; }
     }
 
-    /// <summary>One row of "Top products" for the dashboard.</summary>
-    public class TopProductRow
+    /// <summary>One row of "sales by category" aggregation.</summary>
+    public class CategoryRevenueRow
     {
-        public int ProductId { get; set; }
-        public string ProductName { get; set; } = string.Empty;
-        public string Brand { get; set; } = string.Empty;
-        public int QuantitySold { get; set; }
+        public int CategoryId { get; set; }
+        public string CategoryName { get; set; } = string.Empty;
         public decimal Revenue { get; set; }
+        public int UnitsSold { get; set; }
+    }
+
+    /// <summary>Cash vs GCash split for the period.</summary>
+    public class PaymentSplitRow
+    {
+        public decimal CashAmount { get; set; }
+        public decimal GCashAmount { get; set; }
+        public int TransactionCount { get; set; }
     }
 }
