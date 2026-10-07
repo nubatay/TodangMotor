@@ -9,10 +9,11 @@ using TodangMotor.Services;
 namespace TodangMotor.Forms
 {
     /// <summary>
-    /// Sale detail popup. Shows one sale's full information.
-    /// View-only.
+    /// Digital receipt shown after a successful POS sale.
+    /// View-only. Loads sale details by SaleId and displays them
+    /// as a receipt-style summary.
     /// </summary>
-    public class SaleDetailForm : ShellForm
+    public class ReceiptForm : ShellForm
     {
         private readonly SalesService _salesService = new();
         private readonly int _saleId;
@@ -41,22 +42,22 @@ namespace TodangMotor.Forms
         // CONSTRUCTION
         // ============================================================
 
-        public SaleDetailForm(int saleId)
+        public ReceiptForm(int saleId)
         {
             _saleId = saleId;
 
-            HeaderTitle = "Sale Detail";
+            HeaderTitle = "Sale Receipt";
             ShowMaximizeButton = false;
             ShowMinimizeButton = true;
             StartPosition = FormStartPosition.CenterParent;
-            ClientSize = new Size(820, 780);
-            MinimumSize = new Size(760, 700);
+            ClientSize = new Size(760, 720);
+            MinimumSize = new Size(700, 640);
             BackColor = Theme.Background;
             KeyPreview = true;
 
             BuildLayout();
 
-            Load += SaleDetailForm_Load;
+            Load += ReceiptForm_Load;
             KeyDown += (s, e) =>
             {
                 if (e.KeyCode == Keys.Escape) Close();
@@ -81,7 +82,7 @@ namespace TodangMotor.Forms
             root.RowStyles.Add(new RowStyle(SizeType.Absolute, 170));
             root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
             root.RowStyles.Add(new RowStyle(SizeType.Absolute, 120));
-            root.RowStyles.Add(new RowStyle(SizeType.Absolute, 88));
+            root.RowStyles.Add(new RowStyle(SizeType.Absolute, 84));
 
             root.Controls.Add(BuildInfoBlock(), 0, 0);
             root.Controls.Add(BuildGridBlock(), 0, 1);
@@ -101,7 +102,7 @@ namespace TodangMotor.Forms
             };
 
             const int padX = 32;
-            const int contentW = 740;
+            const int contentW = 680;
 
             // ---- "INVOICE" caption ----
             var caption = new Label
@@ -261,7 +262,7 @@ namespace TodangMotor.Forms
                 ForeColor = bold ? Theme.TextPrimary : Theme.TextSecondary,
                 AutoSize = false,
                 Location = new Point(32, y),
-                Size = new Size(720, 28),
+                Size = new Size(660, 28),
                 TextAlign = ContentAlignment.MiddleLeft,
                 BackColor = Color.Transparent
             };
@@ -286,7 +287,7 @@ namespace TodangMotor.Forms
             const int btnW = 140;
             const int btnH = 44;
 
-            _btnClose = UiFactory.CreateButton("Close", UiFactory.ButtonStyle.Ghost, btnW, btnH);
+            _btnClose = UiFactory.CreateButton("Close", UiFactory.ButtonStyle.Primary, btnW, btnH);
             _btnClose.Anchor = AnchorStyles.Top | AnchorStyles.Right;
             _btnClose.Click += (s, e) => Close();
 
@@ -332,7 +333,7 @@ namespace TodangMotor.Forms
         // LOAD
         // ============================================================
 
-        private async void SaleDetailForm_Load(object? sender, EventArgs e)
+        private async void ReceiptForm_Load(object? sender, EventArgs e)
         {
             Animator.SlideFadeInForm(this, 180, 12);
             await LoadDetailAsync();
@@ -345,7 +346,7 @@ namespace TodangMotor.Forms
             if (!success || detail == null)
             {
                 MessageBox.Show(
-                    error ?? "Could not load the sale.",
+                    error ?? "Could not load the receipt.",
                     "Error",
                     MessageBoxButtons.OK,
                     MessageBoxIcon.Error);

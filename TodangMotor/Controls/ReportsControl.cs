@@ -168,7 +168,7 @@ namespace TodangMotor.Controls
             var movementTile = BuildTile(
                 "\uE81C",
                 "Movement Report",
-                "Every stock movement in the range — sales, deliveries, adjustments, voids.",
+                "Every stock movement in the range — sales, deliveries, adjustments.",
                 async (s, e) => await GenerateMovementReportAsync());
 
             var inventoryTile = BuildTile(
@@ -349,8 +349,7 @@ namespace TodangMotor.Controls
                         ("Total Revenue",  "₱ " + result.TotalRevenue.ToString("N2")),
                         ("Total Cost",     "₱ " + result.TotalCost.ToString("N2")),
                         ("Net Income",     "₱ " + result.TotalNetIncome.ToString("N2")),
-                        ("Transactions",   result.TotalTransactions.ToString("N0")),
-                        ("Voided (excl.)", result.VoidedTransactions.ToString("N0"))
+                        ("Transactions",   result.TotalTransactions.ToString("N0"))
                     },
                     Headers = new List<string>
                     {
@@ -421,9 +420,9 @@ namespace TodangMotor.Controls
                     FooterNote = $"{movements.Count} movement(s) recorded",
                     SummaryItems = new List<(string Label, string Value)>
                     {
-                        ("Movements",  movements.Count.ToString("N0")),
-                        ("Sales",      movements.Count(m => m.MovementType == "Sale").ToString("N0")),
-                        ("Stock-Ins",  movements.Count(m => m.MovementType == "StockIn").ToString("N0")),
+                        ("Movements",   movements.Count.ToString("N0")),
+                        ("Sales",       movements.Count(m => m.MovementType == "Sale").ToString("N0")),
+                        ("Stock-Ins",   movements.Count(m => m.MovementType == "StockIn").ToString("N0")),
                         ("Adjustments", movements.Count(m => m.MovementType == "Adjustment").ToString("N0"))
                     },
                     Headers = new List<string>
@@ -443,7 +442,6 @@ namespace TodangMotor.Controls
                         "StockIn" => "Stock-In",
                         "Sale" => "Sale",
                         "Adjustment" => "Adjustment",
-                        "Void" => "Void",
                         "Initial" => "Initial",
                         _ => m.MovementType
                     };
