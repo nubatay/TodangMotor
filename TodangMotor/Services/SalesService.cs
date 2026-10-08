@@ -45,7 +45,6 @@ namespace TodangMotor.Services
         public Sale Sale { get; set; } = new();
         public List<SaleLineDisplay> Lines { get; set; } = new();
         public string CashierName { get; set; } = string.Empty;
-        public string? VoidedByName { get; set; }
     }
 
     /// <summary>
@@ -64,7 +63,6 @@ namespace TodangMotor.Services
         public decimal TotalCost { get; set; }
         public decimal TotalNetIncome { get; set; }
         public int TotalTransactions { get; set; }
-        public int VoidedTransactions { get; set; }
 
         /// <summary>True when every line in the range has a recorded cost.</summary>
         public bool IsCostComplete { get; set; }
@@ -84,7 +82,6 @@ namespace TodangMotor.Services
         private readonly UserRepository _userRepository;
 
         private const int CustomerNameMaxLength = 100;
-        private const int VoidReasonMaxLength = 250;
 
         private const string NotLoggedInMessage =
             "You must be logged in to perform this action.";
@@ -223,8 +220,6 @@ namespace TodangMotor.Services
                 var p = productMap[line.ProductId];
                 decimal lineTotal = p.SellingPrice * line.Quantity;
 
-                // Snapshot the current CostPrice into the SaleItem
-                // so historical profit stays accurate.
                 items.Add(new SaleItem
                 {
                     ProductId = p.ProductId,
@@ -269,73 +264,17 @@ namespace TodangMotor.Services
 
             try
             {
-                var (success, error, invoiceNo) =
+                var (success, error, saleId, invoiceNo) =
                     await _saleRepository.InsertSaleAsync(header, items, userId);
 
                 if (!success)
                     return (false, error, 0, string.Empty);
 
-                return (true, string.Empty, 0, invoiceNo);
+                return (true, string.Empty, saleId, invoiceNo);
             }
             catch (Exception)
             {
                 return (false, DbErrorMessage, 0, string.Empty);
-            }
-        }
-
-        // ============================================================
-        // VOID SALE
-        // ============================================================
-
-        public async Task<(bool Success, string ErrorMessage)> VoidSaleAsync(
-            int saleId, string? reason)
-        {
-            if (!SessionManager.IsLoggedIn)
-                return (false, NotLoggedInMessage);
-
-            int userId = SessionManager.CurrentUser?.UserId ?? 0;
-            if (userId <= 0)
-                return (false, "Could not identify the current user.");
-
-            if (saleId <= 0)
-                return (false, "Invalid sale.");
-
-            string cleanReason = (reason ?? string.Empty).Trim();
-            if (cleanReason.Length == 0)
-                return (false, "Please provide a reason for voiding this sale.");
-
-            if (cleanReason.Length > VoidReasonMaxLength)
-                return (false, $"Reason cannot exceed {VoidReasonMaxLength} characters.");
-
-            Sale? sale;
-            try
-            {
-                sale = await _saleRepository.GetByIdAsync(saleId);
-            }
-            catch (Exception)
-            {
-                return (false, DbErrorMessage);
-            }
-
-            if (sale == null)
-                return (false, "Sale not found.");
-
-            if (sale.Status == "Void")
-                return (false, "This sale has already been voided.");
-
-            if (sale.SaleDate.Date != DateTime.Now.Date)
-                return (false, "Only sales made today can be voided.");
-
-            try
-            {
-                var (success, error) =
-                    await _saleRepository.VoidSaleAsync(saleId, userId, cleanReason);
-
-                return (success, error);
-            }
-            catch (Exception)
-            {
-                return (false, DbErrorMessage);
             }
         }
 
@@ -414,20 +353,11 @@ namespace TodangMotor.Services
                 if (cashier != null)
                     cashierName = cashier.FullName;
 
-                string? voidedByName = null;
-                if (sale.VoidedByUserId.HasValue)
-                {
-                    var voider = await _userRepository.GetByIdAsync(sale.VoidedByUserId.Value);
-                    if (voider != null)
-                        voidedByName = voider.FullName;
-                }
-
                 var result = new SaleDetailResult
                 {
                     Sale = sale,
                     Lines = displayLines,
-                    CashierName = cashierName,
-                    VoidedByName = voidedByName
+                    CashierName = cashierName
                 };
 
                 return (true, string.Empty, result);
@@ -460,8 +390,7 @@ namespace TodangMotor.Services
         // ============================================================
 
         /// <summary>
-        /// Aggregates revenue and profit for the given date range.
-        /// Owner-only. Voids excluded from totals but counted separately.
+        /// Aggregates revenue and profit for the given date range. Owner-only.
         /// </summary>
         public async Task<RevenueReportResult> GenerateRevenueReportAsync(
             DateTime fromDate,
@@ -492,11 +421,7 @@ namespace TodangMotor.Services
                 var daily = await _saleRepository.GetDailyRevenueReportAsync(
                     fromDate, toDateExclusive);
 
-                var voids = await _saleRepository.GetVoidCountInRangeAsync(
-                    fromDate, toDateExclusive);
-
                 result.DailyRows = daily ?? new List<DailyRevenueRow>();
-                result.VoidedTransactions = voids;
 
                 result.TotalRevenue = result.DailyRows.Sum(r => r.Revenue);
                 result.TotalCost = result.DailyRows.Sum(r => r.KnownCost);
