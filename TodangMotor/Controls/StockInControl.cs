@@ -424,60 +424,13 @@ namespace TodangMotor.Controls
             _grid.AutoGenerateColumns = false;
             _grid.Columns.Clear();
 
-            _grid.Columns.Add(new DataGridViewTextBoxColumn
-            {
-                Name = "Product",
-                DataPropertyName = "Product",
-                HeaderText = "Product",
-                FillWeight = 240
-            });
-
-            _grid.Columns.Add(new DataGridViewTextBoxColumn
-            {
-                Name = "Brand",
-                DataPropertyName = "Brand",
-                HeaderText = "Brand",
-                FillWeight = 140
-            });
-
-            _grid.Columns.Add(new DataGridViewTextBoxColumn
-            {
-                Name = "Unit",
-                DataPropertyName = "Unit",
-                HeaderText = "Unit",
-                FillWeight = 60
-            });
-
-            _grid.Columns.Add(new DataGridViewTextBoxColumn
-            {
-                Name = "Quantity",
-                DataPropertyName = "Quantity",
-                HeaderText = "Qty",
-                FillWeight = 70
-            });
-
-            _grid.Columns.Add(new DataGridViewTextBoxColumn
-            {
-                Name = "UnitCost",
-                DataPropertyName = "UnitCost",
-                HeaderText = "Unit Cost (PHP)",
-                FillWeight = 110
-            });
-
-            _grid.Columns.Add(new DataGridViewTextBoxColumn
-            {
-                Name = "Total",
-                DataPropertyName = "Total",
-                HeaderText = "Line Total (PHP)",
-                FillWeight = 130
-            });
-
-            _grid.Columns.Add(new DataGridViewTextBoxColumn
-            {
-                Name = "ProductId",
-                DataPropertyName = "ProductId",
-                Visible = false
-            });
+            _grid.Columns.Add(new DataGridViewTextBoxColumn { Name = "Product", HeaderText = "Product", FillWeight = 240 });
+            _grid.Columns.Add(new DataGridViewTextBoxColumn { Name = "Brand", HeaderText = "Brand", FillWeight = 140 });
+            _grid.Columns.Add(new DataGridViewTextBoxColumn { Name = "Unit", HeaderText = "Unit", FillWeight = 60 });
+            _grid.Columns.Add(new DataGridViewTextBoxColumn { Name = "Quantity", HeaderText = "Qty", FillWeight = 70 });
+            _grid.Columns.Add(new DataGridViewTextBoxColumn { Name = "UnitCost", HeaderText = "Unit Cost (PHP)", FillWeight = 110 });
+            _grid.Columns.Add(new DataGridViewTextBoxColumn { Name = "Total", HeaderText = "Line Total (PHP)", FillWeight = 130 });
+            _grid.Columns.Add(new DataGridViewTextBoxColumn { Name = "ProductId", Visible = false });
         }
 
         // ============================================================

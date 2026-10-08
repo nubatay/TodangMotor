@@ -19,10 +19,10 @@ namespace TodangMotor.Data
         // INSERT SALE (atomic)
         // ============================================================
 
-        public async Task<(bool Success, string ErrorMessage, int SaleId, string InvoiceNo)> InsertSaleAsync(
-    Sale header,
-    List<SaleItem> items,
-    int userId)
+        public async Task<(bool Success, string ErrorMessage, string InvoiceNo)> InsertSaleAsync(
+            Sale header,
+            List<SaleItem> items,
+            int userId)
         {
             if (header == null) throw new ArgumentNullException(nameof(header));
             if (items == null || items.Count == 0)
@@ -43,14 +43,14 @@ namespace TodangMotor.Data
                         string invoiceNo = await GenerateInvoiceNoAsync(connection, transaction);
 
                         const string headerSql = @"
-                    INSERT INTO Sales
-                        (InvoiceNo, UserId, SaleDate, CustomerName, PaymentMethod,
-                         Subtotal, AmountTendered, ChangeAmount, Status)
-                    VALUES
-                        (@InvoiceNo, @UserId, @SaleDate, @CustomerName, @PaymentMethod,
-                         @Subtotal, @AmountTendered, @ChangeAmount, 'Completed');
+                            INSERT INTO Sales
+                                (InvoiceNo, UserId, SaleDate, CustomerName, PaymentMethod,
+                                 Subtotal, AmountTendered, ChangeAmount, Status)
+                            VALUES
+                                (@InvoiceNo, @UserId, @SaleDate, @CustomerName, @PaymentMethod,
+                                 @Subtotal, @AmountTendered, @ChangeAmount, 'Completed');
 
-                    SELECT CAST(SCOPE_IDENTITY() AS int);";
+                            SELECT CAST(SCOPE_IDENTITY() AS int);";
 
                         int saleId = await connection.QuerySingleAsync<int>(headerSql, new
                         {
@@ -67,10 +67,10 @@ namespace TodangMotor.Data
                         foreach (var item in items)
                         {
                             const string itemSql = @"
-                        INSERT INTO SaleItems
-                            (SaleId, ProductId, Quantity, UnitPrice, LineTotal, UnitCost)
-                        VALUES
-                            (@SaleId, @ProductId, @Quantity, @UnitPrice, @LineTotal, @UnitCost);";
+                                INSERT INTO SaleItems
+                                    (SaleId, ProductId, Quantity, UnitPrice, LineTotal, UnitCost)
+                                VALUES
+                                    (@SaleId, @ProductId, @Quantity, @UnitPrice, @LineTotal, @UnitCost);";
 
                             await connection.ExecuteAsync(itemSql, new
                             {
@@ -83,9 +83,9 @@ namespace TodangMotor.Data
                             }, transaction);
 
                             const string readQtySql = @"
-                        SELECT QuantityOnHand
-                        FROM Products
-                        WHERE ProductId = @ProductId;";
+                                SELECT QuantityOnHand
+                                FROM Products
+                                WHERE ProductId = @ProductId;";
 
                             int beforeQty = await connection.QuerySingleAsync<int>(
                                 readQtySql, new { item.ProductId }, transaction);
@@ -100,24 +100,24 @@ namespace TodangMotor.Data
                             int afterQty = beforeQty - item.Quantity;
 
                             const string updateQtySql = @"
-                        UPDATE Products
-                        SET QuantityOnHand = @QuantityAfter,
-                            UpdatedAt      = GETDATE()
-                        WHERE ProductId = @ProductId;";
+                                UPDATE Products
+                                SET QuantityOnHand = @QuantityAfter,
+                                    UpdatedAt      = GETDATE()
+                                WHERE ProductId = @ProductId;";
 
                             await connection.ExecuteAsync(updateQtySql,
                                 new { item.ProductId, QuantityAfter = afterQty },
                                 transaction);
 
                             const string movementSql = @"
-                        INSERT INTO StockMovements
-                            (ProductId, MovementType, QuantityChange,
-                             QuantityBefore, QuantityAfter, ReferenceId, UserId,
-                             MovementDate, Notes)
-                        VALUES
-                            (@ProductId, 'Sale', @QuantityChange,
-                             @QuantityBefore, @QuantityAfter, @SaleId, @UserId,
-                             GETDATE(), NULL);";
+                                INSERT INTO StockMovements
+                                    (ProductId, MovementType, QuantityChange,
+                                     QuantityBefore, QuantityAfter, ReferenceId, UserId,
+                                     MovementDate, Notes)
+                                VALUES
+                                    (@ProductId, 'Sale', @QuantityChange,
+                                     @QuantityBefore, @QuantityAfter, @SaleId, @UserId,
+                                     GETDATE(), NULL);";
 
                             await connection.ExecuteAsync(movementSql, new
                             {
@@ -131,7 +131,7 @@ namespace TodangMotor.Data
                         }
 
                         transaction.Commit();
-                        return (true, string.Empty, saleId, invoiceNo);
+                        return (true, string.Empty, invoiceNo);
                     }
                     catch
                     {
@@ -146,11 +146,130 @@ namespace TodangMotor.Data
 
                     return (false,
                         "Could not generate a unique invoice number after multiple attempts. Please try again.",
-                        0, string.Empty);
+                        string.Empty);
                 }
             }
 
-            return (false, "Could not save the sale.", 0, string.Empty);
+            return (false, "Could not save the sale.", string.Empty);
+        }
+
+        // ============================================================
+        // VOID SALE (atomic)
+        // ============================================================
+
+        public async Task<(bool Success, string ErrorMessage)> VoidSaleAsync(
+            int saleId,
+            int voidedByUserId,
+            string voidReason)
+        {
+            if (saleId <= 0) throw new ArgumentException("Invalid sale ID.", nameof(saleId));
+
+            using var connection = DbConnectionFactory.CreateConnection();
+            connection.Open();
+            using var transaction = connection.BeginTransaction();
+
+            try
+            {
+                const string statusSql = @"
+                    SELECT Status
+                    FROM Sales
+                    WHERE SaleId = @SaleId;";
+
+                string? currentStatus = await connection.QuerySingleOrDefaultAsync<string>(
+                    statusSql, new { SaleId = saleId }, transaction);
+
+                if (currentStatus == null)
+                {
+                    transaction.Rollback();
+                    return (false, "Sale not found.");
+                }
+                if (currentStatus == "Void")
+                {
+                    transaction.Rollback();
+                    return (false, "This sale has already been voided.");
+                }
+
+                const string itemsSql = @"
+                    SELECT SaleItemId, SaleId, ProductId, Quantity, UnitPrice, LineTotal, UnitCost
+                    FROM SaleItems
+                    WHERE SaleId = @SaleId;";
+
+                var items = (await connection.QueryAsync<SaleItem>(
+                    itemsSql, new { SaleId = saleId }, transaction)).ToList();
+
+                if (items.Count == 0)
+                {
+                    transaction.Rollback();
+                    return (false, "This sale has no items to void.");
+                }
+
+                const string updateSaleSql = @"
+                    UPDATE Sales
+                    SET Status         = 'Void',
+                        VoidedByUserId = @VoidedByUserId,
+                        VoidedAt       = GETDATE(),
+                        VoidReason     = @VoidReason
+                    WHERE SaleId = @SaleId;";
+
+                await connection.ExecuteAsync(updateSaleSql, new
+                {
+                    SaleId = saleId,
+                    VoidedByUserId = voidedByUserId,
+                    VoidReason = voidReason
+                }, transaction);
+
+                foreach (var item in items)
+                {
+                    const string readQtySql = @"
+                        SELECT QuantityOnHand
+                        FROM Products
+                        WHERE ProductId = @ProductId;";
+
+                    int beforeQty = await connection.QuerySingleAsync<int>(
+                        readQtySql, new { item.ProductId }, transaction);
+
+                    int afterQty = beforeQty + item.Quantity;
+
+                    const string updateQtySql = @"
+                        UPDATE Products
+                        SET QuantityOnHand = @QuantityAfter,
+                            UpdatedAt      = GETDATE()
+                        WHERE ProductId = @ProductId;";
+
+                    await connection.ExecuteAsync(updateQtySql,
+                        new { item.ProductId, QuantityAfter = afterQty },
+                        transaction);
+
+                    const string movementSql = @"
+                        INSERT INTO StockMovements
+                            (ProductId, MovementType, QuantityChange,
+                             QuantityBefore, QuantityAfter, ReferenceId, UserId,
+                             MovementDate, Notes)
+                        VALUES
+                            (@ProductId, 'Void', @QuantityChange,
+                             @QuantityBefore, @QuantityAfter, @SaleId, @UserId,
+                             GETDATE(), @Notes);";
+
+                    await connection.ExecuteAsync(movementSql, new
+                    {
+                        item.ProductId,
+                        QuantityChange = item.Quantity,
+                        QuantityBefore = beforeQty,
+                        QuantityAfter = afterQty,
+                        SaleId = saleId,
+                        UserId = voidedByUserId,
+                        Notes = voidReason
+                    }, transaction);
+                }
+
+                transaction.Commit();
+                return (true, string.Empty);
+            }
+            catch
+            {
+                try { transaction.Rollback(); } catch { /* ignore */ }
+                throw;
+            }
         }
 
         // ============================================================
@@ -280,6 +399,26 @@ namespace TodangMotor.Data
             return rows.ToList();
         }
 
+        public async Task<int> GetVoidCountInRangeAsync(
+            DateTime fromInclusive,
+            DateTime toExclusive)
+        {
+            using var connection = DbConnectionFactory.CreateConnection();
+
+            const string sql = @"
+                SELECT COUNT(*)
+                FROM Sales
+                WHERE SaleDate >= @From
+                  AND SaleDate <  @To
+                  AND Status = 'Void';";
+
+            return await connection.ExecuteScalarAsync<int>(sql, new
+            {
+                From = fromInclusive,
+                To = toExclusive
+            });
+        }
+
         // ============================================================
         // TOP PRODUCTS
         // ============================================================
@@ -348,7 +487,7 @@ namespace TodangMotor.Data
         }
 
         // ============================================================
-        // DASHBOARD QUERIES
+        // DASHBOARD QUERIES (Phase 6B)
         // ============================================================
 
         /// <summary>

@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.Drawing;
 using System.Linq;
 using System.Threading.Tasks;
@@ -9,8 +10,8 @@ using TodangMotor.Services;
 namespace TodangMotor.Forms
 {
     /// <summary>
-    /// Sale detail popup. Shows one sale's full information.
-    /// View-only.
+    /// Sale detail popup. Shows one sale's full information and
+    /// provides a Void Sale button (same-day only, reason required).
     /// </summary>
     public class SaleDetailForm : ShellForm
     {
@@ -19,22 +20,15 @@ namespace TodangMotor.Forms
 
         private SaleDetailResult? _detail;
 
-        // ---- Header info ----
-        private Label _lblInvoiceNumber;
-        private Label _metaDateValue;
-        private Label _metaCashierValue;
-        private Label _metaCustomerValue;
-        private Label _metaPaymentValue;
-
-        // ---- Line items ----
+        // ---- Controls ----
+        private Label _lblInvoice;
+        private Label _lblMeta;
+        private Label _lblVoidBanner;
         private DataGridView _linesGrid;
-
-        // ---- Totals ----
         private Label _lblSubtotal;
         private Label _lblTendered;
         private Label _lblChange;
-
-        // ---- Footer ----
+        private Button _btnVoid;
         private Button _btnClose;
 
         // ============================================================
@@ -69,6 +63,8 @@ namespace TodangMotor.Forms
 
         private void BuildLayout()
         {
+            // Root uses a TableLayoutPanel so the vertical stack is
+            // deterministic regardless of docking-order quirks.
             var root = new TableLayoutPanel
             {
                 Dock = DockStyle.Fill,
@@ -78,10 +74,10 @@ namespace TodangMotor.Forms
                 Margin = Padding.Empty,
                 Padding = Padding.Empty
             };
-            root.RowStyles.Add(new RowStyle(SizeType.Absolute, 170));
-            root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-            root.RowStyles.Add(new RowStyle(SizeType.Absolute, 120));
-            root.RowStyles.Add(new RowStyle(SizeType.Absolute, 88));
+            root.RowStyles.Add(new RowStyle(SizeType.Absolute, 176)); // header info
+            root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));  // grid
+            root.RowStyles.Add(new RowStyle(SizeType.Absolute, 130)); // totals
+            root.RowStyles.Add(new RowStyle(SizeType.Absolute, 88));  // footer
 
             root.Controls.Add(BuildInfoBlock(), 0, 0);
             root.Controls.Add(BuildGridBlock(), 0, 1);
@@ -97,115 +93,50 @@ namespace TodangMotor.Forms
             {
                 Dock = DockStyle.Fill,
                 BackColor = Theme.Background,
-                Margin = Padding.Empty
+                Padding = new Padding(32, 16, 32, 0)
             };
 
-            const int padX = 32;
-            const int contentW = 740;
-
-            // ---- "INVOICE" caption ----
-            var caption = new Label
+            _lblInvoice = new Label
             {
-                Text = "INVOICE",
-                Font = new Font(Theme.UiFontFamily, 9F, FontStyle.Bold),
-                ForeColor = Theme.TextMuted,
-                AutoSize = false,
-                Location = new Point(padX, 14),
-                Size = new Size(contentW, 16),
-                TextAlign = ContentAlignment.MiddleLeft,
-                BackColor = Color.Transparent
-            };
-
-            // ---- Invoice number ----
-            _lblInvoiceNumber = new Label
-            {
-                Text = "—",
-                Font = new Font(Theme.UiFontFamily, 18F, FontStyle.Bold),
+                Text = "Loading…",
+                Font = new Font(Theme.UiFontFamily, 20F, FontStyle.Bold),
                 ForeColor = Theme.TextPrimary,
                 AutoSize = false,
-                Location = new Point(padX, 32),
-                Size = new Size(contentW, 34),
+                Location = new Point(32, 16),
+                Size = new Size(740, 36),
                 TextAlign = ContentAlignment.MiddleLeft,
                 BackColor = Color.Transparent
             };
 
-            // ---- Divider under invoice ----
-            var divider = new Panel
-            {
-                Location = new Point(padX, 76),
-                Size = new Size(contentW, 1),
-                BackColor = Theme.Divider
-            };
-
-            // ---- 4-column × 2-row meta grid ----
-            var meta = new TableLayoutPanel
-            {
-                ColumnCount = 4,
-                RowCount = 2,
-                Location = new Point(padX, 86),
-                Size = new Size(contentW, 60),
-                BackColor = Color.Transparent,
-                Margin = Padding.Empty,
-                Padding = Padding.Empty
-            };
-            meta.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 80));
-            meta.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
-            meta.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 80));
-            meta.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
-            meta.RowStyles.Add(new RowStyle(SizeType.Absolute, 30));
-            meta.RowStyles.Add(new RowStyle(SizeType.Absolute, 30));
-
-            _metaDateValue = MakeMetaValue();
-            _metaCashierValue = MakeMetaValue();
-            _metaCustomerValue = MakeMetaValue();
-            _metaPaymentValue = MakeMetaValue();
-
-            meta.Controls.Add(MakeMetaLabel("Date"), 0, 0);
-            meta.Controls.Add(_metaDateValue, 1, 0);
-            meta.Controls.Add(MakeMetaLabel("Cashier"), 2, 0);
-            meta.Controls.Add(_metaCashierValue, 3, 0);
-
-            meta.Controls.Add(MakeMetaLabel("Customer"), 0, 1);
-            meta.Controls.Add(_metaCustomerValue, 1, 1);
-            meta.Controls.Add(MakeMetaLabel("Payment"), 2, 1);
-            meta.Controls.Add(_metaPaymentValue, 3, 1);
-
-            block.Controls.Add(caption);
-            block.Controls.Add(_lblInvoiceNumber);
-            block.Controls.Add(divider);
-            block.Controls.Add(meta);
-
-            return block;
-        }
-
-        private static Label MakeMetaLabel(string text)
-        {
-            return new Label
-            {
-                Text = text,
-                Font = Theme.FontSmall,
-                ForeColor = Theme.TextSecondary,
-                AutoSize = false,
-                Dock = DockStyle.Fill,
-                TextAlign = ContentAlignment.MiddleLeft,
-                BackColor = Color.Transparent,
-                Margin = new Padding(0)
-            };
-        }
-
-        private static Label MakeMetaValue()
-        {
-            return new Label
+            _lblMeta = new Label
             {
                 Text = string.Empty,
                 Font = Theme.FontBody,
-                ForeColor = Theme.TextPrimary,
+                ForeColor = Theme.TextSecondary,
                 AutoSize = false,
-                Dock = DockStyle.Fill,
-                TextAlign = ContentAlignment.MiddleLeft,
-                BackColor = Color.Transparent,
-                Margin = new Padding(0)
+                Location = new Point(32, 58),
+                Size = new Size(740, 76),
+                TextAlign = ContentAlignment.TopLeft,
+                BackColor = Color.Transparent
             };
+
+            _lblVoidBanner = new Label
+            {
+                Text = string.Empty,
+                Font = Theme.FontBodyBold,
+                ForeColor = Theme.Danger,
+                AutoSize = false,
+                Location = new Point(32, 138),
+                Size = new Size(740, 32),
+                TextAlign = ContentAlignment.MiddleLeft,
+                BackColor = Color.Transparent
+            };
+
+            block.Controls.Add(_lblInvoice);
+            block.Controls.Add(_lblMeta);
+            block.Controls.Add(_lblVoidBanner);
+
+            return block;
         }
 
         private Panel BuildGridBlock()
@@ -239,9 +170,9 @@ namespace TodangMotor.Forms
                 Padding = new Padding(32, 0, 32, 0)
             };
 
-            _lblSubtotal = MakeTotalLabel("Subtotal", 8, true);
-            _lblTendered = MakeTotalLabel("Tendered", 42, false);
-            _lblChange = MakeTotalLabel("Change", 72, false);
+            _lblSubtotal = MakeTotalLabel("Subtotal", 0, 8, true);
+            _lblTendered = MakeTotalLabel("Tendered", 0, 42, false);
+            _lblChange = MakeTotalLabel("Change", 0, 72, false);
 
             block.Controls.Add(_lblSubtotal);
             block.Controls.Add(_lblTendered);
@@ -250,7 +181,7 @@ namespace TodangMotor.Forms
             return block;
         }
 
-        private Label MakeTotalLabel(string prefix, int y, bool bold)
+        private Label MakeTotalLabel(string prefix, int x, int y, bool bold)
         {
             return new Label
             {
@@ -261,7 +192,7 @@ namespace TodangMotor.Forms
                 ForeColor = bold ? Theme.TextPrimary : Theme.TextSecondary,
                 AutoSize = false,
                 Location = new Point(32, y),
-                Size = new Size(720, 28),
+                Size = new Size(740, 28),
                 TextAlign = ContentAlignment.MiddleLeft,
                 BackColor = Color.Transparent
             };
@@ -286,10 +217,15 @@ namespace TodangMotor.Forms
             const int btnW = 140;
             const int btnH = 44;
 
+            _btnVoid = UiFactory.CreateButton("Void Sale", UiFactory.ButtonStyle.Danger, btnW, btnH);
+            _btnVoid.Location = new Point(32, 22);
+            _btnVoid.Click += async (s, e) => await VoidSaleAsync();
+
             _btnClose = UiFactory.CreateButton("Close", UiFactory.ButtonStyle.Ghost, btnW, btnH);
             _btnClose.Anchor = AnchorStyles.Top | AnchorStyles.Right;
             _btnClose.Click += (s, e) => Close();
 
+            footer.Controls.Add(_btnVoid);
             footer.Controls.Add(_btnClose);
 
             footer.Resize += (s, e) =>
@@ -320,12 +256,12 @@ namespace TodangMotor.Forms
                 _linesGrid.Columns.Add(col);
             }
 
-            AddCol("Item", "Item", 320);
+            AddCol("ProductName", "Product", 240);
+            AddCol("Brand", "Brand", 140);
+            AddCol("Unit", "Unit", 60);
             AddCol("Quantity", "Qty", 60, true);
-            AddCol("UnitPrice", "Unit Price", 110, true);
-            AddCol("LineTotal", "Line Total", 110, true);
-
-            _linesGrid.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill;
+            AddCol("UnitPrice", "Unit Price", 120, true);
+            AddCol("LineTotal", "Line Total", 120, true);
         }
 
         // ============================================================
@@ -362,21 +298,37 @@ namespace TodangMotor.Forms
             if (_detail == null) return;
             var sale = _detail.Sale;
 
-            _lblInvoiceNumber.Text = sale.InvoiceNo;
+            _lblInvoice.Text = $"Invoice {sale.InvoiceNo}";
 
-            _metaDateValue.Text = sale.SaleDate.ToString("MMM d, yyyy  h:mm tt");
-            _metaCashierValue.Text = string.IsNullOrEmpty(_detail.CashierName)
-                ? "—"
-                : _detail.CashierName;
-            _metaCustomerValue.Text = string.IsNullOrEmpty(sale.CustomerName)
+            string customer = string.IsNullOrEmpty(sale.CustomerName)
                 ? "Walk-in"
                 : sale.CustomerName;
-            _metaPaymentValue.Text = sale.PaymentMethod ?? string.Empty;
+
+            string statusIcon = sale.Status == "Void" ? "  ·  VOID" : "";
+
+            _lblMeta.Text =
+                $"Date:          {sale.SaleDate:MMMM d, yyyy  h:mm tt}\n" +
+                $"Cashier:       {_detail.CashierName}\n" +
+                $"Customer:      {customer}   ·   " +
+                $"Payment: {sale.PaymentMethod}{statusIcon}";
+
+            if (sale.Status == "Void")
+            {
+                _lblVoidBanner.Text =
+                    $"VOID — by {_detail.VoidedByName} on " +
+                    $"{sale.VoidedAt:MMM d, yyyy h:mm tt}. Reason: {sale.VoidReason}";
+            }
+            else
+            {
+                _lblVoidBanner.Text = string.Empty;
+            }
 
             var lineRows = _detail.Lines
                 .Select(l => new
                 {
-                    Item = BuildItemText(l),
+                    ProductName = l.ProductName,
+                    Brand = l.Brand,
+                    Unit = l.Unit,
                     Quantity = l.Quantity,
                     UnitPrice = l.UnitPrice.ToString("N2"),
                     LineTotal = l.LineTotal.ToString("N2")
@@ -388,19 +340,171 @@ namespace TodangMotor.Forms
             _lblSubtotal.Text = $"Subtotal:  ₱ {sale.Subtotal:N2}";
             _lblTendered.Text = $"Tendered:  ₱ {sale.AmountTendered:N2}  ({sale.PaymentMethod})";
             _lblChange.Text = $"Change:    ₱ {sale.ChangeAmount:N2}";
+
+            bool canVoid = sale.Status != "Void"
+                           && sale.SaleDate.Date == DateTime.Now.Date;
+            _btnVoid.Enabled = canVoid;
+
+            if (sale.Status == "Void")
+                _btnVoid.Text = "Already Void";
+            else if (sale.SaleDate.Date != DateTime.Now.Date)
+                _btnVoid.Text = "Cannot Void";
+            else
+                _btnVoid.Text = "Void Sale";
         }
 
-        private static string BuildItemText(SaleLineDisplay l)
+        // ============================================================
+        // VOID SALE
+        // ============================================================
+
+        private async Task VoidSaleAsync()
         {
-            string name = l.ProductName ?? string.Empty;
+            if (_detail == null) return;
 
-            if (!string.IsNullOrWhiteSpace(l.Brand))
-                name = $"{name} — {l.Brand}";
+            using var reasonForm = new VoidReasonForm();
+            var choice = reasonForm.ShowDialog(this);
 
-            if (!string.IsNullOrWhiteSpace(l.Unit))
-                name = $"{name}  ·  {l.Unit}";
+            if (choice != DialogResult.OK) return;
 
-            return name;
+            string reason = reasonForm.Reason;
+            if (string.IsNullOrWhiteSpace(reason)) return;
+
+            var confirm = MessageBox.Show(
+                $"Void invoice {_detail.Sale.InvoiceNo}?\n\n" +
+                "Stock will be restored for all items in this sale.\n" +
+                "This cannot be undone.",
+                "Confirm Void",
+                MessageBoxButtons.YesNo,
+                MessageBoxIcon.Warning);
+
+            if (confirm != DialogResult.Yes) return;
+
+            var (success, error) = await _salesService.VoidSaleAsync(_saleId, reason);
+
+            if (!success)
+            {
+                MessageBox.Show(
+                    error ?? "Could not void the sale.",
+                    "Void Failed",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Error);
+                return;
+            }
+
+            MessageBox.Show(
+                "Sale voided. Stock has been restored.",
+                "Void Successful",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Information);
+
+            DialogResult = DialogResult.OK;
+            Close();
+        }
+    }
+
+    // ================================================================
+    // VOID REASON DIALOG
+    // ================================================================
+
+    public class VoidReasonForm : ShellForm
+    {
+        private RoundedTextBox _reasonBox;
+        private Label _errorLabel;
+
+        public string Reason => _reasonBox?.Text?.Trim() ?? string.Empty;
+
+        public VoidReasonForm()
+        {
+            HeaderTitle = "Void Sale — Reason";
+            ShowMaximizeButton = false;
+            ShowMinimizeButton = false;
+            StartPosition = FormStartPosition.CenterParent;
+            ClientSize = new Size(520, 300);
+            MinimumSize = new Size(500, 280);
+            BackColor = Theme.Background;
+            KeyPreview = true;
+
+            BuildLayout();
+
+            KeyDown += (s, e) =>
+            {
+                if (e.KeyCode == Keys.Escape)
+                {
+                    DialogResult = DialogResult.Cancel;
+                    Close();
+                }
+            };
+        }
+
+        private void BuildLayout()
+        {
+            const int padX = 32;
+            int fieldW = ClientSize.Width - padX * 2;
+
+            var lbl = new Label
+            {
+                Text = "Why is this sale being voided?",
+                Font = Theme.FontBody,
+                ForeColor = Theme.TextPrimary,
+                AutoSize = false,
+                Location = new Point(padX, 24),
+                Size = new Size(fieldW, 22),
+                TextAlign = ContentAlignment.MiddleLeft,
+                BackColor = Color.Transparent
+            };
+            ContentPanel.Controls.Add(lbl);
+
+            _reasonBox = UiFactory.CreateTextBox(fieldW);
+            _reasonBox.Location = new Point(padX, 54);
+            _reasonBox.MaxLength = 250;
+            _reasonBox.Placeholder = "e.g. Wrong item, Customer changed mind";
+            ContentPanel.Controls.Add(_reasonBox);
+
+            _errorLabel = new Label
+            {
+                Text = string.Empty,
+                Font = Theme.FontSmall,
+                ForeColor = Theme.Danger,
+                AutoSize = false,
+                Location = new Point(padX, 104),
+                Size = new Size(fieldW, 22),
+                TextAlign = ContentAlignment.MiddleLeft,
+                BackColor = Color.Transparent
+            };
+            ContentPanel.Controls.Add(_errorLabel);
+
+            int btnW = 130;
+            int btnH = 42;
+            int btnY = ClientSize.Height - 68;
+
+            var btnCancel = UiFactory.CreateButton("Cancel", UiFactory.ButtonStyle.Ghost, btnW, btnH);
+            btnCancel.Anchor = AnchorStyles.Bottom | AnchorStyles.Right;
+            btnCancel.Location = new Point(ClientSize.Width - padX - btnW - 8 - btnW, btnY);
+            btnCancel.Click += (s, e) => { DialogResult = DialogResult.Cancel; Close(); };
+
+            var btnOk = UiFactory.CreateButton("Continue", UiFactory.ButtonStyle.Danger, btnW, btnH);
+            btnOk.Anchor = AnchorStyles.Bottom | AnchorStyles.Right;
+            btnOk.Location = new Point(ClientSize.Width - padX - btnW, btnY);
+            btnOk.Click += (s, e) =>
+            {
+                string r = _reasonBox.Text?.Trim() ?? string.Empty;
+                if (r.Length == 0)
+                {
+                    _errorLabel.Text = "Please type a reason.";
+                    _reasonBox.FocusInput();
+                    return;
+                }
+                if (r.Length > 250)
+                {
+                    _errorLabel.Text = "Reason cannot exceed 250 characters.";
+                    return;
+                }
+                DialogResult = DialogResult.OK;
+                Close();
+            };
+
+            ContentPanel.Controls.Add(btnCancel);
+            ContentPanel.Controls.Add(btnOk);
         }
     }
 }

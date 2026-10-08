@@ -394,9 +394,9 @@ namespace TodangMotor.Controls
             SetWeight("SKU", 100, "SKU");
             SetWeight("Category", 110, "Category");
             SetWeight("Unit", 50, "Unit");
-            SetWeight("Cost", 80, "Cost (₱)");
-            SetWeight("Selling", 80, "Selling (₱)");
-            SetWeight("Reorder", 70, "Reorder");
+            SetWeight("Cost", 80, "Cost (PHP)");
+            SetWeight("Selling", 80, "Selling (PHP)");
+            SetWeight("Reorder", 70, "Reorder At");
             SetWeight("Supplier", 130, "Supplier");
             SetWeight("Status", 70, "Status");
         }

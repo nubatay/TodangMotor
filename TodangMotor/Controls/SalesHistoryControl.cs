@@ -13,7 +13,8 @@ namespace TodangMotor.Controls
 {
     /// <summary>
     /// Sales History — filterable list of sales with From/To date pickers.
-    /// View-only. Revenue report generation lives in the Reports Hub (Owner-only).
+    /// View and void actions only. Revenue report generation lives in the
+    /// Reports Hub (Owner-only).
     /// </summary>
     public class SalesHistoryControl : UserControl
     {
@@ -44,6 +45,7 @@ namespace TodangMotor.Controls
         private DataGridView _grid;
 
         private Button _btnView;
+        private Button _btnVoid;
         private Button _btnRefresh;
         private Label _statusLabel;
 
@@ -176,6 +178,7 @@ namespace TodangMotor.Controls
             };
             UiFactory.StyleGrid(_grid);
             _grid.AlternatingRowsDefaultCellStyle.BackColor = Color.FromArgb(248, 249, 251);
+            _grid.CellFormatting += Grid_CellFormatting;
             _grid.CellDoubleClick += (s, e) =>
             {
                 if (e.RowIndex < 0) return;
@@ -192,6 +195,25 @@ namespace TodangMotor.Controls
             return _grid;
         }
 
+        private void Grid_CellFormatting(object? sender, DataGridViewCellFormattingEventArgs e)
+        {
+            if (e.RowIndex < 0 || e.ColumnIndex < 0) return;
+            if (e.RowIndex >= _grid.Rows.Count) return;
+            if (!_grid.Columns.Contains("Status")) return;
+
+            var statusVal = _grid.Rows[e.RowIndex].Cells["Status"].Value?.ToString();
+            if (statusVal == "Void")
+            {
+                e.CellStyle.BackColor = Color.FromArgb(255, 235, 235);
+                e.CellStyle.SelectionBackColor = Color.FromArgb(255, 220, 220);
+                e.CellStyle.ForeColor = Color.FromArgb(170, 40, 40);
+                e.CellStyle.SelectionForeColor = Color.FromArgb(170, 40, 40);
+
+                if (_grid.Columns[e.ColumnIndex].Name == "Status")
+                    e.CellStyle.Font = Theme.FontBodyBold;
+            }
+        }
+
         private Panel BuildBottomBar()
         {
             var bar = new Panel
@@ -201,32 +223,41 @@ namespace TodangMotor.Controls
                 BackColor = Theme.Background
             };
 
+            // ---- Left group: view / void ----
             _btnView = UiFactory.CreateButton("View Detail", UiFactory.ButtonStyle.Secondary, 120, 40);
             _btnView.Location = new Point(4, 14);
             _btnView.Click += (s, e) => OpenDetailForSelected();
 
+            _btnVoid = UiFactory.CreateButton("Void Sale", UiFactory.ButtonStyle.Ghost, 110, 40);
+            _btnVoid.Location = new Point(132, 14);
+            _btnVoid.Click += (s, e) => OpenDetailForSelected();
+
+            // ---- Center: status ----
             _statusLabel = new Label
             {
                 Text = string.Empty,
                 Font = Theme.FontSmall,
                 ForeColor = Theme.TextSecondary,
                 AutoSize = false,
-                Location = new Point(140, 14),
+                Location = new Point(250, 14),
                 Height = 40,
-                Width = 400,
+                Width = 300,
                 TextAlign = ContentAlignment.MiddleLeft,
                 Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right,
                 BackColor = Color.Transparent
             };
 
+            // ---- Right: refresh ----
             _btnRefresh = UiFactory.CreateButton("Refresh", UiFactory.ButtonStyle.Ghost, 100, 40);
             _btnRefresh.Anchor = AnchorStyles.Top | AnchorStyles.Right;
             _btnRefresh.Click += async (s, e) => await ReloadAllAsync();
 
             bar.Controls.Add(_btnView);
+            bar.Controls.Add(_btnVoid);
             bar.Controls.Add(_statusLabel);
             bar.Controls.Add(_btnRefresh);
 
+            // Position the Refresh button on the right edge.
             bar.Resize += (s, e) =>
             {
                 _btnRefresh.Left = bar.ClientSize.Width - _btnRefresh.Width - 4;
@@ -313,7 +344,8 @@ namespace TodangMotor.Controls
                     Date = s.SaleDate.ToString("MMM d, yyyy h:mm tt"),
                     Customer = string.IsNullOrEmpty(s.CustomerName) ? "Walk-in" : s.CustomerName,
                     Payment = s.PaymentMethod ?? string.Empty,
-                    Subtotal = s.Subtotal.ToString("N2")
+                    Subtotal = s.Subtotal.ToString("N2"),
+                    Status = s.Status ?? "Completed"
                 })
                 .ToList();
 
@@ -334,11 +366,17 @@ namespace TodangMotor.Controls
             SetWeight("Customer", 180, "Customer");
             SetWeight("Payment", 100, "Payment");
             SetWeight("Subtotal", 100, "Subtotal (PHP)");
+            SetWeight("Status", 100, "Status");
 
             if (_grid.Rows.Count > 0)
                 _grid.ClearSelection();
 
-            _countLabel.Text = $"Showing {rows.Count} sale(s)";
+            int completed = rows.Count(r => r.Status == "Completed");
+            int voids = rows.Count(r => r.Status == "Void");
+
+            _countLabel.Text =
+                $"Showing {rows.Count} sale(s)   ·   " +
+                $"Completed: {completed}   Void: {voids}";
         }
 
         // ============================================================
@@ -388,6 +426,7 @@ namespace TodangMotor.Controls
         {
             _isBusy = busy;
             _btnView.Enabled = !busy;
+            _btnVoid.Enabled = !busy;
             _btnRefresh.Enabled = !busy;
         }
 
