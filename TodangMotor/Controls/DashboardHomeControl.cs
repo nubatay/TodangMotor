@@ -20,6 +20,7 @@ namespace TodangMotor.Controls
         private readonly DashboardService _dashboardService = new();
 
         public event Action<string>? NavigateRequested;
+        public event Action<DateTime, DateTime>? NavigateToSalesRequested;
 
         private bool _isLoading;
         private System.Windows.Forms.Timer _refreshTimer;
@@ -67,6 +68,7 @@ namespace TodangMotor.Controls
             Padding = new Padding(Theme.SpacingLg);
 
             BuildLayout();
+
 
             _refreshTimer = new System.Windows.Forms.Timer { Interval = 30_000 };
             _refreshTimer.Tick += async (s, e) => await SilentRefreshAsync();
@@ -235,6 +237,12 @@ namespace TodangMotor.Controls
             ResumeLayout(true);
         }
 
+        private void NavigateToSales()
+        {
+            var (from, toExclusive) = GetSelectedRange();
+            NavigateToSalesRequested?.Invoke(from, toExclusive);
+        }
+
         private void ApplyTrend(Label target, decimal? pct, string vsLabel)
         {
             if (target == null) return;
@@ -382,30 +390,30 @@ namespace TodangMotor.Controls
             _cardSales = BuildStatCard("\uE719", "Sales", out _salesValue, out _salesSub);
             _cardSales.Margin = new Padding(Theme.SpacingSm);
             row.Controls.Add(_cardSales, col++, 0);
-            MakeCardClickable(_cardSales, "sales");
+            MakeCardClickable(_cardSales, NavigateToSales);
 
             if (isOwner)
             {
                 _cardNetProfit = BuildStatCard("\uE9D9", "Net Profit", out _netProfitValue, out _netProfitSub);
                 _cardNetProfit.Margin = new Padding(Theme.SpacingSm);
                 row.Controls.Add(_cardNetProfit, col++, 0);
-                MakeCardClickable(_cardNetProfit, "sales");
+                MakeCardClickable(_cardNetProfit, NavigateToSales);
             }
 
             _cardTransactions = BuildStatCard("\uE8EF", "Transactions", out _transactionsValue, out _transactionsSub);
             _cardTransactions.Margin = new Padding(Theme.SpacingSm);
             row.Controls.Add(_cardTransactions, col++, 0);
-            MakeCardClickable(_cardTransactions, "sales");
+            MakeCardClickable(_cardTransactions, NavigateToSales);
 
             _cardItemsSold = BuildStatCard("\uE7B8", "Items Sold", out _itemsSoldValue, out _itemsSoldSub);
             _cardItemsSold.Margin = new Padding(Theme.SpacingSm);
             row.Controls.Add(_cardItemsSold, col++, 0);
-            MakeCardClickable(_cardItemsSold, "sales");
+            MakeCardClickable(_cardItemsSold, NavigateToSales);
 
             _cardStockAlerts = BuildStockAlertsCard();
             _cardStockAlerts.Margin = new Padding(Theme.SpacingSm);
             row.Controls.Add(_cardStockAlerts, col++, 0);
-            MakeCardClickable(_cardStockAlerts, "inventory");
+            MakeCardClickable(_cardStockAlerts, () => NavigateRequested?.Invoke("inventory"));
 
             return row;
         }
@@ -453,7 +461,7 @@ namespace TodangMotor.Controls
             _salesChart = new SalesBarChart { Dock = DockStyle.Fill };
             _salesChart.BarClicked += (bucketLabel) =>
             {
-                NavigateRequested?.Invoke("sales");
+                NavigateToSales();
             };
 
             chartCard.Controls.Add(_salesChart);
@@ -809,9 +817,9 @@ namespace TodangMotor.Controls
             return card;
         }
 
-        private void MakeCardClickable(RoundedPanel card, string navKey)
+        private void MakeCardClickable(RoundedPanel card, Action onClick)
         {
-            EventHandler clickHandler = (s, e) => NavigateRequested?.Invoke(navKey);
+            EventHandler clickHandler = (s, e) => onClick();
 
             card.Click += clickHandler;
             card.Cursor = Cursors.Hand;

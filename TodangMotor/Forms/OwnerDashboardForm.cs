@@ -76,6 +76,8 @@ namespace TodangMotor.Forms
             ShowMaximizeButton = true;
             ShowMinimizeButton = true;
             StartPosition = FormStartPosition.CenterScreen;
+            ClientSize = new Size(1400, 900);       // restore size when un-maximized
+            MinimumSize = new Size(1100, 700);       // never let it crush the layout
             WindowState = FormWindowState.Maximized;
             BackColor = Theme.Background;
 
@@ -96,6 +98,7 @@ namespace TodangMotor.Forms
             BuildSidebar();
             BuildContentHost();
             UpdateActiveNav(KeyDashboard);
+            
 
             EnsureChromeButtons();
 
@@ -477,7 +480,11 @@ namespace TodangMotor.Forms
                 home.NavigateRequested += navKey =>
                 {
                     if (navKey == "inventory") NavigateTo(KeyInventory);
-                    else if (navKey == "sales") NavigateTo(KeySales);
+                };
+                home.NavigateToSalesRequested += (from, toExclusive) =>
+                {
+                    // toExclusive is exclusive; SalesHistoryControl wants inclusive To.
+                    NavigateToSalesWithRange(from, toExclusive.AddDays(-1));
                 };
                 ShowContent(home);
             }
@@ -536,6 +543,14 @@ namespace TodangMotor.Forms
                 HeaderTitle = "Settings";
                 ShowContent(new SettingsControl());
             }
+        }
+
+        private void NavigateToSalesWithRange(DateTime fromInclusive, DateTime toInclusive)
+        {
+            _currentKey = KeySales;
+            UpdateActiveNav(KeySales);
+            HeaderTitle = "Sales";
+            ShowContent(new SalesHistoryControl(fromInclusive, toInclusive));
         }
 
         private void ShowContent(Control content)

@@ -14,6 +14,8 @@ namespace TodangMotor.Controls
     /// <summary>
     /// Sales History — filterable list of sales with From/To date pickers.
     /// View-only. Revenue report generation lives in the Reports Hub (Owner-only).
+    /// Can be constructed with an optional initial From/To range (inclusive)
+    /// so navigating from the dashboard preserves the selected period.
     /// </summary>
     public class SalesHistoryControl : UserControl
     {
@@ -28,6 +30,9 @@ namespace TodangMotor.Controls
         // ============================================================
 
         private List<Sale> _allSales = new();
+
+        private readonly DateTime? _initialFrom;
+        private readonly DateTime? _initialTo;
 
         private bool _isLoaded;
         private bool _isBusy;
@@ -52,7 +57,15 @@ namespace TodangMotor.Controls
         // ============================================================
 
         public SalesHistoryControl()
+            : this(null, null)
         {
+        }
+
+        public SalesHistoryControl(DateTime? initialFrom, DateTime? initialTo)
+        {
+            _initialFrom = initialFrom?.Date;
+            _initialTo = initialTo?.Date;
+
             Dock = DockStyle.Fill;
             BackColor = Theme.Background;
             Padding = new Padding(Theme.SpacingLg);
@@ -107,6 +120,8 @@ namespace TodangMotor.Controls
                 BackColor = Color.Transparent
             };
 
+            DateTime fromValue = ResolveFromValue();
+
             _dtpFrom = new DateTimePicker
             {
                 Format = DateTimePickerFormat.Custom,
@@ -115,7 +130,7 @@ namespace TodangMotor.Controls
                 Location = new Point(324, 14),
                 Size = new Size(160, 32),
                 MaxDate = DateTime.Today,
-                Value = DateTime.Today
+                Value = fromValue
             };
             _dtpFrom.ValueChanged += (s, e) => ApplyFilters();
 
@@ -131,6 +146,8 @@ namespace TodangMotor.Controls
                 BackColor = Color.Transparent
             };
 
+            DateTime toValue = ResolveToValue(fromValue);
+
             _dtpTo = new DateTimePicker
             {
                 Format = DateTimePickerFormat.Custom,
@@ -139,7 +156,7 @@ namespace TodangMotor.Controls
                 Location = new Point(526, 14),
                 Size = new Size(160, 32),
                 MaxDate = DateTime.Today,
-                Value = DateTime.Today
+                Value = toValue
             };
             _dtpTo.ValueChanged += (s, e) => ApplyFilters();
 
@@ -165,6 +182,21 @@ namespace TodangMotor.Controls
             bar.Controls.Add(_countLabel);
 
             return bar;
+        }
+
+        private DateTime ResolveFromValue()
+        {
+            DateTime v = _initialFrom ?? DateTime.Today;
+            if (v > DateTime.Today) v = DateTime.Today;
+            return v;
+        }
+
+        private DateTime ResolveToValue(DateTime fromValue)
+        {
+            DateTime v = _initialTo ?? DateTime.Today;
+            if (v > DateTime.Today) v = DateTime.Today;
+            if (v < fromValue) v = fromValue;
+            return v;
         }
 
         private DataGridView BuildGrid()

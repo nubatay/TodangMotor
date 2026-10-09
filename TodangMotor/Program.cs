@@ -1,3 +1,6 @@
+using System;
+using System.Windows.Forms;
+using TodangMotor.Data;
 using TodangMotor.Forms;
 using TodangMotor.Services;
 
@@ -5,29 +8,48 @@ namespace TodangMotor
 {
     internal static class Program
     {
-        /// <summary>
-        ///  The main entry point for the application.
-        /// </summary>
         [STAThread]
         static void Main()
         {
-            // To customize application configuration such as set high DPI settings or default font,
-            // see https://aka.ms/applicationconfiguration.
             ApplicationConfiguration.Initialize();
 
-            // Before showing any screen, make sure the Owner account exists.
-            // If the Users table is completely empty (first time running the app),
-            // this automatically creates the default Owner login.
+            // ---- 1. Ensure the database and schema exist ----
+            try
+            {
+                var (ok, error) = DatabaseInitializer
+                    .EnsureDatabaseAsync()
+                    .GetAwaiter()
+                    .GetResult();
+
+                if (!ok)
+                {
+                    MessageBox.Show(
+                        "Could not prepare the database.\n\n" + error +
+                        "\n\nIf this is the first run on this PC, please make sure " +
+                        "SQL Server Express LocalDB is installed.",
+                        "Database Setup Error",
+                        MessageBoxButtons.OK,
+                        MessageBoxIcon.Error);
+                    return;
+                }
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show(
+                    "Could not prepare the database.\n\n" + ex.Message +
+                    "\n\nIf this is the first run on this PC, please make sure " +
+                    "SQL Server Express LocalDB is installed.",
+                    "Database Setup Error",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Error);
+                return;
+            }
+
+            // ---- 2. Ensure the default Owner account exists ----
             try
             {
                 var authService = new AuthService();
                 authService.SeedOwnerIfNeededAsync().GetAwaiter().GetResult();
-
-                // TEMPORARY SCAFFOLDING: also make sure a test Cashier account
-                // exists, so Cashier-side access restrictions can be tested
-                // before Module 9 (User Management) is built. Remove this call
-                // once there's a real "Add User" screen for creating Cashiers.
-                
             }
             catch (Exception ex)
             {
@@ -35,11 +57,11 @@ namespace TodangMotor
                     "Cannot connect to the database. Please check your database setup.\n\n" + ex.Message,
                     "Startup Error",
                     MessageBoxButtons.OK,
-                    MessageBoxIcon.Error
-                );
-                return; // stop the app from continuing if we can't even reach the DB
+                    MessageBoxIcon.Error);
+                return;
             }
 
+            // ---- 3. Show login ----
             Application.Run(new LoginForm());
         }
     }

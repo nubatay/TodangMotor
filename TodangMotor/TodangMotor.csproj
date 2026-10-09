@@ -30,4 +30,10 @@
     </None>
   </ItemGroup>
 
+  <ItemGroup>
+		<EmbeddedResource Include="Data\Schema.sql">
+			<LogicalName>TodangMotor.Data.Schema.sql</LogicalName>
+		</EmbeddedResource>
+  </ItemGroup>
+
 </Project>

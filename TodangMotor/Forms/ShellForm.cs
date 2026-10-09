@@ -39,6 +39,48 @@ namespace TodangMotor.Forms
         [DllImport("user32.dll")]
         private static extern IntPtr SendMessage(IntPtr hWnd, int Msg, IntPtr wParam, IntPtr lParam);
 
+        [DllImport("user32.dll")]
+        private static extern IntPtr MonitorFromWindow(IntPtr hwnd, int dwFlags);
+
+        [DllImport("user32.dll")]
+        private static extern bool GetMonitorInfo(IntPtr hMonitor, ref MONITORINFO lpmi);
+
+        private const int MONITOR_DEFAULTTONEAREST = 0x00000002;
+        private const int WM_GETMINMAXINFO = 0x0024;
+
+        [StructLayout(LayoutKind.Sequential)]
+        private struct POINT
+        {
+            public int X;
+            public int Y;
+            public POINT(int x, int y) { X = x; Y = y; }
+        }
+
+        [StructLayout(LayoutKind.Sequential)]
+        private struct MINMAXINFO
+        {
+            public POINT ptReserved;
+            public POINT ptMaxSize;
+            public POINT ptMaxPosition;
+            public POINT ptMinTrackSize;
+            public POINT ptMaxTrackSize;
+        }
+
+        [StructLayout(LayoutKind.Sequential)]
+        private struct RECT
+        {
+            public int Left, Top, Right, Bottom;
+        }
+
+        [StructLayout(LayoutKind.Sequential)]
+        private struct MONITORINFO
+        {
+            public int cbSize;
+            public RECT rcMonitor;
+            public RECT rcWork;
+            public uint dwFlags;
+        }
+
         // ============================================================
         // FIELDS
         // ============================================================
@@ -73,7 +115,8 @@ namespace TodangMotor.Forms
             BackColor = Theme.Background;
             Font = Theme.FontBody;
             DoubleBuffered = true;
-            MinimumSize = new Size(480, 320);
+            MinimumSize = new Size(900, 600);       // was 480x320 — too small for real layouts
+            ClientSize = new Size(1024, 700);      // provides a real "restore" size
 
             BuildChrome();
         }
@@ -337,6 +380,13 @@ namespace TodangMotor.Forms
 
         protected override void WndProc(ref Message m)
         {
+            // Handle maximize bounds FIRST — before base.WndProc lets Windows
+            // decide. Without this, borderless forms compute garbage bounds.
+            if (m.Msg == WM_GETMINMAXINFO)
+            {
+                HandleGetMinMaxInfo(m.HWnd, m.LParam);
+            }
+
             base.WndProc(ref m);
 
             if (m.Msg != WM_NCHITTEST) return;
@@ -363,6 +413,44 @@ namespace TodangMotor.Forms
             else if (right) m.Result = (IntPtr)HTRIGHT;
             else if (top) m.Result = (IntPtr)HTTOP;
             else if (bottom) m.Result = (IntPtr)HTBOTTOM;
+        }
+
+        private static void HandleGetMinMaxInfo(IntPtr hwnd, IntPtr lParam)
+        {
+            // Load the structure Windows is asking us to fill in.
+            var mmi = Marshal.PtrToStructure<MINMAXINFO>(lParam);
+
+            // Which monitor is this form on?
+            IntPtr monitor = MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST);
+            if (monitor != IntPtr.Zero)
+            {
+                var monitorInfo = new MONITORINFO();
+                monitorInfo.cbSize = Marshal.SizeOf(typeof(MONITORINFO));
+
+                if (GetMonitorInfo(monitor, ref monitorInfo))
+                {
+                    // Working area = screen minus taskbar.
+                    var work = monitorInfo.rcWork;
+                    var mon = monitorInfo.rcMonitor;
+
+                    // Position: where the maximized window's top-left goes
+                    // (relative to the monitor's top-left).
+                    mmi.ptMaxPosition.X = Math.Abs(work.Left - mon.Left);
+                    mmi.ptMaxPosition.Y = Math.Abs(work.Top - mon.Top);
+
+                    // Size: how big the maximized window should be.
+                    mmi.ptMaxSize.X = Math.Abs(work.Right - work.Left);
+                    mmi.ptMaxSize.Y = Math.Abs(work.Bottom - work.Top);
+
+                    // Also constrain the drag-to-resize maximum so users can't
+                    // drag the form larger than the working area.
+                    mmi.ptMaxTrackSize.X = mmi.ptMaxSize.X;
+                    mmi.ptMaxTrackSize.Y = mmi.ptMaxSize.Y;
+                }
+            }
+
+            // Write it back.
+            Marshal.StructureToPtr(mmi, lParam, true);
         }
 
         // ============================================================

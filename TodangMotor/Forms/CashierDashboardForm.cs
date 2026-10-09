@@ -60,6 +60,8 @@ namespace TodangMotor.Forms
             ShowMaximizeButton = true;
             ShowMinimizeButton = true;
             StartPosition = FormStartPosition.CenterScreen;
+            ClientSize = new Size(1400, 900);
+            MinimumSize = new Size(1100, 700);
             WindowState = FormWindowState.Maximized;
             BackColor = Theme.Background;
 
@@ -438,7 +440,10 @@ namespace TodangMotor.Forms
                 home.NavigateRequested += navKey =>
                 {
                     if (navKey == "inventory") NavigateTo(KeyInventory);
-                    else if (navKey == "sales") NavigateTo(KeySalesHistory);
+                };
+                home.NavigateToSalesRequested += (from, toExclusive) =>
+                {
+                    NavigateToSalesWithRange(from, toExclusive.AddDays(-1));
                 };
                 ShowContent(home);
             }
@@ -457,6 +462,14 @@ namespace TodangMotor.Forms
                 HeaderTitle = "Inventory";
                 ShowContent(new CashierInventoryControl());
             }
+        }
+
+        private void NavigateToSalesWithRange(DateTime fromInclusive, DateTime toInclusive)
+        {
+            _currentKey = KeySalesHistory;
+            UpdateActiveNav(KeySalesHistory);
+            HeaderTitle = "Sales History";
+            ShowContent(new SalesHistoryControl(fromInclusive, toInclusive));
         }
 
         private void ShowContent(Control content)
