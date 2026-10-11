@@ -241,8 +241,9 @@ namespace TodangMotor.Services
                             {
                                 if (logoBytes != null)
                                 {
-                                    logoBox.Background(BrandBlue)
-                                           .Padding(6)
+                                    logoBox.Background("#FFFFFF")
+                                           .Border(1).BorderColor(Divider)
+                                           .Padding(4)
                                            .Image(logoBytes).FitArea();
                                 }
                                 else
@@ -327,14 +328,30 @@ namespace TodangMotor.Services
 
                             t.ColumnsDefinition(c =>
                             {
-                                // First column gets more weight (product name),
-                                // last column gets a bit more (reason).
+                                // Content-aware weights.
+                                //   - maxLen = longest of (header text, longest cell in column)
+                                //   - Floor at 18 so narrow headers like "Unit", "Qty",
+                                //     "Category", "On Hand", "Reorder At" always have room
+                                //     for their full header on one line.
+                                var weights = new float[nCols];
                                 for (int i = 0; i < nCols; i++)
                                 {
-                                    if (i == 0) c.RelativeColumn(2.2f);
-                                    else if (i == nCols - 1) c.RelativeColumn(1.4f);
-                                    else c.RelativeColumn();
+                                    int maxLen = (table.Headers[i] ?? string.Empty).Length;
+
+                                    foreach (var row in table.Rows)
+                                    {
+                                        if (i < row.Count)
+                                        {
+                                            int len = (row[i] ?? string.Empty).Length;
+                                            if (len > maxLen) maxLen = len;
+                                        }
+                                    }
+
+                                    weights[i] = Math.Max(18, maxLen);
                                 }
+
+                                for (int i = 0; i < nCols; i++)
+                                    c.RelativeColumn(weights[i]);
                             });
 
                             // Header row
@@ -344,7 +361,7 @@ namespace TodangMotor.Services
                                 {
                                     h.Cell()
                                         .Background(BrandBlue)
-                                        .PaddingVertical(10).PaddingHorizontal(10)
+                                        .PaddingVertical(9).PaddingHorizontal(6)
                                         .AlignMiddle()
                                         .Text(header ?? string.Empty)
                                         .FontColor("#FFFFFF").Bold().FontSize(10);
@@ -359,12 +376,13 @@ namespace TodangMotor.Services
 
                                 for (int i = 0; i < table.Headers.Count; i++)
                                 {
-                                    string cellText = i < row.Count ? (row[i] ?? string.Empty) : string.Empty;
+                                    string raw = i < row.Count ? (row[i] ?? string.Empty) : string.Empty;
+                                    string cellText = string.IsNullOrWhiteSpace(raw) ? "—" : raw;
                                     bool rightAlign = IsNumericHeader(table.Headers[i]);
 
                                     var cell = t.Cell()
                                         .BorderBottom(0.5f).BorderColor(Divider)
-                                        .PaddingVertical(9).PaddingHorizontal(10)
+                                        .PaddingVertical(8).PaddingHorizontal(6)
                                         .AlignMiddle();
 
                                     if (zebra)

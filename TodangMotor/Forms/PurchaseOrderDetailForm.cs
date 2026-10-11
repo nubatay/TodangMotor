@@ -336,29 +336,89 @@ namespace TodangMotor.Forms
 
         private async Task ExportPdfAsync()
         {
-            if (_isBusy || _detail == null) return;
+            // ---- Guard: detail not loaded yet ----
+            if (_detail == null)
+            {
+                MessageBox.Show(
+                    "The Purchase Order is still loading. Please wait a moment and try again.",
+                    "Not Ready",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Information);
+                return;
+            }
+
+            // ---- Guard: another operation in progress ----
+            if (_isBusy)
+            {
+                MessageBox.Show(
+                    "Another operation is already in progress. Please wait.",
+                    "Busy",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Information);
+                return;
+            }
+
+            // ---- Choose destination ----
+            string suggestedName;
+            try
+            {
+                string poNo = _detail.Order.PONumber ?? string.Empty;
+                if (string.IsNullOrWhiteSpace(poNo))
+                    poNo = $"PO-{_detail.Order.PurchaseOrderId}";
+                suggestedName = $"{poNo}.pdf";
+            }
+            catch
+            {
+                suggestedName = "PurchaseOrder.pdf";
+            }
 
             using var sfd = new SaveFileDialog
             {
+                Title = "Save Purchase Order PDF",
                 Filter = "PDF files (*.pdf)|*.pdf",
                 DefaultExt = ".pdf",
                 AddExtension = true,
-                FileName = $"{_detail.Order.PONumber}.pdf",
+                OverwritePrompt = true,
+                FileName = suggestedName,
                 InitialDirectory = GetDefaultReportFolder()
             };
 
-            if (sfd.ShowDialog(FindForm()) != DialogResult.OK) return;
+            var parent = FindForm();
+            var result = parent != null ? sfd.ShowDialog(parent) : sfd.ShowDialog();
+            if (result != DialogResult.OK) return;
+
+            string path = sfd.FileName;
 
             SetBusy(true);
             try
             {
-                string path = sfd.FileName;
                 var table = BuildReportTable(_detail);
 
+                // Run the synchronous QuestPDF call on a background thread.
                 await Task.Run(() => ReportService.ExportPdf(table, path));
 
+                // ---- Verify the file was actually written ----
+                if (!System.IO.File.Exists(path))
+                {
+                    MessageBox.Show(
+                        "The export completed but no file was created at:\n\n" +
+                        path + "\n\n" +
+                        "This usually means the folder is read-only, or the path " +
+                        "contains characters Windows rejected. Try saving to " +
+                        "your Desktop or Documents folder.",
+                        "File Not Created",
+                        MessageBoxButtons.OK,
+                        MessageBoxIcon.Error);
+                    return;
+                }
+
+                long sizeKb = new System.IO.FileInfo(path).Length / 1024;
+
                 var openIt = MessageBox.Show(
-                    $"PDF saved to:\n{path}\n\nOpen the folder?",
+                    $"PDF saved successfully.\n\n" +
+                    $"Location: {path}\n" +
+                    $"Size:     {sizeKb} KB\n\n" +
+                    "Open the folder?",
                     "PDF Saved",
                     MessageBoxButtons.YesNo,
                     MessageBoxIcon.Information);
@@ -369,13 +429,19 @@ namespace TodangMotor.Forms
                     {
                         System.Diagnostics.Process.Start("explorer.exe", $"/select,\"{path}\"");
                     }
-                    catch { /* ignore */ }
+                    catch { /* ignore — folder open is optional */ }
                 }
             }
             catch (Exception ex)
             {
                 MessageBox.Show(
-                    $"Could not generate PDF:\n\n{ex.Message}",
+                    "Could not generate PDF.\n\n" +
+                    $"Type:    {ex.GetType().Name}\n" +
+                    $"Message: {ex.Message}\n\n" +
+                    (ex.InnerException != null
+                        ? $"Inner:   {ex.InnerException.Message}\n\n"
+                        : string.Empty) +
+                    $"Stack:\n{ex.StackTrace}",
                     "PDF Error",
                     MessageBoxButtons.OK,
                     MessageBoxIcon.Error);

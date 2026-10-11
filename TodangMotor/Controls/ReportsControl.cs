@@ -237,18 +237,20 @@ namespace TodangMotor.Controls
                 Font = new Font(Theme.IconFontFamily, 32F, FontStyle.Regular),
                 ForeColor = Theme.Primary,
                 AutoSize = false,
-                Size = new Size(60, 52),
+                Size = new Size(56, 56),
                 TextAlign = ContentAlignment.MiddleCenter,
                 BackColor = Color.Transparent
             };
 
+            // AutoSize=true + MaximumSize.Width = wrap without clipping.
+            // WinForms computes the exact height needed for the font, including
+            // ascenders and descenders. No fixed Height → nothing can clip.
             var titleLabel = new Label
             {
                 Text = title,
                 Font = new Font(Theme.UiFontFamily, 16F, FontStyle.Bold),
                 ForeColor = Theme.TextPrimary,
-                AutoSize = false,
-                Size = new Size(340, 30),
+                AutoSize = true,
                 TextAlign = ContentAlignment.MiddleLeft,
                 BackColor = Color.Transparent
             };
@@ -258,8 +260,7 @@ namespace TodangMotor.Controls
                 Text = description,
                 Font = Theme.FontSmall,
                 ForeColor = Theme.TextSecondary,
-                AutoSize = false,
-                Size = new Size(360, 60),
+                AutoSize = true,
                 TextAlign = ContentAlignment.TopLeft,
                 BackColor = Color.Transparent
             };
@@ -274,15 +275,27 @@ namespace TodangMotor.Controls
 
             tile.Resize += (s, e) =>
             {
-                int contentW = Math.Max(200, tile.ClientSize.Width - 56);
-                int cx = 28;
+                const int padLeft = 28;
+                const int padTop = 28;
+                const int textColX = 68;
 
-                iconLabel.Location = new Point(cx, 20);
-                titleLabel.Location = new Point(cx + 68, 28);
-                titleLabel.Width = Math.Max(120, contentW - 68);
-                descLabel.Location = new Point(cx + 68, 60);
-                descLabel.Width = Math.Max(120, contentW - 68);
-                btn.Location = new Point(cx + 68, Math.Max(126, tile.ClientSize.Height - 70));
+                int contentW = Math.Max(200, tile.ClientSize.Width - padLeft * 2);
+                int textW = Math.Max(120, contentW - textColX);
+
+                // Icon anchored at top of the text block.
+                iconLabel.Location = new Point(padLeft, padTop);
+
+                // Title: wrap at textW, height auto-computed by WinForms.
+                titleLabel.MaximumSize = new Size(textW, 0);
+                titleLabel.Location = new Point(padLeft + textColX, padTop);
+
+                // Description: sits right below the title's actual height.
+                descLabel.MaximumSize = new Size(textW, 0);
+                descLabel.Location = new Point(padLeft + textColX,
+                                               titleLabel.Bottom + 4);
+
+                // Button sits right below the description.
+                btn.Location = new Point(padLeft + textColX, tile.ClientSize.Height - btn.Height - 28);
             };
 
             return tile;

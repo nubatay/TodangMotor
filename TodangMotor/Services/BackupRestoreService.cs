@@ -1,4 +1,6 @@
 ﻿using System;
+using System.Collections.Generic;
+using System.Data;
 using System.IO;
 using System.Threading.Tasks;
 using Microsoft.Data.SqlClient;
@@ -56,9 +58,6 @@ namespace TodangMotor.Services
                 if (!string.IsNullOrEmpty(directory) && !Directory.Exists(directory))
                     Directory.CreateDirectory(directory);
 
-                // BACKUP DATABASE — must run against master (or any other DB),
-                // not against the DB we're backing up (SQL actually allows both,
-                // but master is the standard).
                 const string sql = @"
                     BACKUP DATABASE [TodangMotorDB]
                     TO DISK = @Path
@@ -99,14 +98,42 @@ namespace TodangMotor.Services
 
             try
             {
-                // Release every pooled connection to TodangMotorDB so the
-                // single-user lock can succeed.
+                // Release every pooled connection so the single-user lock succeeds.
                 SqlConnection.ClearAllPools();
 
                 using var connection = new SqlConnection(BuildMasterConnectionString());
                 await connection.OpenAsync();
 
-                // 1. Force the DB into single-user mode (kills other connections).
+                // ---------- 1. Read the logical file names inside the backup ----------
+                var (dataLogicalName, logLogicalName) =
+                    await ReadLogicalFileNamesAsync(connection, backupFilePath);
+
+                if (string.IsNullOrEmpty(dataLogicalName) || string.IsNullOrEmpty(logLogicalName))
+                    return (false,
+                        "Could not read the file list from the backup. The file may be corrupt " +
+                        "or not a SQL Server .bak file.");
+
+                // ---------- 2. Determine the current server's default data folder ----------
+                string defaultDataDir = await GetServerDefaultDataPathAsync(connection);
+
+                // Fallback if the server didn't report one (rare).
+                if (string.IsNullOrEmpty(defaultDataDir))
+                {
+                    string docs = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
+                    defaultDataDir = Path.Combine(docs, "TodangMotor", "DatabaseFiles");
+                    if (!Directory.Exists(defaultDataDir))
+                        Directory.CreateDirectory(defaultDataDir);
+                }
+
+                // SQL Server needs the paths to exist.
+                if (!Directory.Exists(defaultDataDir))
+                    Directory.CreateDirectory(defaultDataDir);
+
+                // ---------- 3. Build new physical paths ----------
+                string targetMdf = Path.Combine(defaultDataDir, $"{DatabaseName}.mdf");
+                string targetLdf = Path.Combine(defaultDataDir, $"{DatabaseName}_log.ldf");
+
+                // ---------- 4. Force single-user ----------
                 const string singleUserSql = @"
                     IF EXISTS (SELECT 1 FROM sys.databases WHERE name = 'TodangMotorDB')
                     BEGIN
@@ -119,22 +146,29 @@ namespace TodangMotor.Services
                     await cmd.ExecuteNonQueryAsync();
                 }
 
-                // 2. RESTORE with REPLACE. Same-PC restore → paths still valid.
-                const string restoreSql = @"
+                // ---------- 5. RESTORE with MOVE ----------
+                // RESTORE ... WITH REPLACE moves the files to the target paths
+                // regardless of where the backup was originally taken.
+                string restoreSql = $@"
                     RESTORE DATABASE [TodangMotorDB]
                     FROM DISK = @Path
-                    WITH REPLACE;";
+                    WITH REPLACE,
+                         MOVE @DataLogical TO @TargetMdf,
+                         MOVE @LogLogical  TO @TargetLdf;";
 
                 using (var cmd = new SqlCommand(restoreSql, connection))
                 {
                     cmd.Parameters.AddWithValue("@Path", backupFilePath);
+                    cmd.Parameters.AddWithValue("@DataLogical", dataLogicalName);
+                    cmd.Parameters.AddWithValue("@LogLogical", logLogicalName);
+                    cmd.Parameters.AddWithValue("@TargetMdf", targetMdf);
+                    cmd.Parameters.AddWithValue("@TargetLdf", targetLdf);
                     cmd.CommandTimeout = 600;
                     await cmd.ExecuteNonQueryAsync();
                 }
 
-                // 3. Return to multi-user.
-                const string multiUserSql = @"
-                    ALTER DATABASE [TodangMotorDB] SET MULTI_USER;";
+                // ---------- 6. Back to multi-user ----------
+                const string multiUserSql = @"ALTER DATABASE [TodangMotorDB] SET MULTI_USER;";
 
                 using (var cmd = new SqlCommand(multiUserSql, connection))
                 {
@@ -159,6 +193,68 @@ namespace TodangMotor.Services
 
                 return (false, $"Restore failed: {ex.Message}");
             }
+        }
+
+        // ============================================================
+        // RESTORE HELPERS
+        // ============================================================
+
+        /// <summary>
+        /// Runs RESTORE FILELISTONLY against the given backup and returns
+        /// (logical data name, logical log name). These are the identifiers
+        /// we need for the MOVE clauses.
+        /// </summary>
+        private static async Task<(string DataLogicalName, string LogLogicalName)>
+            ReadLogicalFileNamesAsync(SqlConnection connection, string backupPath)
+        {
+            string dataLogical = string.Empty;
+            string logLogical = string.Empty;
+
+            const string sql = @"RESTORE FILELISTONLY FROM DISK = @Path;";
+
+            using var cmd = new SqlCommand(sql, connection);
+            cmd.Parameters.AddWithValue("@Path", backupPath);
+            cmd.CommandTimeout = 120;
+
+            using var reader = await cmd.ExecuteReaderAsync();
+
+            // Columns we care about: LogicalName, Type ('D' = data, 'L' = log)
+            int logicalNameOrdinal = reader.GetOrdinal("LogicalName");
+            int typeOrdinal = reader.GetOrdinal("Type");
+
+            while (await reader.ReadAsync())
+            {
+                string logicalName = reader.GetString(logicalNameOrdinal);
+                string type = reader.GetString(typeOrdinal).Trim().ToUpperInvariant();
+
+                if (type == "D" && string.IsNullOrEmpty(dataLogical))
+                    dataLogical = logicalName;
+                else if (type == "L" && string.IsNullOrEmpty(logLogical))
+                    logLogical = logicalName;
+            }
+
+            return (dataLogical, logLogical);
+        }
+
+        /// <summary>
+        /// Asks the current SQL Server instance for its default data directory
+        /// (the folder where it puts .mdf and .ldf files by default).
+        /// Different on every machine — that's the whole reason we query it.
+        /// </summary>
+        private static async Task<string> GetServerDefaultDataPathAsync(SqlConnection connection)
+        {
+            const string sql = @"
+                SELECT CAST(SERVERPROPERTY('InstanceDefaultDataPath') AS NVARCHAR(4000));";
+
+            using var cmd = new SqlCommand(sql, connection);
+            cmd.CommandTimeout = 30;
+
+            var result = await cmd.ExecuteScalarAsync();
+
+            if (result == null || result == DBNull.Value)
+                return string.Empty;
+
+            return result.ToString() ?? string.Empty;
         }
 
         // ============================================================
@@ -198,9 +294,7 @@ namespace TodangMotor.Services
 
         /// <summary>
         /// Builds a copy of AppSettings.ConnectionString that points at
-        /// the master database instead of TodangMotorDB. Required for
-        /// BACKUP and RESTORE, since you can't safely talk to a database
-        /// while you're replacing it.
+        /// the master database instead of TodangMotorDB.
         /// </summary>
         private static string BuildMasterConnectionString()
         {
