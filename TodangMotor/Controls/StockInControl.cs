@@ -18,16 +18,8 @@ namespace TodangMotor.Controls
     /// </summary>
     public class StockInControl : UserControl
     {
-        // ============================================================
-        // SERVICES
-        // ============================================================
-
         private readonly StockInService _stockInService = new();
         private readonly ProductService _productService = new();
-
-        // ============================================================
-        // STATE
-        // ============================================================
 
         private List<Supplier> _suppliers = new();
         private List<Product> _products = new();
@@ -43,6 +35,14 @@ namespace TodangMotor.Controls
 
         private const string AllSuppliersDisplay = "(All Suppliers)";
 
+        // Fixed column widths (Product is dynamic).
+        private const int ColBrandW = 150;
+        private const int ColUnitW = 80;
+        private const int ColQtyW = 75;
+        private const int ColUnitCostW = 155;
+        private const int ColTotalW = 155;
+        private const int ColRemoveW = 55;
+
         private class WorkingLine
         {
             public int ProductId { get; set; }
@@ -54,10 +54,7 @@ namespace TodangMotor.Controls
             public decimal LineTotal => Quantity * UnitCost;
         }
 
-        // ============================================================
-        // UI CONTROLS
-        // ============================================================
-
+        // ---- UI controls ----
         private RoundedComboBox _cmbSupplier;
         private DateTimePicker _dtpDeliveryDate;
         private RoundedTextBox _txtReferenceNo;
@@ -72,30 +69,15 @@ namespace TodangMotor.Controls
         private Label _lblTotals;
         private Label _lblWarning;
 
-        private Button _btnRemoveLine;
         private Button _btnClearForm;
         private Button _btnComplete;
         private Label _lblStatus;
-
-        // ============================================================
-        // LAYOUT CONSTANTS
-        // ============================================================
-
-        private const int PadX = 24;
-        private const int LabelCol = 120;
-        private const int FieldCol = PadX + LabelCol + 12;
-        private const int RowH = 60;
-        private const int FieldH = 40;
-
-        // ============================================================
-        // CONSTRUCTION
-        // ============================================================
 
         public StockInControl()
         {
             Dock = DockStyle.Fill;
             BackColor = Theme.Background;
-            Padding = new Padding(Theme.SpacingLg);
+            Padding = new Padding(UiFactory.PagePadding);
 
             BuildLayout();
 
@@ -126,25 +108,27 @@ namespace TodangMotor.Controls
             var block = new Panel
             {
                 Dock = DockStyle.Top,
-                Height = 230,
+                Height = 240,
                 BackColor = Theme.Background
             };
 
-            block.Controls.Add(MakeSectionTitle("DELIVERY DETAILS", PadX, 8));
+            block.Controls.Add(MakeSectionTitle("DELIVERY DETAILS", 0, 8));
 
-            int y = 42;
+            int y = 48;
+            const int labelW = 130;
+            const int fieldX = 140;
 
-            block.Controls.Add(MakeRowLabel("Supplier:", PadX, y, LabelCol));
+            block.Controls.Add(MakeRowLabel("Supplier:", 0, y, labelW));
 
             _cmbSupplier = new RoundedComboBox
             {
-                Width = 320,
-                Location = new Point(FieldCol, y)
+                Width = 340,
+                Location = new Point(fieldX, y)
             };
             _cmbSupplier.SelectedIndexChanged += async (s, e) => await OnSupplierChangedAsync();
             block.Controls.Add(_cmbSupplier);
 
-            var lblDate = MakeRowLabel("Delivery Date:", 0, y, 120);
+            var lblDate = MakeRowLabel("Delivery Date:", 0, y, 130);
             block.Controls.Add(lblDate);
 
             _dtpDeliveryDate = new DateTimePicker
@@ -153,37 +137,37 @@ namespace TodangMotor.Controls
                 CustomFormat = "MMMM d, yyyy",
                 Font = Theme.FontBody,
                 Size = new Size(220, 32),
-                Location = new Point(0, y + 5),
+                Location = new Point(0, y + 6),
                 MaxDate = DateTime.Today,
                 Value = DateTime.Today
             };
             block.Controls.Add(_dtpDeliveryDate);
 
-            y += RowH;
+            y += 64;
 
-            block.Controls.Add(MakeRowLabel("Reference No:", PadX, y, LabelCol));
+            block.Controls.Add(MakeRowLabel("Reference No:", 0, y, labelW));
 
             _txtReferenceNo = UiFactory.CreateTextBox(400);
-            _txtReferenceNo.Location = new Point(FieldCol, y);
+            _txtReferenceNo.Location = new Point(fieldX, y);
             _txtReferenceNo.Placeholder = "Optional — supplier invoice or DR number";
             _txtReferenceNo.MaxLength = 50;
             block.Controls.Add(_txtReferenceNo);
 
-            y += RowH;
+            y += 64;
 
-            block.Controls.Add(MakeRowLabel("Notes:", PadX, y, LabelCol));
+            block.Controls.Add(MakeRowLabel("Notes:", 0, y, labelW));
 
             _txtNotes = UiFactory.CreateTextBox(400);
-            _txtNotes.Location = new Point(FieldCol, y);
+            _txtNotes.Location = new Point(fieldX, y);
             _txtNotes.Placeholder = "Optional — e.g. regular monthly order";
             _txtNotes.MaxLength = 250;
             block.Controls.Add(_txtNotes);
 
             block.Resize += (s, e) =>
             {
-                int right = block.ClientSize.Width - PadX;
-                _txtReferenceNo.Width = Math.Max(200, right - FieldCol);
-                _txtNotes.Width = Math.Max(200, right - FieldCol);
+                int right = block.ClientSize.Width;
+                _txtReferenceNo.Width = Math.Max(200, right - fieldX);
+                _txtNotes.Width = Math.Max(200, right - fieldX);
 
                 int dateX = right - _dtpDeliveryDate.Width;
                 _dtpDeliveryDate.Left = dateX;
@@ -198,52 +182,56 @@ namespace TodangMotor.Controls
             var block = new Panel
             {
                 Dock = DockStyle.Top,
-                Height = 170,
+                Height = 190,
                 BackColor = Theme.Background
             };
 
-            block.Controls.Add(MakeSectionTitle("ADD LINE ITEM", PadX, 8));
+            block.Controls.Add(MakeSectionTitle("ADD LINE ITEM", 0, 8));
 
-            int y = 42;
+            int y = 48;
+            const int labelW = 130;
+            const int fieldX = 140;
 
-            block.Controls.Add(MakeRowLabel("Product:", PadX, y, LabelCol));
+            // ---- Row 1: Product + Add Line ----
+            block.Controls.Add(MakeRowLabel("Product:", 0, y, labelW));
 
             _cmbProduct = new RoundedComboBox
             {
                 Width = 400,
-                Location = new Point(FieldCol, y)
+                Location = new Point(fieldX, y)
             };
             _cmbProduct.SelectedIndexChanged += (s, e) => OnProductPicked();
             block.Controls.Add(_cmbProduct);
 
-            _btnAddLine = UiFactory.CreateButton("+ Add Line", UiFactory.ButtonStyle.Primary, 160, FieldH);
+            _btnAddLine = UiFactory.CreateButton("+ Add Line", UiFactory.ButtonStyle.Primary, 170, UiFactory.PrimaryButtonHeight);
             _btnAddLine.Location = new Point(0, y);
             _btnAddLine.Click += (s, e) => AddLine();
             block.Controls.Add(_btnAddLine);
 
-            y += RowH;
+            y += 64;
 
-            block.Controls.Add(MakeRowLabel("Quantity:", PadX, y, LabelCol));
+            // ---- Row 2: Quantity + Unit Cost ----
+            block.Controls.Add(MakeRowLabel("Quantity:", 0, y, labelW));
 
             _txtQty = UiFactory.CreateTextBox(120);
-            _txtQty.Location = new Point(FieldCol, y);
+            _txtQty.Location = new Point(fieldX, y);
             _txtQty.MaxLength = 8;
             block.Controls.Add(_txtQty);
 
-            var lblCost = MakeRowLabel("Unit Cost (PHP):", FieldCol + 140, y, 150);
+            var lblCost = MakeRowLabel("Unit Cost (₱):", fieldX + 152, y, 140);
             block.Controls.Add(lblCost);
 
-            _txtUnitCost = UiFactory.CreateTextBox(160);
-            _txtUnitCost.Location = new Point(FieldCol + 300, y);
+            _txtUnitCost = UiFactory.CreateTextBox(180);
+            _txtUnitCost.Location = new Point(fieldX + 300, y);
             _txtUnitCost.MaxLength = 12;
             block.Controls.Add(_txtUnitCost);
 
             block.Resize += (s, e) =>
             {
-                int right = block.ClientSize.Width - PadX;
-                _cmbProduct.Width = Math.Max(300, right - FieldCol - _btnAddLine.Width - 12);
+                int right = block.ClientSize.Width;
+                _cmbProduct.Width = Math.Max(280, right - fieldX - _btnAddLine.Width - 16);
                 _btnAddLine.Left = right - _btnAddLine.Width;
-                _btnAddLine.Top = 42;
+                _btnAddLine.Top = 48;
             };
 
             return block;
@@ -257,23 +245,24 @@ namespace TodangMotor.Controls
                 BackColor = Theme.Background
             };
 
+            // ---- Top row: section title + totals ----
             var topRow = new Panel
             {
                 Dock = DockStyle.Top,
-                Height = 42,
+                Height = 48,
                 BackColor = Theme.Background
             };
 
-            topRow.Controls.Add(MakeSectionTitle("LINE ITEMS", PadX, 12));
+            topRow.Controls.Add(MakeSectionTitle("LINE ITEMS", 0, 14));
 
             _lblTotals = new Label
             {
-                Text = "Total items: 0   ·   Total cost: PHP 0.00",
+                Text = "Total items: 0   ·   Total cost: ₱ 0.00",
                 Font = Theme.FontBodyBold,
                 ForeColor = Theme.TextPrimary,
                 AutoSize = false,
-                Location = new Point(0, 12),
-                Height = 22,
+                Location = new Point(0, 14),
+                Height = 24,
                 Width = 400,
                 TextAlign = ContentAlignment.MiddleRight,
                 BackColor = Color.Transparent
@@ -282,13 +271,14 @@ namespace TodangMotor.Controls
 
             topRow.Resize += (s, e) =>
             {
-                _lblTotals.Left = topRow.ClientSize.Width - _lblTotals.Width - PadX;
+                _lblTotals.Left = topRow.ClientSize.Width - _lblTotals.Width;
             };
 
+            // ---- Bottom row: warning ----
             var bottomRow = new Panel
             {
                 Dock = DockStyle.Bottom,
-                Height = 40,
+                Height = 44,
                 BackColor = Theme.Background
             };
 
@@ -298,8 +288,8 @@ namespace TodangMotor.Controls
                 Font = Theme.FontSmall,
                 ForeColor = Theme.Danger,
                 AutoSize = false,
-                Location = new Point(PadX, 6),
-                Height = 34,
+                Location = new Point(0, 8),
+                Height = 36,
                 Width = 400,
                 TextAlign = ContentAlignment.TopLeft,
                 BackColor = Color.Transparent
@@ -308,25 +298,34 @@ namespace TodangMotor.Controls
 
             bottomRow.Resize += (s, e) =>
             {
-                _lblWarning.Width = Math.Max(200, bottomRow.ClientSize.Width - PadX * 2);
+                _lblWarning.Width = Math.Max(200, bottomRow.ClientSize.Width);
             };
 
+            // ---- Grid ----
             var gridWrapper = new Panel
             {
                 Dock = DockStyle.Fill,
-                Padding = new Padding(PadX, 0, PadX, 0),
+                Padding = new Padding(0, 8, 0, 8),
                 BackColor = Theme.Background
             };
 
             _grid = new DataGridView
             {
                 Dock = DockStyle.Fill,
-                Margin = new Padding(0, 4, 0, 4)
+                Margin = new Padding(0)
             };
-            UiFactory.StyleGrid(_grid);
-            _grid.BackgroundColor = Color.FromArgb(250, 251, 254);
-            _grid.AlternatingRowsDefaultCellStyle.BackColor = Color.FromArgb(248, 249, 251);
+            UiFactory.StyleGridModern(_grid);
+            _grid.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.None;
+            _grid.CellClick += Grid_CellClick;
+            _grid.CellMouseEnter += Grid_CellMouseEnter;
+            _grid.CellPainting += Grid_CellPainting;
+            _grid.CellMouseLeave += (s, e) => _grid.Cursor = Cursors.Default;
+            _grid.CellPainting += Grid_CellPainting;
+
             PrimeGridColumns();
+
+            _grid.Resize += (s, e) => FitProductColumn();
+
             gridWrapper.Controls.Add(_grid);
 
             block.Controls.Add(gridWrapper);
@@ -336,23 +335,38 @@ namespace TodangMotor.Controls
             return block;
         }
 
+        private void Grid_CellPainting(object? sender, DataGridViewCellPaintingEventArgs e)
+        {
+            if (e.RowIndex < 0 || e.ColumnIndex < 0) return;
+            if (_grid.Columns[e.ColumnIndex].Name != "Remove") return;
+
+            e.PaintBackground(e.CellBounds, true);
+
+            using var font = new Font(Theme.IconFontFamily, 14F, FontStyle.Regular);
+            TextRenderer.DrawText(
+                e.Graphics,
+                "\uE711",
+                font,
+                e.CellBounds,
+                Theme.Danger,
+                TextFormatFlags.HorizontalCenter |
+                TextFormatFlags.VerticalCenter |
+                TextFormatFlags.NoPrefix);
+
+            e.Handled = true;
+        }
+
         private Panel BuildBottomBar()
         {
             var bar = new Panel
             {
                 Dock = DockStyle.Bottom,
-                Height = 80,
+                Height = 88,
                 BackColor = Theme.Background
             };
 
-            const int btnH = 40;
-
-            _btnRemoveLine = UiFactory.CreateButton("Remove Selected", UiFactory.ButtonStyle.Ghost, 170, btnH);
-            _btnRemoveLine.Location = new Point(PadX, 20);
-            _btnRemoveLine.Click += (s, e) => RemoveSelectedLine();
-
-            _btnClearForm = UiFactory.CreateButton("Clear Form", UiFactory.ButtonStyle.Secondary, 130, btnH);
-            _btnClearForm.Location = new Point(PadX + 180, 20);
+            _btnClearForm = UiFactory.CreateButton("Clear Form", UiFactory.ButtonStyle.Secondary, 150, UiFactory.PrimaryButtonHeight);
+            _btnClearForm.Location = new Point(0, 20);
             _btnClearForm.Click += (s, e) => ClearForm();
 
             _lblStatus = new Label
@@ -361,27 +375,27 @@ namespace TodangMotor.Controls
                 Font = Theme.FontSmall,
                 ForeColor = Theme.Danger,
                 AutoSize = false,
-                Location = new Point(PadX + 320, 20),
-                Height = btnH,
-                Width = 200,
+                Location = new Point(_btnClearForm.Right + 24, 20),
+                Height = UiFactory.PrimaryButtonHeight,
+                Width = 300,
                 TextAlign = ContentAlignment.MiddleLeft,
+                Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right,
                 BackColor = Color.Transparent
             };
 
-            _btnComplete = UiFactory.CreateButton("Complete Stock-In", UiFactory.ButtonStyle.Primary, 190, 46);
-            _btnComplete.Location = new Point(0, 17);
+            _btnComplete = UiFactory.CreateButton("Complete Stock-In", UiFactory.ButtonStyle.Primary, 200, UiFactory.PrimaryButtonHeight);
+            _btnComplete.Anchor = AnchorStyles.Top | AnchorStyles.Right;
             _btnComplete.Click += async (s, e) => await CompleteAsync();
 
-            bar.Controls.Add(_btnRemoveLine);
             bar.Controls.Add(_btnClearForm);
             bar.Controls.Add(_lblStatus);
             bar.Controls.Add(_btnComplete);
 
             bar.Resize += (s, e) =>
             {
-                _btnComplete.Left = bar.ClientSize.Width - _btnComplete.Width - PadX;
+                _btnComplete.Left = bar.ClientSize.Width - _btnComplete.Width;
                 _lblStatus.Width = Math.Max(100,
-                    bar.ClientSize.Width - PadX - _btnComplete.Width - 20 - _lblStatus.Left);
+                    _btnComplete.Left - _lblStatus.Left - 16);
             };
 
             return bar;
@@ -396,7 +410,7 @@ namespace TodangMotor.Controls
             return new Label
             {
                 Text = text,
-                Font = new Font(Theme.UiFontFamily, 9F, FontStyle.Bold),
+                Font = new Font(Theme.UiFontFamily, 10F, FontStyle.Bold),
                 ForeColor = Theme.Primary,
                 AutoSize = true,
                 Location = new Point(x, y),
@@ -412,7 +426,7 @@ namespace TodangMotor.Controls
                 Font = Theme.FontSmall,
                 ForeColor = Theme.TextSecondary,
                 AutoSize = false,
-                Size = new Size(width, FieldH),
+                Size = new Size(width, UiFactory.InputHeight),
                 Location = new Point(x, y),
                 TextAlign = ContentAlignment.MiddleLeft,
                 BackColor = Color.Transparent
@@ -423,54 +437,54 @@ namespace TodangMotor.Controls
         {
             _grid.AutoGenerateColumns = false;
             _grid.Columns.Clear();
+            _grid.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.None;
 
-            _grid.Columns.Add(new DataGridViewTextBoxColumn
+            void AddTextCol(string prop, string header, int width, bool readOnly,
+                DataGridViewContentAlignment align = DataGridViewContentAlignment.MiddleLeft)
             {
-                Name = "Product",
-                DataPropertyName = "Product",
-                HeaderText = "Product",
-                FillWeight = 240
-            });
+                var col = new DataGridViewTextBoxColumn
+                {
+                    Name = prop,
+                    DataPropertyName = prop,
+                    HeaderText = header,
+                    Width = width,
+                    ReadOnly = readOnly,
+                    SortMode = DataGridViewColumnSortMode.NotSortable,
+                    Resizable = DataGridViewTriState.False
+                };
+                if (align != DataGridViewContentAlignment.MiddleLeft)
+                    col.DefaultCellStyle.Alignment = align;
+                _grid.Columns.Add(col);
+            }
 
-            _grid.Columns.Add(new DataGridViewTextBoxColumn
-            {
-                Name = "Brand",
-                DataPropertyName = "Brand",
-                HeaderText = "Brand",
-                FillWeight = 140
-            });
+            // Text — left
+            AddTextCol("Product", "Product", 400, true);
+            AddTextCol("Brand", "Brand", ColBrandW, true);
 
-            _grid.Columns.Add(new DataGridViewTextBoxColumn
-            {
-                Name = "Unit",
-                DataPropertyName = "Unit",
-                HeaderText = "Unit",
-                FillWeight = 60
-            });
+            // Unit — center
+            AddTextCol("Unit", "Unit", ColUnitW, true, DataGridViewContentAlignment.MiddleCenter);
 
-            _grid.Columns.Add(new DataGridViewTextBoxColumn
-            {
-                Name = "Quantity",
-                DataPropertyName = "Quantity",
-                HeaderText = "Qty",
-                FillWeight = 70
-            });
+            // Numbers — right
+            AddTextCol("Quantity", "Qty", ColQtyW, true, DataGridViewContentAlignment.MiddleRight);
+            AddTextCol("UnitCost", "Unit Cost (₱)", ColUnitCostW, true, DataGridViewContentAlignment.MiddleRight);
+            AddTextCol("Total", "Line Total (₱)", ColTotalW, true, DataGridViewContentAlignment.MiddleRight);
 
-            _grid.Columns.Add(new DataGridViewTextBoxColumn
+            // Remove — × per row
+            var removeCol = new DataGridViewTextBoxColumn
             {
-                Name = "UnitCost",
-                DataPropertyName = "UnitCost",
-                HeaderText = "Unit Cost (PHP)",
-                FillWeight = 110
-            });
-
-            _grid.Columns.Add(new DataGridViewTextBoxColumn
-            {
-                Name = "Total",
-                DataPropertyName = "Total",
-                HeaderText = "Line Total (PHP)",
-                FillWeight = 130
-            });
+                Name = "Remove",
+                HeaderText = "",
+                Width = ColRemoveW,
+                ReadOnly = true,
+                SortMode = DataGridViewColumnSortMode.NotSortable,
+                Resizable = DataGridViewTriState.False,
+                DefaultCellStyle = new DataGridViewCellStyle
+                {
+                    Alignment = DataGridViewContentAlignment.MiddleCenter,
+                    Padding = new Padding(0)
+                }
+            };
+            _grid.Columns.Add(removeCol);
 
             _grid.Columns.Add(new DataGridViewTextBoxColumn
             {
@@ -478,6 +492,45 @@ namespace TodangMotor.Controls
                 DataPropertyName = "ProductId",
                 Visible = false
             });
+        }
+
+        private void FitProductColumn()
+        {
+            if (_grid == null || !_grid.Columns.Contains("Product")) return;
+
+            int others =
+                ColBrandW + ColUnitW + ColQtyW + ColUnitCostW + ColTotalW + ColRemoveW;
+
+            int available = _grid.ClientSize.Width - others - 24;
+            if (available < 220) available = 220;
+
+            _grid.Columns["Product"].Width = available;
+        }
+
+        private void Grid_CellMouseEnter(object? sender, DataGridViewCellEventArgs e)
+        {
+            if (e.RowIndex < 0 || e.ColumnIndex < 0) return;
+            _grid.Cursor = _grid.Columns[e.ColumnIndex].Name == "Remove"
+                ? Cursors.Hand
+                : Cursors.Default;
+        }
+
+        private void Grid_CellClick(object? sender, DataGridViewCellEventArgs e)
+        {
+            if (e.RowIndex < 0 || e.ColumnIndex < 0) return;
+            if (_grid.Columns[e.ColumnIndex].Name != "Remove") return;
+
+            var idCell = _grid.Rows[e.RowIndex].Cells["ProductId"];
+            if (idCell?.Value == null) return;
+
+            int id = Convert.ToInt32(idCell.Value);
+            var line = _lines.FirstOrDefault(l => l.ProductId == id);
+            if (line != null)
+            {
+                _lines.Remove(line);
+                RefreshGrid();
+                ShowInfo("Line removed.");
+            }
         }
 
         // ============================================================
@@ -491,7 +544,6 @@ namespace TodangMotor.Controls
             {
                 _suppliers = await _stockInService.GetActiveSuppliersAsync();
 
-                // Build supplier dropdown — "(All Suppliers)" first.
                 _supplierByDisplay.Clear();
                 _cmbSupplier.Items.Clear();
                 _cmbSupplier.Items.Add(AllSuppliersDisplay);
@@ -504,10 +556,9 @@ namespace TodangMotor.Controls
 
                 _suppressSupplierChange = true;
                 if (_cmbSupplier.Items.Count > 0)
-                    _cmbSupplier.SelectedIndex = 0; // (All Suppliers)
+                    _cmbSupplier.SelectedIndex = 0;
                 _suppressSupplierChange = false;
 
-                // Load all products initially.
                 await ReloadProductsForCurrentSupplierAsync();
 
                 if (_suppliers.Count == 0)
@@ -551,7 +602,6 @@ namespace TodangMotor.Controls
             if (_cmbProduct.Items.Count > 0)
                 _cmbProduct.SelectedIndex = 0;
 
-            // Reset line-builder fields because the previous product may not be in the new list.
             _txtQty.Text = string.Empty;
             _txtUnitCost.Text = string.Empty;
         }
@@ -633,27 +683,6 @@ namespace TodangMotor.Controls
             ShowInfo("Line added.");
         }
 
-        private void RemoveSelectedLine()
-        {
-            if (_grid.SelectedRows.Count == 0)
-            {
-                ShowError("Select a line in the grid to remove.");
-                return;
-            }
-
-            var cell = _grid.SelectedRows[0].Cells["ProductId"];
-            if (cell == null || cell.Value == null) return;
-
-            int id = Convert.ToInt32(cell.Value);
-            var line = _lines.FirstOrDefault(l => l.ProductId == id);
-            if (line != null)
-            {
-                _lines.Remove(line);
-                RefreshGrid();
-                ShowInfo("Line removed.");
-            }
-        }
-
         private void ClearForm()
         {
             if (_lines.Count > 0)
@@ -705,6 +734,7 @@ namespace TodangMotor.Controls
                 _grid.ClearSelection();
 
             UpdateTotals();
+            FitProductColumn();
         }
 
         private void UpdateTotals()
@@ -712,9 +742,9 @@ namespace TodangMotor.Controls
             int totalQty = _lines.Sum(l => l.Quantity);
             decimal totalCost = _lines.Sum(l => l.LineTotal);
 
-            _lblTotals.Text = $"Total items: {totalQty}   ·   Total cost: PHP {totalCost:N2}";
+            _lblTotals.Text = $"Total items: {totalQty}   ·   Total cost: ₱ {totalCost:N2}";
             if (_lblTotals.Parent != null)
-                _lblTotals.Left = _lblTotals.Parent.ClientSize.Width - _lblTotals.Width - PadX;
+                _lblTotals.Left = _lblTotals.Parent.ClientSize.Width - _lblTotals.Width;
 
             var overpriced = new List<string>();
             foreach (var line in _lines)
@@ -846,7 +876,6 @@ namespace TodangMotor.Controls
             _isBusy = busy;
             _btnComplete.Enabled = !busy;
             _btnAddLine.Enabled = !busy;
-            _btnRemoveLine.Enabled = !busy;
             _btnClearForm.Enabled = !busy;
             _cmbSupplier.Enabled = !busy;
             _cmbProduct.Enabled = !busy;

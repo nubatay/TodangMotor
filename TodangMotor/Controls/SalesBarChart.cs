@@ -18,16 +18,13 @@ namespace TodangMotor.Controls
         private List<ChartBucket> _buckets = new();
         private string _emptyMessage = "No data for this period.";
 
-        // Hover state — index of the bar under the mouse, or -1.
         private int _hoverIndex = -1;
 
-        // Layout constants.
-        private const int TopPadding = 22;
-        private const int BottomPadding = 30;
+        private const int TopPadding = 24;
+        private const int BottomPadding = 34;
         private const int SidePadding = 10;
         private const int BarGapPx = 6;
 
-        /// <summary>Fired when a bar is clicked. Payload is the bucket's label.</summary>
         public event Action<string>? BarClicked;
 
         public SalesBarChart()
@@ -94,7 +91,6 @@ namespace TodangMotor.Controls
 
             decimal maxValue = _buckets.Max(b => b.Value);
 
-            // Baseline (0-line)
             using (var gridPen = new Pen(Theme.Divider, 1))
             {
                 int baselineY = TopPadding + chartHeight;
@@ -108,6 +104,32 @@ namespace TodangMotor.Controls
             float barWidth = (chartWidth - totalGaps) / (float)n;
             if (barWidth < 4) barWidth = 4;
 
+            // ---------- Decide label density ----------
+            // Measure the widest label so we know how many pixels each one needs.
+            using var labelFont = new Font(Theme.UiFontFamily, 9.5F, FontStyle.Regular);
+            using var labelBrush = new SolidBrush(Theme.TextMuted);
+            using var labelHoverBrush = new SolidBrush(Theme.Primary);
+
+            float maxLabelWidth = 0f;
+            foreach (var b in _buckets)
+            {
+                if (string.IsNullOrEmpty(b.Label)) continue;
+                var s = e.Graphics.MeasureString(b.Label, labelFont);
+                if (s.Width > maxLabelWidth) maxLabelWidth = s.Width;
+            }
+
+            // Minimum horizontal gap between two drawn labels.
+            const float minLabelSpacing = 12f;
+            float slotWidth = barWidth + BarGapPx;
+
+            int labelStep = 1;
+            if (maxLabelWidth > 0)
+            {
+                labelStep = (int)Math.Ceiling((maxLabelWidth + minLabelSpacing) / slotWidth);
+                if (labelStep < 1) labelStep = 1;
+            }
+
+            // ---------- Draw bars + labels ----------
             for (int i = 0; i < n; i++)
             {
                 var bucket = _buckets[i];
@@ -133,11 +155,11 @@ namespace TodangMotor.Controls
                     e.Graphics.FillPath(brush, path);
                 }
 
-                // Value above the bar when hovered.
+                // Hovered bar value above the bar.
                 if (i == _hoverIndex && bucket.Value > 0)
                 {
                     string valueText = "₱" + bucket.Value.ToString("N0");
-                    using var valueFont = new Font(Theme.UiFontFamily, 9F, FontStyle.Bold);
+                    using var valueFont = new Font(Theme.UiFontFamily, 9.5F, FontStyle.Bold);
                     var textSize = e.Graphics.MeasureString(valueText, valueFont);
                     float textX = x + (barWidth - textSize.Width) / 2f;
                     float textY = Math.Max(2, y - textSize.Height - 4);
@@ -146,22 +168,31 @@ namespace TodangMotor.Controls
                     e.Graphics.DrawString(valueText, valueFont, valueBrush, textX, textY);
                 }
 
-                // Bucket label below the baseline.
-                using var labelFont = new Font(Theme.UiFontFamily, 8.5F, FontStyle.Regular);
+                // ---------- Label below the baseline ----------
+                // Only draw when this is a "shown" index (step-based) OR it's hovered.
+                bool isHovered = (i == _hoverIndex);
+                bool shouldShowLabel =
+                    isHovered ||
+                    (i % labelStep == 0) ||
+                    (i == n - 1 && (n - 1) % labelStep != 0 && slotWidth * (n - 1 - (n - 1) % labelStep) > 0 ? false : false);
+
+                // Simpler rule: always show first and last; otherwise follow the step.
+                shouldShowLabel = isHovered || (i % labelStep == 0);
+
+                if (!shouldShowLabel) continue;
+
                 var labelSize = e.Graphics.MeasureString(bucket.Label, labelFont);
                 float labelX = x + (barWidth - labelSize.Width) / 2f;
-                float labelY = TopPadding + chartHeight + 8;
+                float labelY = TopPadding + chartHeight + 10;
 
-                using var labelBrush = new SolidBrush(
-                    i == _hoverIndex ? Theme.Primary : Theme.TextMuted);
-
-                e.Graphics.DrawString(bucket.Label, labelFont, labelBrush, labelX, labelY);
+                var rowLabelBrush = isHovered ? labelHoverBrush : labelBrush;
+                e.Graphics.DrawString(bucket.Label, labelFont, rowLabelBrush, labelX, labelY);
             }
 
             // Y-axis max value — small label at top-left.
             if (maxValue > 0)
             {
-                using var maxFont = new Font(Theme.UiFontFamily, 8F, FontStyle.Regular);
+                using var maxFont = new Font(Theme.UiFontFamily, 9F, FontStyle.Regular);
                 using var maxBrush = new SolidBrush(Theme.TextMuted);
                 e.Graphics.DrawString(
                     "₱" + maxValue.ToString("N0"),
@@ -230,7 +261,7 @@ namespace TodangMotor.Controls
             int chartWidth = Width - SidePadding * 2;
             int chartHeight = Height - TopPadding - BottomPadding;
 
-            if (mouseY < TopPadding - 10 || mouseY > TopPadding + chartHeight + 30)
+            if (mouseY < TopPadding - 10 || mouseY > TopPadding + chartHeight + 34)
                 return -1;
 
             int n = _buckets.Count;

@@ -8,11 +8,6 @@ using TodangMotor.Services;
 
 namespace TodangMotor.Forms
 {
-    /// <summary>
-    /// Single-record Supplier editor popup.
-    /// Add mode: SupplierForm()
-    /// Edit mode: SupplierForm(existingSupplier)
-    /// </summary>
     public class SupplierForm : ShellForm
     {
         private readonly SupplierService _supplierService = new();
@@ -20,16 +15,17 @@ namespace TodangMotor.Forms
         private readonly Supplier? _supplierToEdit;
         private bool IsEditMode => _supplierToEdit != null;
 
-        private RoundedTextBox _txtSupplierName;
-        private RoundedTextBox _txtContactNumber;
-        private RoundedTextBox _txtAddress;
-        private Button _btnSave;
-        private Button _btnCancel;
-        private Label _lblStatus;
+        private RoundedTextBox _txtSupplierName = null!;
+        private RoundedTextBox _txtContactNumber = null!;
+        private RoundedTextBox _txtAddress = null!;
+        private Button _btnSave = null!;
+        private Button _btnCancel = null!;
+        private Label _lblStatus = null!;
 
-        // ============================================================
-        // CONSTRUCTION
-        // ============================================================
+        private const int PadX = 32;
+        private const int LabelH = 22;
+        private const int FieldH = 44;
+        private const int RowGap = 16;
 
         public SupplierForm(Supplier? supplierToEdit = null)
         {
@@ -39,8 +35,8 @@ namespace TodangMotor.Forms
             ShowMaximizeButton = false;
             ShowMinimizeButton = true;
             StartPosition = FormStartPosition.CenterParent;
-            ClientSize = new Size(560, 420);
-            MinimumSize = new Size(540, 400);
+            ClientSize = new Size(640, 500);
+            MinimumSize = new Size(600, 480);
             BackColor = Theme.Background;
             KeyPreview = true;
 
@@ -50,23 +46,39 @@ namespace TodangMotor.Forms
             KeyDown += SupplierForm_KeyDown;
         }
 
-        // ============================================================
-        // LAYOUT
-        // ============================================================
-
         private void BuildLayout()
         {
-            // ---- Footer panel (docked bottom, holds buttons) ----
+            // ---------- Footer ----------
             var footer = new Panel
             {
                 Dock = DockStyle.Bottom,
-                Height = 68,
-                BackColor = Theme.Background,
-                Padding = new Padding(0)
+                Height = 88,
+                BackColor = Theme.Background
             };
 
-            const int btnW = 110;
-            const int btnH = 40;
+            var divider = new Panel
+            {
+                Dock = DockStyle.Top,
+                Height = 1,
+                BackColor = Theme.Divider
+            };
+            footer.Controls.Add(divider);
+
+            int btnW = 140;
+            int btnH = UiFactory.PrimaryButtonHeight;
+
+            _lblStatus = new Label
+            {
+                Text = string.Empty,
+                Font = Theme.FontSmall,
+                ForeColor = Theme.Danger,
+                AutoSize = false,
+                Location = new Point(PadX, 22),
+                Height = btnH,
+                TextAlign = ContentAlignment.MiddleLeft,
+                BackColor = Color.Transparent,
+                Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right
+            };
 
             _btnSave = UiFactory.CreateButton("Save", UiFactory.ButtonStyle.Primary, btnW, btnH);
             _btnSave.Anchor = AnchorStyles.Top | AnchorStyles.Right;
@@ -76,82 +88,65 @@ namespace TodangMotor.Forms
             _btnCancel.Anchor = AnchorStyles.Top | AnchorStyles.Right;
             _btnCancel.Click += (s, e) => { DialogResult = DialogResult.Cancel; Close(); };
 
+            footer.Controls.Add(_lblStatus);
             footer.Controls.Add(_btnSave);
             footer.Controls.Add(_btnCancel);
 
             footer.Resize += (s, e) =>
             {
-                int rightPad = 32;
-                _btnSave.Location = new Point(
-                    footer.ClientSize.Width - rightPad - btnW, 14);
-                _btnCancel.Location = new Point(
-                    footer.ClientSize.Width - rightPad - btnW - 8 - btnW, 14);
+                _btnSave.Location = new Point(footer.ClientSize.Width - PadX - btnW, 22);
+                _btnCancel.Location = new Point(footer.ClientSize.Width - PadX - btnW - 8 - btnW, 22);
+                _lblStatus.Width = Math.Max(100,
+                    footer.ClientSize.Width - PadX - btnW * 2 - 8 - PadX - 16);
             };
 
-            // ---- Content area above the footer ----
-            const int padX = 32;
-            int fieldW = ClientSize.Width - padX * 2;
+            ContentPanel.Controls.Add(footer);
 
-            int y = 24;
+            // ---------- Body ----------
+            int fieldW = ClientSize.Width - PadX * 2;
+            int y = 28;
 
-            // ---- Supplier Name ----
-            AddLabel("Supplier Name:", padX, y);
+            // Supplier Name
+            AddFieldLabel("Supplier Name", PadX, y, fieldW);
             _txtSupplierName = UiFactory.CreateTextBox(fieldW);
-            _txtSupplierName.Location = new Point(padX, y + 22);
+            _txtSupplierName.Location = new Point(PadX, y + LabelH + 4);
             _txtSupplierName.MaxLength = 150;
+            _txtSupplierName.Placeholder = "e.g. Motohub";
             ContentPanel.Controls.Add(_txtSupplierName);
-            y += 76;
+            y += LabelH + 4 + FieldH + RowGap;
 
-            // ---- Contact Number ----
-            AddLabel("Contact Number:", padX, y);
+            // Contact Number
+            AddFieldLabel("Contact Number", PadX, y, fieldW);
             _txtContactNumber = UiFactory.CreateTextBox(fieldW);
-            _txtContactNumber.Location = new Point(padX, y + 22);
+            _txtContactNumber.Location = new Point(PadX, y + LabelH + 4);
             _txtContactNumber.MaxLength = 15;
+            _txtContactNumber.Placeholder = "09XXXXXXXXX";
             ContentPanel.Controls.Add(_txtContactNumber);
 
-            // Hint label below the field. Height 20 gives 8pt text room for
-            // its descenders (g, p, y) and a little padding.
             var hint = new Label
             {
                 Text = "Format: 09XXXXXXXXX (11 digits, e.g. 09171234567)",
                 Font = Theme.FontTiny,
                 ForeColor = Theme.TextMuted,
                 AutoSize = false,
-                Location = new Point(padX, y + 68),
-                Size = new Size(fieldW, 20),
+                Location = new Point(PadX, y + LabelH + 4 + FieldH + 2),
+                Size = new Size(fieldW, 18),
                 TextAlign = ContentAlignment.MiddleLeft,
                 BackColor = Color.Transparent
             };
             ContentPanel.Controls.Add(hint);
-            y += 96; // field (64) + hint (20) + breathing room (12)
+            y += LabelH + 4 + FieldH + 22 + RowGap;
 
-            // ---- Address (optional) ----
-            AddLabel("Address (optional):", padX, y);
+            // Address
+            AddFieldLabel("Address (optional)", PadX, y, fieldW);
             _txtAddress = UiFactory.CreateTextBox(fieldW);
-            _txtAddress.Location = new Point(padX, y + 22);
+            _txtAddress.Location = new Point(PadX, y + LabelH + 4);
             _txtAddress.MaxLength = 250;
+            _txtAddress.Placeholder = "e.g. 123 Rizal St., Davao City";
             ContentPanel.Controls.Add(_txtAddress);
-            y += 76;
-
-            // ---- Status ----
-            _lblStatus = new Label
-            {
-                Text = string.Empty,
-                Font = Theme.FontSmall,
-                ForeColor = Theme.Danger,
-                AutoSize = false,
-                Location = new Point(padX, y),
-                Size = new Size(fieldW, 40),
-                TextAlign = ContentAlignment.TopLeft,
-                BackColor = Color.Transparent
-            };
-            ContentPanel.Controls.Add(_lblStatus);
-
-            // Add footer LAST so it docks first and always wins the bottom edge.
-            ContentPanel.Controls.Add(footer);
         }
 
-        private void AddLabel(string text, int x, int y)
+        private void AddFieldLabel(string text, int x, int y, int width)
         {
             var lbl = new Label
             {
@@ -159,17 +154,13 @@ namespace TodangMotor.Forms
                 Font = Theme.FontSmall,
                 ForeColor = Theme.TextSecondary,
                 AutoSize = false,
-                Size = new Size(300, 18),
                 Location = new Point(x, y),
+                Size = new Size(width, LabelH),
                 TextAlign = ContentAlignment.MiddleLeft,
                 BackColor = Color.Transparent
             };
             ContentPanel.Controls.Add(lbl);
         }
-
-        // ============================================================
-        // LOAD
-        // ============================================================
 
         private void SupplierForm_Load(object? sender, EventArgs e)
         {
@@ -190,12 +181,9 @@ namespace TodangMotor.Forms
             }
         }
 
-        // ============================================================
-        // SAVE
-        // ============================================================
-
         private async Task SaveAsync()
         {
+            _lblStatus.Text = string.Empty;
             SetBusy(true);
             try
             {
@@ -233,10 +221,6 @@ namespace TodangMotor.Forms
             }
         }
 
-        // ============================================================
-        // EVENTS
-        // ============================================================
-
         private void SupplierForm_KeyDown(object? sender, KeyEventArgs e)
         {
             if (e.KeyCode == Keys.Escape)
@@ -245,10 +229,6 @@ namespace TodangMotor.Forms
                 Close();
             }
         }
-
-        // ============================================================
-        // HELPERS
-        // ============================================================
 
         private void SetBusy(bool busy)
         {

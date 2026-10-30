@@ -20,15 +20,7 @@ namespace TodangMotor.Controls
     /// </summary>
     public class PurchaseOrdersControl : UserControl
     {
-        // ============================================================
-        // SERVICES
-        // ============================================================
-
         private readonly PurchaseOrderService _poService = new();
-
-        // ============================================================
-        // STATE
-        // ============================================================
 
         private List<Supplier> _suppliers = new();
         private List<Product> _products = new();
@@ -45,6 +37,19 @@ namespace TodangMotor.Controls
 
         private const string AllSuppliersDisplay = "(All Suppliers)";
 
+        // ---- Fixed column widths (Product is dynamic) ----
+        // Build grid
+        private const int ColBBrandW = 150;
+        private const int ColBUnitW = 80;
+        private const int ColBQtyW = 75;
+        private const int ColBRemoveW = 55;
+
+        // History grid
+        private const int ColHPONumW = 220;
+        private const int ColHDateW = 180;
+        private const int ColHItemsW = 100;
+        // Supplier column is dynamic
+
         private class WorkingLine
         {
             public int ProductId { get; set; }
@@ -54,10 +59,7 @@ namespace TodangMotor.Controls
             public int Quantity { get; set; }
         }
 
-        // ============================================================
-        // UI CONTROLS
-        // ============================================================
-
+        // ---- UI controls ----
         private TabControl _subTabs;
         private TabPage _buildPage;
         private TabPage _historyPage;
@@ -74,7 +76,6 @@ namespace TodangMotor.Controls
         private DataGridView _buildGrid;
         private Label _buildTotals;
 
-        private Button _btnRemoveLine;
         private Button _btnClearForm;
         private Button _btnSaveAndPdf;
         private Label _buildStatus;
@@ -82,21 +83,18 @@ namespace TodangMotor.Controls
         // ---- History page ----
         private RoundedTextBox _historySearch;
         private DataGridView _historyGrid;
-        private Button _btnViewDetail;
         private Button _btnExportPdf;
         private Button _btnRefresh;
         private Label _historyStatus;
         private Label _historyCount;
 
-        // ============================================================
-        // CONSTRUCTION
-        // ============================================================
+        private List<PurchaseOrder> _historyOrders = new();
 
         public PurchaseOrdersControl()
         {
             Dock = DockStyle.Fill;
             BackColor = Theme.Background;
-            Padding = new Padding(Theme.SpacingLg);
+            Padding = new Padding(UiFactory.PagePadding);
 
             BuildLayout();
 
@@ -119,15 +117,23 @@ namespace TodangMotor.Controls
             _subTabs = new TabControl
             {
                 Dock = DockStyle.Fill,
-                Font = Theme.FontBody,
-                ItemSize = new Size(180, 38),
+                Font = new Font(Theme.UiFontFamily, 11F, FontStyle.Regular),
+                ItemSize = new Size(200, 42),
                 SizeMode = TabSizeMode.Fixed,
                 Appearance = TabAppearance.Normal,
-                Padding = new Point(20, 6)
+                Padding = new Point(20, 8)
             };
 
-            _buildPage = new TabPage("Build PO") { BackColor = Theme.Background, Padding = Padding.Empty };
-            _historyPage = new TabPage("PO History") { BackColor = Theme.Background, Padding = Padding.Empty };
+            _buildPage = new TabPage("Build PO")
+            {
+                BackColor = Theme.Background,
+                Padding = Padding.Empty
+            };
+            _historyPage = new TabPage("PO History")
+            {
+                BackColor = Theme.Background,
+                Padding = Padding.Empty
+            };
 
             BuildBuildPage();
             BuildHistoryPage();
@@ -153,29 +159,31 @@ namespace TodangMotor.Controls
 
         private void BuildBuildPage()
         {
-            // Header block — supplier + order date + notes
+            // ---- Header block: supplier + order date + notes ----
             var headerBlock = new Panel
             {
                 Dock = DockStyle.Top,
-                Height = 176,
-                BackColor = Theme.Background,
-                Padding = new Padding(24, 12, 24, 0)
+                Height = 190,
+                BackColor = Theme.Background
             };
 
-            int y = 12;
+            headerBlock.Controls.Add(MakeSectionTitle("ORDER DETAILS", 0, 8));
 
-            var lblSupplier = MakeRowLabel("Supplier:", 24, y);
-            headerBlock.Controls.Add(lblSupplier);
+            int y = 48;
+            const int labelW = 130;
+            const int fieldX = 140;
+
+            headerBlock.Controls.Add(MakeRowLabel("Supplier:", 0, y, labelW));
 
             _cmbSupplier = new RoundedComboBox
             {
-                Width = 320,
-                Location = new Point(144, y)
+                Width = 340,
+                Location = new Point(fieldX, y)
             };
             _cmbSupplier.SelectedIndexChanged += async (s, e) => await OnSupplierChangedAsync();
             headerBlock.Controls.Add(_cmbSupplier);
 
-            var lblDate = MakeRowLabel("Order Date:", 0, y);
+            var lblDate = MakeRowLabel("Order Date:", 0, y, 130);
             headerBlock.Controls.Add(lblDate);
 
             _dtpOrderDate = new DateTimePicker
@@ -183,128 +191,151 @@ namespace TodangMotor.Controls
                 Format = DateTimePickerFormat.Custom,
                 CustomFormat = "MMMM d, yyyy",
                 Font = Theme.FontBody,
-                Size = new Size(200, 32),
-                Location = new Point(0, y + 5),
+                Size = new Size(220, 32),
+                Location = new Point(0, y + 6),
                 Value = DateTime.Today
             };
             headerBlock.Controls.Add(_dtpOrderDate);
 
-            y += 60;
+            y += 64;
 
-            var lblNotes = MakeRowLabel("Notes:", 24, y);
-            headerBlock.Controls.Add(lblNotes);
+            headerBlock.Controls.Add(MakeRowLabel("Notes:", 0, y, labelW));
 
             _txtNotes = UiFactory.CreateTextBox(400);
-            _txtNotes.Location = new Point(144, y);
-            _txtNotes.Placeholder = "Optional — e.g. Urgent restock";
+            _txtNotes.Location = new Point(fieldX, y);
+            _txtNotes.Placeholder = "Optional — e.g. urgent restock";
             _txtNotes.MaxLength = 500;
             headerBlock.Controls.Add(_txtNotes);
 
-            // Responsive layout — date picker pinned right
             headerBlock.Resize += (s, e) =>
             {
-                int right = headerBlock.ClientSize.Width - 24;
-                _txtNotes.Width = Math.Max(200, right - 144);
+                int right = headerBlock.ClientSize.Width;
+                _txtNotes.Width = Math.Max(200, right - fieldX);
 
                 int dateX = right - _dtpOrderDate.Width;
                 _dtpOrderDate.Left = dateX;
                 lblDate.Left = dateX - lblDate.Width - 12;
             };
 
-            // Builder row — product + qty + add
+            // ---- Builder row: product + qty + add ----
             var builderRow = new Panel
             {
                 Dock = DockStyle.Top,
-                Height = 76,
-                BackColor = Theme.Background,
-                Padding = new Padding(24, 8, 24, 0)
+                Height = 190,
+                BackColor = Theme.Background
             };
 
-            var lblProduct = MakeRowLabel("Product:", 24, 16);
-            builderRow.Controls.Add(lblProduct);
+            builderRow.Controls.Add(MakeSectionTitle("ADD LINE ITEM", 0, 8));
+
+            int by = 48;
+
+            builderRow.Controls.Add(MakeRowLabel("Product:", 0, by, labelW));
 
             _cmbProduct = new RoundedComboBox
             {
-                Width = 420,
-                Location = new Point(144, 14)
+                Width = 400,
+                Location = new Point(fieldX, by)
             };
             builderRow.Controls.Add(_cmbProduct);
 
-            var lblQty = MakeRowLabel("Qty:", 0, 16);
-            builderRow.Controls.Add(lblQty);
+            _btnAddLine = UiFactory.CreateButton("+ Add Line", UiFactory.ButtonStyle.Primary, 170, UiFactory.PrimaryButtonHeight);
+            _btnAddLine.Location = new Point(0, by);
+            _btnAddLine.Click += (s, e) => AddLine();
+            builderRow.Controls.Add(_btnAddLine);
 
-            _txtQty = UiFactory.CreateTextBox(100);
-            _txtQty.Location = new Point(0, 14);
+            by += 64;
+
+            builderRow.Controls.Add(MakeRowLabel("Quantity:", 0, by, labelW));
+
+            _txtQty = UiFactory.CreateTextBox(120);
+            _txtQty.Location = new Point(fieldX, by);
             _txtQty.MaxLength = 8;
             _txtQty.Text = "1";
             builderRow.Controls.Add(_txtQty);
 
-            _btnAddLine = UiFactory.CreateButton("+ Add", UiFactory.ButtonStyle.Primary, 110, 40);
-            _btnAddLine.Location = new Point(0, 14);
-            _btnAddLine.Click += (s, e) => AddLine();
-            builderRow.Controls.Add(_btnAddLine);
-
             builderRow.Resize += (s, e) =>
             {
-                int right = builderRow.ClientSize.Width - 24;
+                int right = builderRow.ClientSize.Width;
 
                 _btnAddLine.Left = right - _btnAddLine.Width;
+                _btnAddLine.Top = 48;
 
-                int qtyX = _btnAddLine.Left - 12 - _txtQty.Width;
-                _txtQty.Left = qtyX;
-                lblQty.Left = qtyX - lblQty.Width - 8;
-
-                int available = qtyX - 12 - 144;
-                _cmbProduct.Width = Math.Max(200, available);
+                _cmbProduct.Width = Math.Max(280, right - fieldX - _btnAddLine.Width - 16);
             };
 
-            // Grid block
+            // ---- Grid block ----
             var gridBlock = new Panel
             {
                 Dock = DockStyle.Fill,
-                BackColor = Theme.Background,
-                Padding = new Padding(24, 4, 24, 8)
+                BackColor = Theme.Background
+            };
+
+            var topRow = new Panel
+            {
+                Dock = DockStyle.Top,
+                Height = 48,
+                BackColor = Theme.Background
+            };
+
+            topRow.Controls.Add(MakeSectionTitle("LINE ITEMS", 0, 14));
+
+            _buildTotals = new Label
+            {
+                Text = "Total items: 0   ·   Total units: 0",
+                Font = Theme.FontBodyBold,
+                ForeColor = Theme.TextPrimary,
+                AutoSize = false,
+                Location = new Point(0, 14),
+                Height = 24,
+                Width = 400,
+                TextAlign = ContentAlignment.MiddleRight,
+                BackColor = Color.Transparent
+            };
+            topRow.Controls.Add(_buildTotals);
+
+            topRow.Resize += (s, e) =>
+            {
+                _buildTotals.Left = topRow.ClientSize.Width - _buildTotals.Width;
+            };
+
+            var gridWrapper = new Panel
+            {
+                Dock = DockStyle.Fill,
+                Padding = new Padding(0, 8, 0, 8),
+                BackColor = Theme.Background
             };
 
             _buildGrid = new DataGridView
             {
                 Dock = DockStyle.Fill,
-                Margin = new Padding(0, 4, 0, 4)
+                Margin = new Padding(0)
             };
-            UiFactory.StyleGrid(_buildGrid);
-            _buildGrid.AlternatingRowsDefaultCellStyle.BackColor = Color.FromArgb(248, 249, 251);
+            UiFactory.StyleGridModern(_buildGrid);
+            _buildGrid.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.None;
+            _buildGrid.CellClick += BuildGrid_CellClick;
+            _buildGrid.CellMouseEnter += BuildGrid_CellMouseEnter;
+            _buildGrid.CellPainting += BuildGrid_CellPainting;
+            _buildGrid.CellMouseLeave += (s, e) => _buildGrid.Cursor = Cursors.Default;
+            _buildGrid.CellPainting += BuildGrid_CellPainting;
             PrimeBuildGridColumns();
 
-            _buildTotals = new Label
-            {
-                Dock = DockStyle.Bottom,
-                Height = 28,
-                Font = Theme.FontBodyBold,
-                ForeColor = Theme.TextPrimary,
-                TextAlign = ContentAlignment.MiddleRight,
-                BackColor = Color.Transparent,
-                Text = "Total items: 0   ·   Total units: 0"
-            };
+            _buildGrid.Resize += (s, e) => FitBuildProductColumn();
 
-            gridBlock.Controls.Add(_buildGrid);
-            gridBlock.Controls.Add(_buildTotals);
+            gridWrapper.Controls.Add(_buildGrid);
 
-            // Bottom bar
+            gridBlock.Controls.Add(gridWrapper);
+            gridBlock.Controls.Add(topRow);
+
+            // ---- Bottom bar ----
             var bottomBar = new Panel
             {
                 Dock = DockStyle.Bottom,
-                Height = 76,
-                BackColor = Theme.Background,
-                Padding = new Padding(24, 0, 24, 0)
+                Height = 88,
+                BackColor = Theme.Background
             };
 
-            _btnRemoveLine = UiFactory.CreateButton("Remove Selected", UiFactory.ButtonStyle.Ghost, 160, 40);
-            _btnRemoveLine.Location = new Point(24, 18);
-            _btnRemoveLine.Click += (s, e) => RemoveSelectedLine();
-            bottomBar.Controls.Add(_btnRemoveLine);
-
-            _btnClearForm = UiFactory.CreateButton("Clear Form", UiFactory.ButtonStyle.Secondary, 130, 40);
-            _btnClearForm.Location = new Point(196, 18);
+            _btnClearForm = UiFactory.CreateButton("Clear Form", UiFactory.ButtonStyle.Secondary, 150, UiFactory.PrimaryButtonHeight);
+            _btnClearForm.Location = new Point(0, 20);
             _btnClearForm.Click += (s, e) => ClearForm();
             bottomBar.Controls.Add(_btnClearForm);
 
@@ -313,9 +344,9 @@ namespace TodangMotor.Controls
                 Font = Theme.FontSmall,
                 ForeColor = Theme.Danger,
                 AutoSize = false,
-                Location = new Point(340, 18),
-                Height = 40,
-                Width = 200,
+                Location = new Point(_btnClearForm.Right + 24, 20),
+                Height = UiFactory.PrimaryButtonHeight,
+                Width = 300,
                 TextAlign = ContentAlignment.MiddleLeft,
                 BackColor = Color.Transparent,
                 Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right
@@ -325,49 +356,134 @@ namespace TodangMotor.Controls
             _btnSaveAndPdf = UiFactory.CreateButton(
                 "Save PO & Generate PDF",
                 UiFactory.ButtonStyle.Primary,
-                210, 44);
+                220, UiFactory.PrimaryButtonHeight);
             _btnSaveAndPdf.Anchor = AnchorStyles.Top | AnchorStyles.Right;
             _btnSaveAndPdf.Click += async (s, e) => await SaveAndExportAsync();
             bottomBar.Controls.Add(_btnSaveAndPdf);
 
             bottomBar.Resize += (s, e) =>
             {
-                _btnSaveAndPdf.Left = bottomBar.ClientSize.Width - _btnSaveAndPdf.Width - 24;
+                _btnSaveAndPdf.Left = bottomBar.ClientSize.Width - _btnSaveAndPdf.Width;
                 _buildStatus.Width = Math.Max(100,
-                    _btnSaveAndPdf.Left - _buildStatus.Left - 12);
+                    _btnSaveAndPdf.Left - _buildStatus.Left - 16);
             };
 
-            // Docking order for the page
             _buildPage.Controls.Add(gridBlock);
             _buildPage.Controls.Add(bottomBar);
             _buildPage.Controls.Add(builderRow);
             _buildPage.Controls.Add(headerBlock);
         }
 
+        private void BuildGrid_CellPainting(object? sender, DataGridViewCellPaintingEventArgs e)
+        {
+            if (e.RowIndex < 0 || e.ColumnIndex < 0) return;
+            if (_buildGrid.Columns[e.ColumnIndex].Name != "Remove") return;
+
+            e.PaintBackground(e.CellBounds, true);
+
+            using var font = new Font(Theme.IconFontFamily, 14F, FontStyle.Regular);
+            TextRenderer.DrawText(
+                e.Graphics,
+                "\uE711",
+                font,
+                e.CellBounds,
+                Theme.Danger,
+                TextFormatFlags.HorizontalCenter |
+                TextFormatFlags.VerticalCenter |
+                TextFormatFlags.NoPrefix);
+
+            e.Handled = true;
+        }
+
         private void PrimeBuildGridColumns()
         {
             _buildGrid.AutoGenerateColumns = false;
             _buildGrid.Columns.Clear();
+            _buildGrid.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.None;
 
-            void AddCol(string prop, string header, int weight, bool rightAlign = false)
+            void AddTextCol(string prop, string header, int width, bool readOnly,
+                DataGridViewContentAlignment align = DataGridViewContentAlignment.MiddleLeft)
             {
                 var col = new DataGridViewTextBoxColumn
                 {
                     Name = prop,
                     DataPropertyName = prop,
                     HeaderText = header,
-                    FillWeight = weight,
-                    ReadOnly = true
+                    Width = width,
+                    ReadOnly = readOnly,
+                    SortMode = DataGridViewColumnSortMode.NotSortable,
+                    Resizable = DataGridViewTriState.False
                 };
-                if (rightAlign)
-                    col.DefaultCellStyle.Alignment = DataGridViewContentAlignment.MiddleRight;
+                if (align != DataGridViewContentAlignment.MiddleLeft)
+                    col.DefaultCellStyle.Alignment = align;
                 _buildGrid.Columns.Add(col);
             }
 
-            AddCol("Product", "Product", 300);
-            AddCol("Brand", "Brand", 160);
-            AddCol("Unit", "Unit", 80);
-            AddCol("Quantity", "Qty", 90, true);
+            AddTextCol("Product", "Product", 400, true);
+            AddTextCol("Brand", "Brand", ColBBrandW, true);
+            AddTextCol("Unit", "Unit", ColBUnitW, true, DataGridViewContentAlignment.MiddleCenter);
+            AddTextCol("Quantity", "Qty", ColBQtyW, true, DataGridViewContentAlignment.MiddleRight);
+
+            // Remove — × per row
+            var removeCol = new DataGridViewTextBoxColumn
+            {
+                Name = "Remove",
+                HeaderText = "",
+                Width = ColBRemoveW,
+                ReadOnly = true,
+                SortMode = DataGridViewColumnSortMode.NotSortable,
+                Resizable = DataGridViewTriState.False,
+                DefaultCellStyle = new DataGridViewCellStyle
+                {
+                    Alignment = DataGridViewContentAlignment.MiddleCenter,
+                    Padding = new Padding(0)
+                }
+            };
+            _buildGrid.Columns.Add(removeCol);
+
+            _buildGrid.Columns.Add(new DataGridViewTextBoxColumn
+            {
+                Name = "ProductId",
+                DataPropertyName = "ProductId",
+                Visible = false
+            });
+        }
+
+        private void FitBuildProductColumn()
+        {
+            if (_buildGrid == null || !_buildGrid.Columns.Contains("Product")) return;
+
+            int others = ColBBrandW + ColBUnitW + ColBQtyW + ColBRemoveW;
+            int available = _buildGrid.ClientSize.Width - others - 24;
+            if (available < 220) available = 220;
+
+            _buildGrid.Columns["Product"].Width = available;
+        }
+
+        private void BuildGrid_CellMouseEnter(object? sender, DataGridViewCellEventArgs e)
+        {
+            if (e.RowIndex < 0 || e.ColumnIndex < 0) return;
+            _buildGrid.Cursor = _buildGrid.Columns[e.ColumnIndex].Name == "Remove"
+                ? Cursors.Hand
+                : Cursors.Default;
+        }
+
+        private void BuildGrid_CellClick(object? sender, DataGridViewCellEventArgs e)
+        {
+            if (e.RowIndex < 0 || e.ColumnIndex < 0) return;
+            if (_buildGrid.Columns[e.ColumnIndex].Name != "Remove") return;
+
+            var idCell = _buildGrid.Rows[e.RowIndex].Cells["ProductId"];
+            if (idCell?.Value == null) return;
+
+            int id = Convert.ToInt32(idCell.Value);
+            var line = _lines.FirstOrDefault(l => l.ProductId == id);
+            if (line != null)
+            {
+                _lines.Remove(line);
+                RefreshBuildGrid();
+                ShowBuildStatus("Line removed.", false);
+            }
         }
 
         // ============================================================
@@ -376,16 +492,15 @@ namespace TodangMotor.Controls
 
         private void BuildHistoryPage()
         {
-            // Filter bar
             var bar = new Panel
             {
                 Dock = DockStyle.Top,
-                Height = 84,
+                Height = 108,
                 BackColor = Theme.Background
             };
 
-            _historySearch = UiFactory.CreateTextBox(320);
-            _historySearch.Location = new Point(4, 12);
+            _historySearch = UiFactory.CreateTextBox(340);
+            _historySearch.Location = new Point(0, 16);
             _historySearch.Placeholder = "Search PO number or supplier…";
             _historySearch.MaxLength = 150;
             _historySearch.TextChanged += (s, e) => ApplyHistoryFilter();
@@ -396,9 +511,9 @@ namespace TodangMotor.Controls
                 Font = Theme.FontSmall,
                 ForeColor = Theme.TextSecondary,
                 AutoSize = false,
-                Location = new Point(4, 58),
-                Height = 20,
-                Width = 900,
+                Location = new Point(_historySearch.Right + 24, 26),
+                Height = 24,
+                Width = 500,
                 TextAlign = ContentAlignment.MiddleLeft,
                 Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right,
                 BackColor = Color.Transparent
@@ -411,10 +526,10 @@ namespace TodangMotor.Controls
             _historyGrid = new DataGridView
             {
                 Dock = DockStyle.Fill,
-                Margin = new Padding(0, 4, 0, 4)
+                Margin = new Padding(0, 8, 0, 0)
             };
-            UiFactory.StyleGrid(_historyGrid);
-            _historyGrid.AlternatingRowsDefaultCellStyle.BackColor = Color.FromArgb(248, 249, 251);
+            UiFactory.StyleGridModern(_historyGrid);
+            _historyGrid.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.None;
             _historyGrid.CellDoubleClick += (s, e) =>
             {
                 if (e.RowIndex < 0) return;
@@ -428,54 +543,48 @@ namespace TodangMotor.Controls
                     OpenDetailForSelected();
                 }
             };
+            PrimeHistoryGridColumns();
+
+            _historyGrid.Resize += (s, e) => FitHistorySupplierColumn();
 
             // Bottom bar
             var bottomBar = new Panel
             {
                 Dock = DockStyle.Bottom,
-                Height = 76,
+                Height = 88,
                 BackColor = Theme.Background
             };
 
-            // ---- Left group: view / export ----
-            _btnViewDetail = UiFactory.CreateButton("View Detail", UiFactory.ButtonStyle.Secondary, 130, 40);
-            _btnViewDetail.Location = new Point(4, 18);
-            _btnViewDetail.Click += (s, e) => OpenDetailForSelected();
-
-            _btnExportPdf = UiFactory.CreateButton("Export PDF", UiFactory.ButtonStyle.Primary, 130, 40);
-            _btnExportPdf.Location = new Point(146, 18);
+            _btnExportPdf = UiFactory.CreateButton("Export PDF", UiFactory.ButtonStyle.Primary, 150, UiFactory.PrimaryButtonHeight);
+            _btnExportPdf.Location = new Point(0, 20);
             _btnExportPdf.Click += async (s, e) => await ExportSelectedAsync();
 
-            // ---- Center: status ----
             _historyStatus = new Label
             {
                 Font = Theme.FontSmall,
                 ForeColor = Theme.TextSecondary,
                 AutoSize = false,
-                Location = new Point(288, 18),
-                Height = 40,
+                Location = new Point(_btnExportPdf.Right + 24, 20),
+                Height = UiFactory.PrimaryButtonHeight,
                 Width = 300,
                 TextAlign = ContentAlignment.MiddleLeft,
                 Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right,
                 BackColor = Color.Transparent
             };
 
-            // ---- Right: refresh ----
-            _btnRefresh = UiFactory.CreateButton("Refresh", UiFactory.ButtonStyle.Ghost, 110, 40);
+            _btnRefresh = UiFactory.CreateButton("Refresh", UiFactory.ButtonStyle.Secondary, 140, UiFactory.PrimaryButtonHeight);
             _btnRefresh.Anchor = AnchorStyles.Top | AnchorStyles.Right;
             _btnRefresh.Click += async (s, e) => await LoadHistoryAsync();
 
-            bottomBar.Controls.Add(_btnViewDetail);
             bottomBar.Controls.Add(_btnExportPdf);
             bottomBar.Controls.Add(_historyStatus);
             bottomBar.Controls.Add(_btnRefresh);
 
-            // Position Refresh on the right edge; status fills the middle.
             bottomBar.Resize += (s, e) =>
             {
-                _btnRefresh.Left = bottomBar.ClientSize.Width - _btnRefresh.Width - 4;
+                _btnRefresh.Left = bottomBar.ClientSize.Width - _btnRefresh.Width;
                 _historyStatus.Width = Math.Max(100,
-                    _btnRefresh.Left - _historyStatus.Left - 12);
+                    _btnRefresh.Left - _historyStatus.Left - 16);
             };
 
             _historyPage.Controls.Add(_historyGrid);
@@ -483,11 +592,72 @@ namespace TodangMotor.Controls
             _historyPage.Controls.Add(bar);
         }
 
+        private void PrimeHistoryGridColumns()
+        {
+            _historyGrid.AutoGenerateColumns = false;
+            _historyGrid.Columns.Clear();
+            _historyGrid.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.None;
+
+            void AddTextCol(string prop, string header, int width, bool readOnly,
+                DataGridViewContentAlignment align = DataGridViewContentAlignment.MiddleLeft)
+            {
+                var col = new DataGridViewTextBoxColumn
+                {
+                    Name = prop,
+                    DataPropertyName = prop,
+                    HeaderText = header,
+                    Width = width,
+                    ReadOnly = readOnly,
+                    SortMode = DataGridViewColumnSortMode.NotSortable,
+                    Resizable = DataGridViewTriState.False
+                };
+                if (align != DataGridViewContentAlignment.MiddleLeft)
+                    col.DefaultCellStyle.Alignment = align;
+                _historyGrid.Columns.Add(col);
+            }
+
+            AddTextCol("PONumber", "PO Number", ColHPONumW, true);
+            AddTextCol("OrderDate", "Order Date", ColHDateW, true);
+            AddTextCol("SupplierName", "Supplier", 400, true);
+            AddTextCol("ItemCount", "Items", ColHItemsW, true, DataGridViewContentAlignment.MiddleRight);
+
+            _historyGrid.Columns.Add(new DataGridViewTextBoxColumn
+            {
+                Name = "PurchaseOrderId",
+                DataPropertyName = "PurchaseOrderId",
+                Visible = false
+            });
+        }
+
+        private void FitHistorySupplierColumn()
+        {
+            if (_historyGrid == null || !_historyGrid.Columns.Contains("SupplierName")) return;
+
+            int others = ColHPONumW + ColHDateW + ColHItemsW;
+            int available = _historyGrid.ClientSize.Width - others - 24;
+            if (available < 200) available = 200;
+
+            _historyGrid.Columns["SupplierName"].Width = available;
+        }
+
         // ============================================================
         // SMALL HELPERS
         // ============================================================
 
-        private Label MakeRowLabel(string text, int x, int y)
+        private Label MakeSectionTitle(string text, int x, int y)
+        {
+            return new Label
+            {
+                Text = text,
+                Font = new Font(Theme.UiFontFamily, 10F, FontStyle.Bold),
+                ForeColor = Theme.Primary,
+                AutoSize = true,
+                Location = new Point(x, y),
+                BackColor = Color.Transparent
+            };
+        }
+
+        private Label MakeRowLabel(string text, int x, int y, int width)
         {
             return new Label
             {
@@ -495,7 +665,7 @@ namespace TodangMotor.Controls
                 Font = Theme.FontSmall,
                 ForeColor = Theme.TextSecondary,
                 AutoSize = false,
-                Size = new Size(120, 40),
+                Size = new Size(width, UiFactory.InputHeight),
                 Location = new Point(x, y),
                 TextAlign = ContentAlignment.MiddleLeft,
                 BackColor = Color.Transparent
@@ -511,7 +681,6 @@ namespace TodangMotor.Controls
             SetBuildBusy(true);
             try
             {
-                // Suppliers
                 _suppliers = await _poService.GetActiveSuppliersAsync();
 
                 _supplierByDisplay.Clear();
@@ -529,7 +698,6 @@ namespace TodangMotor.Controls
                     _cmbSupplier.SelectedIndex = 0;
                 _suppressSupplierChange = false;
 
-                // Products (all initially)
                 await ReloadProductsForCurrentSupplierAsync();
 
                 if (_suppliers.Count == 0)
@@ -629,30 +797,6 @@ namespace TodangMotor.Controls
             ShowBuildStatus("Line added.", false);
         }
 
-        private void RemoveSelectedLine()
-        {
-            if (_buildGrid.SelectedRows.Count == 0)
-            {
-                ShowBuildStatus("Select a line to remove.", true);
-                return;
-            }
-
-            // Find by matching Product name + brand because grid rows are a projection.
-            var row = _buildGrid.SelectedRows[0];
-            string productName = row.Cells["Product"].Value?.ToString() ?? string.Empty;
-            string brand = row.Cells["Brand"].Value?.ToString() ?? string.Empty;
-
-            var line = _lines.FirstOrDefault(l =>
-                l.ProductName == productName && l.Brand == brand);
-
-            if (line != null)
-            {
-                _lines.Remove(line);
-                RefreshBuildGrid();
-                ShowBuildStatus("Line removed.", false);
-            }
-        }
-
         private void ClearForm()
         {
             if (_lines.Count > 0)
@@ -686,6 +830,7 @@ namespace TodangMotor.Controls
             var rows = _lines
                 .Select(l => new
                 {
+                    ProductId = l.ProductId,
                     Product = l.ProductName,
                     Brand = l.Brand,
                     Unit = l.Unit,
@@ -700,6 +845,8 @@ namespace TodangMotor.Controls
 
             int totalQty = _lines.Sum(l => l.Quantity);
             _buildTotals.Text = $"Total items: {_lines.Count}   ·   Total units: {totalQty}";
+
+            FitBuildProductColumn();
         }
 
         // ============================================================
@@ -746,8 +893,6 @@ namespace TodangMotor.Controls
                     return;
                 }
 
-                // Load the saved PO's detail so we can build the PDF.
-                // We need to find the PO we just created — query by number.
                 var (detailOk, detailErr, detailList) = await _poService.GetAllAsync(poNumber);
                 if (!detailOk || detailList.Count == 0)
                 {
@@ -773,7 +918,6 @@ namespace TodangMotor.Controls
                     return;
                 }
 
-                // Prompt for PDF destination.
                 using var sfd = new SaveFileDialog
                 {
                     Filter = "PDF files (*.pdf)|*.pdf",
@@ -813,7 +957,6 @@ namespace TodangMotor.Controls
                         MessageBoxIcon.Information);
                 }
 
-                // Reset the form.
                 _lines.Clear();
                 _txtNotes.Text = string.Empty;
                 _dtpOrderDate.Value = DateTime.Today;
@@ -826,7 +969,7 @@ namespace TodangMotor.Controls
                 _suppressSupplierChange = false;
                 await ReloadProductsForCurrentSupplierAsync();
 
-                _historyLoaded = false; // force reload next time History tab opens
+                _historyLoaded = false;
                 ShowBuildStatus($"PO {poNumber} saved.", false);
             }
             finally
@@ -852,7 +995,6 @@ namespace TodangMotor.Controls
                     return;
                 }
 
-                // Store in a field so ApplyHistoryFilter can reuse.
                 _historyOrders = orders ?? new List<PurchaseOrder>();
                 ApplyHistoryFilter();
             }
@@ -862,8 +1004,6 @@ namespace TodangMotor.Controls
                 _historyCount.ForeColor = Theme.Danger;
             }
         }
-
-        private List<PurchaseOrder> _historyOrders = new();
 
         private void ApplyHistoryFilter()
         {
@@ -897,23 +1037,13 @@ namespace TodangMotor.Controls
             if (_historyGrid.Columns.Contains("PurchaseOrderId"))
                 _historyGrid.Columns["PurchaseOrderId"].Visible = false;
 
-            void SetWeight(string col, int weight, string header = null)
-            {
-                if (!_historyGrid.Columns.Contains(col)) return;
-                _historyGrid.Columns[col].FillWeight = weight;
-                if (header != null) _historyGrid.Columns[col].HeaderText = header;
-            }
-
-            SetWeight("PONumber", 200, "PO Number");
-            SetWeight("OrderDate", 160, "Order Date");
-            SetWeight("SupplierName", 260, "Supplier");
-            SetWeight("ItemCount", 100, "Items");
-
             if (_historyGrid.Rows.Count > 0)
                 _historyGrid.ClearSelection();
 
             _historyCount.ForeColor = Theme.TextSecondary;
             _historyCount.Text = $"Showing {rows.Count} Purchase Order(s)";
+
+            FitHistorySupplierColumn();
         }
 
         // ============================================================
@@ -948,7 +1078,6 @@ namespace TodangMotor.Controls
                 using var form = new PurchaseOrderDetailForm(order.PurchaseOrderId);
                 form.ShowDialog(parent);
 
-                // After closing, reload history in case something changed.
                 _ = LoadHistoryAsync();
             }
             catch (Exception ex)
@@ -1038,7 +1167,6 @@ namespace TodangMotor.Controls
             _isBusy = busy;
             _btnSaveAndPdf.Enabled = !busy;
             _btnAddLine.Enabled = !busy;
-            _btnRemoveLine.Enabled = !busy;
             _btnClearForm.Enabled = !busy;
             _cmbSupplier.Enabled = !busy;
             _cmbProduct.Enabled = !busy;

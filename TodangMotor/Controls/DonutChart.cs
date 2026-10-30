@@ -31,7 +31,7 @@ namespace TodangMotor.Controls
 
         // Layout
         private const int PaddingPx = 12;
-        private const int LegendRowHeight = 30;
+        private const int LegendRowHeight = 34;
         private const float InnerRadiusRatio = 0.58f;
         private const int SegmentBorderPx = 2;
 
@@ -277,20 +277,35 @@ namespace TodangMotor.Controls
             if (_slices.Count == 0) return;
 
             using var swatchBrush = new SolidBrush(Color.Transparent);
-            using var labelFont = new Font(Theme.UiFontFamily, 9F, FontStyle.Regular);
-            using var valueFont = new Font(Theme.UiFontFamily, 9F, FontStyle.Bold);
+            using var labelFont = new Font(Theme.UiFontFamily, 9.5F, FontStyle.Regular);
+            using var valueFont = new Font(Theme.UiFontFamily, 9.5F, FontStyle.Bold);
             using var labelBrush = new SolidBrush(Theme.TextPrimary);
             using var valueBrush = new SolidBrush(Theme.TextSecondary);
 
             int y = legendRect.Y;
             const int swatchSize = 12;
             const int swatchGap = 10;
+            const int labelValueGap = 16;   // breathing room between label and value
 
-            foreach (var slice in _slices)
+            for (int i = 0; i < _slices.Count; i++)
             {
                 if (y + LegendRowHeight > legendRect.Bottom) break;
 
-                // Color swatch
+                var slice = _slices[i];
+
+                // ---- Measure the VALUE text first so we can reserve exactly its width ----
+                float percent = total > 0 ? (float)(slice.Value / total) * 100f : 0f;
+                string valueText = "₱" + slice.Value.ToString("N0") + "   " + percent.ToString("0.#") + "%";
+                var valueSize = g.MeasureString(valueText, valueFont);
+
+                // ---- Compute available label area = total width - swatch - gap - value - gap ----
+                float labelX = legendRect.X + swatchSize + swatchGap;
+                float valueX = legendRect.Right - valueSize.Width;
+                float labelWidth = valueX - labelX - labelValueGap;
+
+                if (labelWidth < 20) labelWidth = 20;
+
+                // ---- Color swatch ----
                 swatchBrush.Color = slice.Color;
                 g.FillRectangle(swatchBrush,
                     legendRect.X,
@@ -298,24 +313,14 @@ namespace TodangMotor.Controls
                     swatchSize,
                     swatchSize);
 
-                // Hover highlight for the legend row.
-                bool isHover = _slices.IndexOf(slice) == _hoverIndex;
-
-                // Label
-                float labelX = legendRect.X + swatchSize + swatchGap;
-                float labelWidth = legendRect.Width - swatchSize - swatchGap - 80;
-
+                // ---- Label (truncate only if it genuinely cannot fit) ----
                 var labelText = TruncateToWidth(g, slice.Label, labelFont, labelWidth);
                 g.DrawString(labelText, labelFont, labelBrush,
                     labelX, y + (LegendRowHeight - labelFont.Height) / 2f);
 
-                // Value + percent
-                float percent = total > 0 ? (float)(slice.Value / total) * 100f : 0f;
-                string valueText = "₱" + slice.Value.ToString("N0") + "  " + percent.ToString("0.#") + "%";
-
-                var valueSize = g.MeasureString(valueText, valueFont);
+                // ---- Value (right-aligned, guaranteed gap from label) ----
                 g.DrawString(valueText, valueFont, valueBrush,
-                    legendRect.Right - valueSize.Width,
+                    valueX,
                     y + (LegendRowHeight - valueFont.Height) / 2f);
 
                 y += LegendRowHeight;
@@ -450,8 +455,8 @@ namespace TodangMotor.Controls
 
             // Between 40% and 55% of total width — enough room for
             // labels but always leaves space for the donut.
-            int preferred = (int)(Width * 0.42);
-            return Math.Max(140, Math.Min(preferred, Width - 160));
+            int preferred = (int)(Width * 0.48);
+            return Math.Max(180, Math.Min(preferred, Width - 160));
         }
     }
 }

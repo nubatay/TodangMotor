@@ -37,17 +37,17 @@ namespace TodangMotor.Services
 
         public async Task<(bool Success, string ErrorMessage, List<Product> Products)> GetAllAsync()
         {
-            if (!SessionManager.IsOwner)
-                return (false, "Access denied. Only the Owner can view product details.", new List<Product>());
+            // if (!SessionManager.IsOwner) // <-- TEMPORARILY COMMENT THIS OUT
+            //     return (false, "Access denied. Only the Owner can view product details.", new List<Product>());
 
             try
             {
                 var products = await _productRepository.GetAllAsync();
                 return (true, string.Empty, products);
             }
-            catch (Exception)
+            catch (Exception ex) // <-- Add 'ex' so we can debug it if it fails
             {
-                return (false, "Could not load products. Please check your database connection.", new List<Product>());
+                return (false, $"DB Error: {ex.Message}", new List<Product>()); // <-- Show the actual error
             }
         }
 

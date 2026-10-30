@@ -8,12 +8,6 @@ using TodangMotor.Services;
 
 namespace TodangMotor.Forms
 {
-    /// <summary>
-    /// Single-record User editor popup.
-    /// Add mode: UserForm()
-    /// Edit mode: UserForm(existingUser)
-    /// List view and Deactivate/Reactivate live in UserManagementControl.
-    /// </summary>
     public class UserForm : ShellForm
     {
         private readonly UserService _userService = new();
@@ -21,19 +15,20 @@ namespace TodangMotor.Forms
         private readonly User? _userToEdit;
         private bool IsEditMode => _userToEdit != null;
 
-        private RoundedTextBox _txtUsername;
-        private RoundedTextBox _txtFullName;
-        private RoundedComboBox _cmbRole;
-        private RoundedTextBox _txtPassword;
-        private RoundedTextBox _txtConfirmPassword;
-        private Label _lblPasswordHint;
-        private Button _btnSave;
-        private Button _btnCancel;
-        private Label _lblStatus;
+        private RoundedTextBox _txtUsername = null!;
+        private RoundedTextBox _txtFullName = null!;
+        private RoundedComboBox _cmbRole = null!;
+        private RoundedTextBox _txtPassword = null!;
+        private RoundedTextBox _txtConfirmPassword = null!;
+        private Label _lblPasswordHint = null!;
+        private Button _btnSave = null!;
+        private Button _btnCancel = null!;
+        private Label _lblStatus = null!;
 
-        // ============================================================
-        // CONSTRUCTION
-        // ============================================================
+        private const int PadX = 32;
+        private const int LabelH = 22;
+        private const int FieldH = 44;
+        private const int RowGap = 16;
 
         public UserForm(User? userToEdit = null)
         {
@@ -43,8 +38,8 @@ namespace TodangMotor.Forms
             ShowMaximizeButton = false;
             ShowMinimizeButton = true;
             StartPosition = FormStartPosition.CenterParent;
-            ClientSize = new Size(620, 680);
-            MinimumSize = new Size(580, 640);
+            ClientSize = new Size(700, 700);
+            MinimumSize = new Size(660, 680);
             BackColor = Theme.Background;
             KeyPreview = true;
 
@@ -54,22 +49,39 @@ namespace TodangMotor.Forms
             KeyDown += UserForm_KeyDown;
         }
 
-        // ============================================================
-        // LAYOUT
-        // ============================================================
-
         private void BuildLayout()
         {
-            // ---- Footer (docked bottom) ----
+            // ---------- Footer ----------
             var footer = new Panel
             {
                 Dock = DockStyle.Bottom,
-                Height = 76,
+                Height = 88,
                 BackColor = Theme.Background
             };
 
-            const int btnW = 120;
-            const int btnH = 42;
+            var divider = new Panel
+            {
+                Dock = DockStyle.Top,
+                Height = 1,
+                BackColor = Theme.Divider
+            };
+            footer.Controls.Add(divider);
+
+            int btnW = 140;
+            int btnH = UiFactory.PrimaryButtonHeight;
+
+            _lblStatus = new Label
+            {
+                Text = string.Empty,
+                Font = Theme.FontSmall,
+                ForeColor = Theme.Danger,
+                AutoSize = false,
+                Location = new Point(PadX, 22),
+                Height = btnH,
+                TextAlign = ContentAlignment.MiddleLeft,
+                BackColor = Color.Transparent,
+                Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right
+            };
 
             _btnSave = UiFactory.CreateButton("Save", UiFactory.ButtonStyle.Primary, btnW, btnH);
             _btnSave.Anchor = AnchorStyles.Top | AnchorStyles.Right;
@@ -79,58 +91,59 @@ namespace TodangMotor.Forms
             _btnCancel.Anchor = AnchorStyles.Top | AnchorStyles.Right;
             _btnCancel.Click += (s, e) => { DialogResult = DialogResult.Cancel; Close(); };
 
+            footer.Controls.Add(_lblStatus);
             footer.Controls.Add(_btnSave);
             footer.Controls.Add(_btnCancel);
 
             footer.Resize += (s, e) =>
             {
-                int rightPad = 32;
-                _btnSave.Location = new Point(footer.ClientSize.Width - rightPad - btnW, 18);
-                _btnCancel.Location = new Point(footer.ClientSize.Width - rightPad - btnW - 8 - btnW, 18);
+                _btnSave.Location = new Point(footer.ClientSize.Width - PadX - btnW, 22);
+                _btnCancel.Location = new Point(footer.ClientSize.Width - PadX - btnW - 8 - btnW, 22);
+                _lblStatus.Width = Math.Max(100,
+                    footer.ClientSize.Width - PadX - btnW * 2 - 8 - PadX - 16);
             };
 
-            // ---- Content area ----
-            const int padX = 32;
-            int fieldW = ClientSize.Width - padX * 2;
+            ContentPanel.Controls.Add(footer);
 
-            int y = 26;
-            const int rowStep = 78;
+            // ---------- Body ----------
+            int fieldW = ClientSize.Width - PadX * 2;
+            int y = 28;
 
-            // ---- Username ----
-            AddFieldLabel("Username:", padX, y);
+            // Username
+            AddFieldLabel("Username", PadX, y, fieldW);
             _txtUsername = UiFactory.CreateTextBox(fieldW);
-            _txtUsername.Location = new Point(padX, y + 22);
+            _txtUsername.Location = new Point(PadX, y + LabelH + 4);
             _txtUsername.MaxLength = 50;
             _txtUsername.Placeholder = "letters, digits, _ and . only";
             ContentPanel.Controls.Add(_txtUsername);
-            y += rowStep;
+            y += LabelH + 4 + FieldH + RowGap;
 
-            // ---- Full Name ----
-            AddFieldLabel("Full Name:", padX, y);
+            // Full Name
+            AddFieldLabel("Full Name", PadX, y, fieldW);
             _txtFullName = UiFactory.CreateTextBox(fieldW);
-            _txtFullName.Location = new Point(padX, y + 22);
+            _txtFullName.Location = new Point(PadX, y + LabelH + 4);
             _txtFullName.MaxLength = 100;
             _txtFullName.Placeholder = "e.g. Juan Dela Cruz";
             ContentPanel.Controls.Add(_txtFullName);
-            y += rowStep;
+            y += LabelH + 4 + FieldH + RowGap;
 
-            // ---- Role ----
-            AddFieldLabel("Role:", padX, y);
+            // Role
+            AddFieldLabel("Role", PadX, y, fieldW);
             _cmbRole = new RoundedComboBox
             {
                 Width = fieldW,
-                Location = new Point(padX, y + 22)
+                Location = new Point(PadX, y + LabelH + 4)
             };
             _cmbRole.Items.Add("Cashier");
             _cmbRole.Items.Add("Owner");
             _cmbRole.SelectedIndex = 0;
             ContentPanel.Controls.Add(_cmbRole);
-            y += rowStep;
+            y += LabelH + 4 + FieldH + RowGap;
 
-            // ---- Password ----
-            AddFieldLabel("Password:", padX, y);
+            // Password
+            AddFieldLabel("Password", PadX, y, fieldW);
             _txtPassword = UiFactory.CreateTextBox(fieldW, isPassword: true);
-            _txtPassword.Location = new Point(padX, y + 22);
+            _txtPassword.Location = new Point(PadX, y + LabelH + 4);
             _txtPassword.MaxLength = 100;
             _txtPassword.ShowPasswordToggle = true;
             ContentPanel.Controls.Add(_txtPassword);
@@ -143,42 +156,24 @@ namespace TodangMotor.Forms
                 Font = Theme.FontTiny,
                 ForeColor = Theme.TextMuted,
                 AutoSize = false,
-                Location = new Point(padX, y + 68),
+                Location = new Point(PadX, y + LabelH + 4 + FieldH + 2),
                 Size = new Size(fieldW, 18),
                 TextAlign = ContentAlignment.MiddleLeft,
                 BackColor = Color.Transparent
             };
             ContentPanel.Controls.Add(_lblPasswordHint);
-            y += rowStep + 18;
+            y += LabelH + 4 + FieldH + 22 + RowGap;
 
-            // ---- Confirm Password ----
-            AddFieldLabel("Confirm Password:", padX, y);
+            // Confirm Password
+            AddFieldLabel("Confirm Password", PadX, y, fieldW);
             _txtConfirmPassword = UiFactory.CreateTextBox(fieldW, isPassword: true);
-            _txtConfirmPassword.Location = new Point(padX, y + 22);
+            _txtConfirmPassword.Location = new Point(PadX, y + LabelH + 4);
             _txtConfirmPassword.MaxLength = 100;
             _txtConfirmPassword.ShowPasswordToggle = true;
             ContentPanel.Controls.Add(_txtConfirmPassword);
-            y += rowStep;
-
-            // ---- Status ----
-            _lblStatus = new Label
-            {
-                Text = string.Empty,
-                Font = Theme.FontSmall,
-                ForeColor = Theme.Danger,
-                AutoSize = false,
-                Location = new Point(padX, y),
-                Size = new Size(fieldW, 60),
-                TextAlign = ContentAlignment.TopLeft,
-                BackColor = Color.Transparent
-            };
-            ContentPanel.Controls.Add(_lblStatus);
-
-            // Footer added last so it docks first and wins the bottom edge.
-            ContentPanel.Controls.Add(footer);
         }
 
-        private void AddFieldLabel(string text, int x, int y)
+        private void AddFieldLabel(string text, int x, int y, int width)
         {
             var lbl = new Label
             {
@@ -186,17 +181,13 @@ namespace TodangMotor.Forms
                 Font = Theme.FontSmall,
                 ForeColor = Theme.TextSecondary,
                 AutoSize = false,
-                Size = new Size(400, 18),
                 Location = new Point(x, y),
+                Size = new Size(width, LabelH),
                 TextAlign = ContentAlignment.MiddleLeft,
                 BackColor = Color.Transparent
             };
             ContentPanel.Controls.Add(lbl);
         }
-
-        // ============================================================
-        // LOAD
-        // ============================================================
 
         private void UserForm_Load(object? sender, EventArgs e)
         {
@@ -220,12 +211,10 @@ namespace TodangMotor.Forms
             }
         }
 
-        // ============================================================
-        // SAVE
-        // ============================================================
-
         private async Task SaveAsync()
         {
+            _lblStatus.Text = string.Empty;
+
             string pw = _txtPassword.Text ?? string.Empty;
             string confirm = _txtConfirmPassword.Text ?? string.Empty;
 
@@ -277,10 +266,6 @@ namespace TodangMotor.Forms
             }
         }
 
-        // ============================================================
-        // EVENTS
-        // ============================================================
-
         private void UserForm_KeyDown(object? sender, KeyEventArgs e)
         {
             if (e.KeyCode == Keys.Escape)
@@ -289,10 +274,6 @@ namespace TodangMotor.Forms
                 Close();
             }
         }
-
-        // ============================================================
-        // HELPERS
-        // ============================================================
 
         private void SetBusy(bool busy)
         {

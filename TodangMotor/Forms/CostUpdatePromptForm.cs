@@ -16,6 +16,10 @@ namespace TodangMotor.Forms
     /// </summary>
     public class CostUpdatePromptForm : ShellForm
     {
+        private const int ColBrandW = 140;
+        private const int ColCostW = 130;
+        private const int ColSellW = 130;
+
         public CostUpdatePromptForm(
             List<CostComparisonItem> changes,
             List<CostComparisonItem> skipped)
@@ -24,8 +28,8 @@ namespace TodangMotor.Forms
             ShowMaximizeButton = false;
             ShowMinimizeButton = false;
             StartPosition = FormStartPosition.CenterParent;
-            ClientSize = new Size(720, 600);
-            MinimumSize = new Size(660, 520);
+            ClientSize = new Size(780, 640);
+            MinimumSize = new Size(720, 580);
             BackColor = Theme.Background;
 
             BuildLayout(changes ?? new List<CostComparisonItem>(),
@@ -34,24 +38,32 @@ namespace TodangMotor.Forms
 
         private void BuildLayout(List<CostComparisonItem> changes, List<CostComparisonItem> skipped)
         {
-            // ---- Footer ----
+            // ---------- Footer ----------
             var footer = new Panel
             {
                 Dock = DockStyle.Bottom,
-                Height = 76,
+                Height = 88,
                 BackColor = Theme.Background
             };
 
-            const int btnW = 160;
-            const int btnH = 44;
-            const int padX = 24;
+            var divider = new Panel
+            {
+                Dock = DockStyle.Top,
+                Height = 1,
+                BackColor = Theme.Divider
+            };
+            footer.Controls.Add(divider);
+
+            int btnW = 160;
+            int btnH = UiFactory.PrimaryButtonHeight;
+            const int padX = 32;
 
             var btnNo = UiFactory.CreateButton("Keep Current", UiFactory.ButtonStyle.Ghost, btnW, btnH);
-            btnNo.Location = new Point(0, 16);
+            btnNo.Anchor = AnchorStyles.Top | AnchorStyles.Right;
             btnNo.Click += (s, e) => { DialogResult = DialogResult.No; Close(); };
 
             var btnYes = UiFactory.CreateButton("Update Costs", UiFactory.ButtonStyle.Primary, btnW, btnH);
-            btnYes.Location = new Point(0, 16);
+            btnYes.Anchor = AnchorStyles.Top | AnchorStyles.Right;
             btnYes.Click += (s, e) => { DialogResult = DialogResult.Yes; Close(); };
 
             footer.Controls.Add(btnNo);
@@ -59,24 +71,24 @@ namespace TodangMotor.Forms
 
             footer.Resize += (s, e) =>
             {
-                btnYes.Location = new Point(footer.ClientSize.Width - padX - btnW, 16);
-                btnNo.Location = new Point(footer.ClientSize.Width - padX - btnW - 8 - btnW, 16);
+                btnYes.Location = new Point(footer.ClientSize.Width - padX - btnW, 22);
+                btnNo.Location = new Point(btnYes.Left - 8 - btnW, 22);
             };
 
             ContentPanel.Controls.Add(footer);
 
-            // ---- Scrollable body ----
+            // ---------- Scrollable body ----------
             var body = new Panel
             {
                 Dock = DockStyle.Fill,
                 AutoScroll = true,
-                BackColor = Theme.Background
+                BackColor = Theme.Background,
+                Padding = new Padding(32, 20, 32, 0)
             };
             ContentPanel.Controls.Add(body);
             body.BringToFront();
 
-            int left = 24;
-            int width = ClientSize.Width - left * 2;
+            int width = ClientSize.Width - 32 * 2 - 20; // allowance for scrollbar
 
             var intro = new Label
             {
@@ -86,105 +98,143 @@ namespace TodangMotor.Forms
                 Font = Theme.FontBody,
                 ForeColor = Theme.TextPrimary,
                 AutoSize = false,
-                Location = new Point(left, 16),
-                Size = new Size(width, 68),
+                Location = new Point(32, 20),
+                Size = new Size(width, 70),
                 TextAlign = ContentAlignment.TopLeft,
                 BackColor = Color.Transparent
             };
             body.Controls.Add(intro);
 
-            int y = 92;
+            int y = 106;
 
             if (changes.Count > 0)
             {
                 var lbl = new Label
                 {
-                    Text = $"Will be updated ({changes.Count}):",
-                    Font = Theme.FontBodyBold,
-                    ForeColor = Theme.TextPrimary,
+                    Text = $"WILL BE UPDATED  ({changes.Count})",
+                    Font = new Font(Theme.UiFontFamily, 10F, FontStyle.Bold),
+                    ForeColor = Theme.Primary,
                     AutoSize = false,
-                    Location = new Point(left, y),
-                    Size = new Size(width, 22),
+                    Location = new Point(32, y),
+                    Size = new Size(width, 24),
                     TextAlign = ContentAlignment.MiddleLeft,
                     BackColor = Color.Transparent
                 };
                 body.Controls.Add(lbl);
                 y += 28;
 
-                var grid = BuildChangeGrid(changes);
-                grid.Location = new Point(left, y);
-                grid.Size = new Size(width, 160);
+                var grid = BuildChangeGrid(changes, width, 180);
+                grid.Location = new Point(32, y);
                 body.Controls.Add(grid);
-                y += 180;
+                y += 180 + 20;
             }
 
             if (skipped.Count > 0)
             {
                 var lbl = new Label
                 {
-                    Text = $"⚠ Skipped — new cost exceeds current selling price ({skipped.Count}):",
-                    Font = Theme.FontBodyBold,
+                    Text = $"⚠  SKIPPED — new cost exceeds current selling price  ({skipped.Count})",
+                    Font = new Font(Theme.UiFontFamily, 10F, FontStyle.Bold),
                     ForeColor = Theme.Danger,
                     AutoSize = false,
-                    Location = new Point(left, y),
-                    Size = new Size(width, 22),
+                    Location = new Point(32, y),
+                    Size = new Size(width, 24),
                     TextAlign = ContentAlignment.MiddleLeft,
                     BackColor = Color.Transparent
                 };
                 body.Controls.Add(lbl);
                 y += 28;
 
-                var grid = BuildSkipGrid(skipped);
-                grid.Location = new Point(left, y);
-                grid.Size = new Size(width, 140);
+                var grid = BuildSkipGrid(skipped, width, 160);
+                grid.Location = new Point(32, y);
                 body.Controls.Add(grid);
             }
         }
 
-        private DataGridView BuildChangeGrid(List<CostComparisonItem> items)
+        private DataGridView BuildChangeGrid(List<CostComparisonItem> items, int width, int height)
         {
-            var grid = new DataGridView();
-            UiFactory.StyleGrid(grid);
+            var grid = new DataGridView
+            {
+                Size = new Size(width, height),
+                AllowUserToAddRows = false,
+                AllowUserToDeleteRows = false,
+                ReadOnly = true
+            };
+            UiFactory.StyleGridModern(grid);
+            grid.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.None;
 
             grid.DataSource = items.Select(c => new
             {
-                Product = c.ProductName,
-                Brand = c.Brand,
+                Product = c.ProductName ?? string.Empty,
+                Brand = c.Brand ?? string.Empty,
                 OldCost = c.CurrentCost.ToString("N2"),
                 NewCost = c.NewCost.ToString("N2")
             }).ToList();
 
-            if (grid.Columns.Contains("Product")) grid.Columns["Product"].HeaderText = "Product";
-            if (grid.Columns.Contains("Brand")) grid.Columns["Brand"].HeaderText = "Brand";
-            if (grid.Columns.Contains("OldCost")) grid.Columns["OldCost"].HeaderText = "Current Cost";
-            if (grid.Columns.Contains("NewCost")) grid.Columns["NewCost"].HeaderText = "New Cost";
+            ConfigureColumns(grid,
+                ("Product", 300, DataGridViewContentAlignment.MiddleLeft),
+                ("Brand", ColBrandW, DataGridViewContentAlignment.MiddleLeft),
+                ("OldCost", ColCostW, DataGridViewContentAlignment.MiddleRight),
+                ("NewCost", ColCostW, DataGridViewContentAlignment.MiddleRight));
 
-            grid.ReadOnly = true;
-            grid.SelectionMode = DataGridViewSelectionMode.FullRowSelect;
+            grid.Columns["OldCost"].HeaderText = "Current Cost (₱)";
+            grid.Columns["NewCost"].HeaderText = "New Cost (₱)";
+
+            if (grid.Columns.Contains("Product"))
+                grid.Columns["Product"].AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill;
+
+            grid.ClearSelection();
             return grid;
         }
 
-        private DataGridView BuildSkipGrid(List<CostComparisonItem> items)
+        private DataGridView BuildSkipGrid(List<CostComparisonItem> items, int width, int height)
         {
-            var grid = new DataGridView();
-            UiFactory.StyleGrid(grid);
+            var grid = new DataGridView
+            {
+                Size = new Size(width, height),
+                AllowUserToAddRows = false,
+                AllowUserToDeleteRows = false,
+                ReadOnly = true
+            };
+            UiFactory.StyleGridModern(grid);
+            grid.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.None;
 
             grid.DataSource = items.Select(c => new
             {
-                Product = c.ProductName,
-                Brand = c.Brand,
+                Product = c.ProductName ?? string.Empty,
+                Brand = c.Brand ?? string.Empty,
                 NewCost = c.NewCost.ToString("N2"),
                 Selling = c.CurrentSellingPrice.ToString("N2")
             }).ToList();
 
-            if (grid.Columns.Contains("Product")) grid.Columns["Product"].HeaderText = "Product";
-            if (grid.Columns.Contains("Brand")) grid.Columns["Brand"].HeaderText = "Brand";
-            if (grid.Columns.Contains("NewCost")) grid.Columns["NewCost"].HeaderText = "New Cost";
-            if (grid.Columns.Contains("Selling")) grid.Columns["Selling"].HeaderText = "Selling Price";
+            ConfigureColumns(grid,
+                ("Product", 300, DataGridViewContentAlignment.MiddleLeft),
+                ("Brand", ColBrandW, DataGridViewContentAlignment.MiddleLeft),
+                ("NewCost", ColCostW, DataGridViewContentAlignment.MiddleRight),
+                ("Selling", ColSellW, DataGridViewContentAlignment.MiddleRight));
 
-            grid.ReadOnly = true;
-            grid.SelectionMode = DataGridViewSelectionMode.FullRowSelect;
+            grid.Columns["NewCost"].HeaderText = "New Cost (₱)";
+            grid.Columns["Selling"].HeaderText = "Selling Price (₱)";
+
+            if (grid.Columns.Contains("Product"))
+                grid.Columns["Product"].AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill;
+
+            grid.ClearSelection();
             return grid;
+        }
+
+        private static void ConfigureColumns(
+            DataGridView grid,
+            params (string name, int width, DataGridViewContentAlignment align)[] specs)
+        {
+            foreach (var (name, width, align) in specs)
+            {
+                if (!grid.Columns.Contains(name)) continue;
+                grid.Columns[name].Width = width;
+                grid.Columns[name].SortMode = DataGridViewColumnSortMode.NotSortable;
+                grid.Columns[name].Resizable = DataGridViewTriState.False;
+                grid.Columns[name].DefaultCellStyle.Alignment = align;
+            }
         }
     }
 }

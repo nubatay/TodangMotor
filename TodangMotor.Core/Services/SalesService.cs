@@ -144,7 +144,8 @@ namespace TodangMotor.Services
                 List<SaleRequestLine> lines,
                 string? paymentMethod,
                 decimal amountTendered,
-                string? customerName)
+                string? customerName,
+                string? gcashReference)
         {
             if (!SessionManager.IsLoggedIn)
                 return (false, NotLoggedInMessage, 0, string.Empty);
@@ -256,6 +257,7 @@ namespace TodangMotor.Services
                 SaleDate = DateTime.Now,
                 CustomerName = cleanCustomerName,
                 PaymentMethod = cleanPayment,
+                ReferenceNo = string.IsNullOrWhiteSpace(gcashReference) ? null : gcashReference.Trim(), // <-- ADD THIS LINE
                 Subtotal = subtotal,
                 AmountTendered = amountTendered,
                 ChangeAmount = change,

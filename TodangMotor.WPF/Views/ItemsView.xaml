@@ -1,0 +1,220 @@
+﻿<UserControl x:Class="TodangMotor.WPF.Views.ItemsView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
+             xmlns:conv="clr-namespace:TodangMotor.WPF.Converters">
+
+    <UserControl.Resources>
+        <BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter"/>
+        <conv:ActionIconConverter x:Key="ActionIconConverter" />
+
+        <SolidColorBrush x:Key="Brand" Color="#4D6BFE"/>
+        <SolidColorBrush x:Key="Ink" Color="#0F172A"/>
+        <SolidColorBrush x:Key="Muted" Color="#64748B"/>
+        <SolidColorBrush x:Key="Line" Color="#EAECF3"/>
+        <SolidColorBrush x:Key="Canvas" Color="#F5F6FA"/>
+
+        <!-- Input Styles (Search & Filter) -->
+        <Style x:Key="InputBorder" TargetType="Border">
+            <Setter Property="Background" Value="#F8FAFC"/>
+            <Setter Property="BorderBrush" Value="#E2E8F0"/>
+            <Setter Property="BorderThickness" Value="1.5"/>
+            <Setter Property="CornerRadius" Value="10"/>
+            <Setter Property="Height" Value="42"/>
+            <Style.Triggers>
+                <Trigger Property="IsKeyboardFocusWithin" Value="True">
+                    <Setter Property="BorderBrush" Value="#4D6BFE"/>
+                    <Setter Property="Background" Value="#FFFFFF"/>
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+
+        <Style x:Key="CleanTextBox" TargetType="TextBox">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="VerticalContentAlignment" Value="Center"/>
+            <Setter Property="FontSize" Value="14"/>
+            <Setter Property="Foreground" Value="{StaticResource Ink}"/>
+            <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+        </Style>
+
+        <!-- DataGrid Base Style -->
+        <Style x:Key="CleanDataGrid" TargetType="DataGrid">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="RowBackground" Value="Transparent"/>
+            <Setter Property="AlternatingRowBackground" Value="Transparent"/>
+            <Setter Property="HeadersVisibility" Value="Column"/>
+            <Setter Property="GridLinesVisibility" Value="None"/>
+            <Setter Property="AutoGenerateColumns" Value="False"/>
+            <Setter Property="IsReadOnly" Value="True"/>
+            <Setter Property="CanUserAddRows" Value="False"/>
+            <Setter Property="SelectionMode" Value="Single"/>
+            <Setter Property="SelectionUnit" Value="FullRow"/>
+        </Style>
+
+        <!-- DEFAULT Header Style: Left Aligned (For Text) -->
+        <Style TargetType="DataGridColumnHeader">
+            <Setter Property="Background" Value="#F1F5F9"/>
+            <Setter Property="Foreground" Value="#334155"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="FontSize" Value="14"/>
+            <Setter Property="Padding" Value="12,12"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="HorizontalContentAlignment" Value="Left"/>
+        </Style>
+
+        <!-- CENTERED Header Style (For Numbers/Status/Icons) -->
+        <Style x:Key="CenterHeader" TargetType="DataGridColumnHeader" BasedOn="{StaticResource {x:Type DataGridColumnHeader}}">
+            <Setter Property="HorizontalContentAlignment" Value="Center"/>
+        </Style>
+
+        <!-- Row & Cell Base Styles -->
+        <Style TargetType="DataGridRow">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="BorderThickness" Value="0,0,0,1"/>
+            <Setter Property="BorderBrush" Value="{StaticResource Line}"/>
+            <Setter Property="Height" Value="50"/>
+            <Style.Triggers>
+                <Trigger Property="IsMouseOver" Value="True">
+                    <Setter Property="Background" Value="#F8FAFC"/>
+                </Trigger>
+                <Trigger Property="IsSelected" Value="True">
+                    <Setter Property="Background" Value="#EEF1FF"/>
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+
+        <Style TargetType="DataGridCell">
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Padding" Value="12,0"/>
+            <Setter Property="VerticalContentAlignment" Value="Center"/>
+            <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+            <Style.Triggers>
+                <Trigger Property="IsSelected" Value="True">
+                    <Setter Property="Foreground" Value="{StaticResource Ink}"/>
+                    <Setter Property="Background" Value="Transparent"/>
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+
+        <!-- Text Element Styles -->
+        <!-- Left Aligned Text (Letters) -->
+        <Style x:Key="LeftAlignedText" TargetType="TextBlock">
+            <Setter Property="TextTrimming" Value="CharacterEllipsis"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+            <Setter Property="HorizontalAlignment" Value="Left"/>
+            <Setter Property="TextAlignment" Value="Left"/>
+            <Setter Property="ToolTip" Value="{Binding Text, RelativeSource={RelativeSource Self}}"/>
+        </Style>
+
+        <!-- Center Aligned Text (Numbers) -->
+        <Style x:Key="CenterAlignedText" TargetType="TextBlock" BasedOn="{StaticResource LeftAlignedText}">
+            <Setter Property="HorizontalAlignment" Value="Center"/>
+            <Setter Property="TextAlignment" Value="Center"/>
+        </Style>
+    </UserControl.Resources>
+
+    <Grid Background="{StaticResource Canvas}" Margin="28">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
+
+        <!-- Header -->
+        <Grid Grid.Row="0" Margin="0,0,0,24">
+            <StackPanel VerticalAlignment="Center">
+                <TextBlock Text="Item Catalog" FontSize="28" FontWeight="Bold" Foreground="{StaticResource Ink}"/>
+                <TextBlock Text="Manage all products, pricing, and inventory thresholds." FontSize="14" Foreground="{StaticResource Muted}" Margin="0,4,0,0"/>
+            </StackPanel>
+
+            <ui:Button Appearance="Primary" Content="Add New Item" Command="{Binding AddProductCommand}" 
+                       Icon="{ui:SymbolIcon Add24}" HorizontalAlignment="Right" VerticalAlignment="Center"
+                       Height="42" Padding="16,0" Background="{StaticResource Brand}"/>
+        </Grid>
+
+        <!-- Filter Bar -->
+        <Border Grid.Row="1" Background="#FFFFFF" BorderBrush="{StaticResource Line}" BorderThickness="1" CornerRadius="12" Padding="16" Margin="0,0,0,16">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="16"/>
+                    <ColumnDefinition Width="200"/>
+                    <ColumnDefinition Width="16"/>
+                    <ColumnDefinition Width="150"/>
+                </Grid.ColumnDefinitions>
+
+                <Border Grid.Column="0" Style="{StaticResource InputBorder}">
+                    <Grid>
+                        <ui:SymbolIcon Symbol="Search24" Foreground="#94A3B8" FontSize="18" HorizontalAlignment="Left" VerticalAlignment="Center" Margin="14,0,0,0"/>
+                        <TextBox x:Name="SearchInput" Style="{StaticResource CleanTextBox}" Margin="42,0,12,0"
+                                 Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged}"/>
+                    </Grid>
+                </Border>
+
+                <ComboBox Grid.Column="2" ItemsSource="{Binding Categories}" SelectedItem="{Binding SelectedCategory}" 
+                          DisplayMemberPath="CategoryName" Background="#F8FAFC" BorderBrush="#E2E8F0" Height="42" VerticalContentAlignment="Center" Padding="10,0"/>
+
+                <ComboBox Grid.Column="4" ItemsSource="{Binding StatusFilters}" SelectedItem="{Binding SelectedStatus}" 
+                          Background="#F8FAFC" BorderBrush="#E2E8F0" Height="42" VerticalContentAlignment="Center" Padding="10,0"/>
+            </Grid>
+        </Border>
+
+        <!-- Data Grid -->
+        <Border Grid.Row="2" Background="#FFFFFF" BorderBrush="{StaticResource Line}" BorderThickness="1" CornerRadius="12">
+            <Border.Effect>
+                <DropShadowEffect Color="#0F172A" Opacity="0.04" BlurRadius="16" ShadowDepth="2" Direction="270"/>
+            </Border.Effect>
+
+            <DataGrid Style="{StaticResource CleanDataGrid}" ItemsSource="{Binding FilteredProducts}" Margin="8">
+                <DataGrid.Columns>
+                    <!-- TEXT COLUMNS (Header Left, Data Left) -->
+                    <DataGridTextColumn Header="Product Name" Binding="{Binding ProductName}" Width="2*" ElementStyle="{StaticResource LeftAlignedText}"/>
+                    <DataGridTextColumn Header="Brand" Binding="{Binding Brand}" Width="1.5*" ElementStyle="{StaticResource LeftAlignedText}"/>
+                    <DataGridTextColumn Header="Category" Binding="{Binding CategoryName}" Width="1.5*" ElementStyle="{StaticResource LeftAlignedText}"/>
+
+                    <!-- NUMBER COLUMNS (Header Center, Data Center) -->
+                    <DataGridTextColumn Header="Cost" Binding="{Binding CostPrice, StringFormat=C2}" Width="100" 
+                                        HeaderStyle="{StaticResource CenterHeader}" ElementStyle="{StaticResource CenterAlignedText}"/>
+                    <DataGridTextColumn Header="Selling" Binding="{Binding SellingPrice, StringFormat=C2}" Width="100" 
+                                        HeaderStyle="{StaticResource CenterHeader}" ElementStyle="{StaticResource CenterAlignedText}"/>
+                    <DataGridTextColumn Header="Stock" Binding="{Binding QuantityOnHand}" Width="80" 
+                                        HeaderStyle="{StaticResource CenterHeader}" ElementStyle="{StaticResource CenterAlignedText}"/>
+
+                    <!-- STATUS COLUMN (Header Center, Data Center) -->
+                    <DataGridTemplateColumn Header="Status" Width="100" HeaderStyle="{StaticResource CenterHeader}">
+                        <DataGridTemplateColumn.CellTemplate>
+                            <DataTemplate>
+                                <!-- HorizontalAlignment="Center" is the magic here -->
+                                <Border Background="{Binding StatusColor}" CornerRadius="10" Padding="8,2" HorizontalAlignment="Center">
+                                    <TextBlock Text="{Binding StatusText}" Foreground="White" FontSize="11" FontWeight="Bold"/>
+                                </Border>
+                            </DataTemplate>
+                        </DataGridTemplateColumn.CellTemplate>
+                    </DataGridTemplateColumn>
+
+                    <!-- ACTIONS COLUMN (Header Center, Data Center) -->
+                    <DataGridTemplateColumn Header="" Width="120" HeaderStyle="{StaticResource CenterHeader}">
+                        <DataGridTemplateColumn.CellTemplate>
+                            <DataTemplate>
+                                <!-- HorizontalAlignment="Center" centers the icons -->
+                                <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
+                                    <Button Command="{Binding DataContext.EditProductCommand, RelativeSource={RelativeSource AncestorType=UserControl}}" 
+                                            CommandParameter="{Binding}" Background="Transparent" BorderThickness="0" Cursor="Hand" ToolTip="Edit Item">
+                                        <ui:SymbolIcon Symbol="Edit24" Foreground="#4D6BFE" FontSize="18"/>
+                                    </Button>
+
+                                    <Button Command="{Binding DataContext.ToggleStatusCommand, RelativeSource={RelativeSource AncestorType=UserControl}}" 
+                                            CommandParameter="{Binding}" Background="Transparent" BorderThickness="0" Cursor="Hand" Margin="10,0,0,0" ToolTip="Deactivate/Reactivate">
+                                        <ui:SymbolIcon Symbol="{Binding IsActive, Converter={StaticResource ActionIconConverter}}" Foreground="#EF4444" FontSize="18"/>
+                                    </Button>
+                                </StackPanel>
+                            </DataTemplate>
+                        </DataGridTemplateColumn.CellTemplate>
+                    </DataGridTemplateColumn>
+                </DataGrid.Columns>
+            </DataGrid>
+        </Border>
+    </Grid>
+</UserControl>

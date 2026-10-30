@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.Drawing;
 using System.Linq;
 using System.Threading.Tasks;
@@ -8,38 +9,29 @@ using TodangMotor.Services;
 
 namespace TodangMotor.Forms
 {
-    /// <summary>
-    /// Sale detail popup. Shows one sale's full information.
-    /// View-only.
-    /// </summary>
     public class SaleDetailForm : ShellForm
     {
         private readonly SalesService _salesService = new();
         private readonly int _saleId;
 
         private SaleDetailResult? _detail;
+        private bool _isBusy;
 
-        // ---- Header info ----
-        private Label _lblInvoiceNumber;
-        private Label _metaDateValue;
-        private Label _metaCashierValue;
-        private Label _metaCustomerValue;
-        private Label _metaPaymentValue;
+        private Label _lblInvoiceNumber = null!;
+        private Label _metaDateValue = null!;
+        private Label _metaCashierValue = null!;
+        private Label _metaCustomerValue = null!;
+        private Label _metaPaymentValue = null!;
+        private Label _metaReferenceValue = null!;
 
-        // ---- Line items ----
-        private DataGridView _linesGrid;
+        private DataGridView _linesGrid = null!;
 
-        // ---- Totals ----
-        private Label _lblSubtotal;
-        private Label _lblTendered;
-        private Label _lblChange;
+        private Label _lblSubtotal = null!;
+        private Label _lblTendered = null!;
+        private Label _lblChange = null!;
 
-        // ---- Footer ----
-        private Button _btnClose;
-
-        // ============================================================
-        // CONSTRUCTION
-        // ============================================================
+        private Button _btnPrint = null!;
+        private Button _btnClose = null!;
 
         public SaleDetailForm(int saleId)
         {
@@ -50,7 +42,7 @@ namespace TodangMotor.Forms
             ShowMinimizeButton = true;
             StartPosition = FormStartPosition.CenterParent;
             ClientSize = new Size(820, 780);
-            MinimumSize = new Size(760, 700);
+            MinimumSize = new Size(760, 720);
             BackColor = Theme.Background;
             KeyPreview = true;
 
@@ -63,10 +55,6 @@ namespace TodangMotor.Forms
             };
         }
 
-        // ============================================================
-        // LAYOUT
-        // ============================================================
-
         private void BuildLayout()
         {
             var root = new TableLayoutPanel
@@ -78,10 +66,10 @@ namespace TodangMotor.Forms
                 Margin = Padding.Empty,
                 Padding = Padding.Empty
             };
-            root.RowStyles.Add(new RowStyle(SizeType.Absolute, 170));
+            root.RowStyles.Add(new RowStyle(SizeType.Absolute, 210));
             root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-            root.RowStyles.Add(new RowStyle(SizeType.Absolute, 120));
-            root.RowStyles.Add(new RowStyle(SizeType.Absolute, 88));
+            root.RowStyles.Add(new RowStyle(SizeType.Absolute, 128));
+            root.RowStyles.Add(new RowStyle(SizeType.Absolute, 96));
 
             root.Controls.Add(BuildInfoBlock(), 0, 0);
             root.Controls.Add(BuildGridBlock(), 0, 1);
@@ -101,64 +89,75 @@ namespace TodangMotor.Forms
             };
 
             const int padX = 32;
-            const int contentW = 740;
+            int contentW = ClientSize.Width - (padX * 2);
 
-            // ---- "INVOICE" caption ----
             var caption = new Label
             {
                 Text = "INVOICE",
-                Font = new Font(Theme.UiFontFamily, 9F, FontStyle.Bold),
+                Font = new Font(Theme.UiFontFamily, 9.5F, FontStyle.Bold),
                 ForeColor = Theme.TextMuted,
                 AutoSize = false,
-                Location = new Point(padX, 14),
-                Size = new Size(contentW, 16),
+                Location = new Point(padX, 16),
+                Size = new Size(contentW, 18),
                 TextAlign = ContentAlignment.MiddleLeft,
                 BackColor = Color.Transparent
             };
 
-            // ---- Invoice number ----
             _lblInvoiceNumber = new Label
             {
                 Text = "—",
-                Font = new Font(Theme.UiFontFamily, 18F, FontStyle.Bold),
+                Font = new Font(Theme.UiFontFamily, 20F, FontStyle.Bold),
                 ForeColor = Theme.TextPrimary,
                 AutoSize = false,
-                Location = new Point(padX, 32),
-                Size = new Size(contentW, 34),
+                Location = new Point(padX, 36),
+                Size = new Size(contentW, 40),
                 TextAlign = ContentAlignment.MiddleLeft,
                 BackColor = Color.Transparent
             };
 
-            // ---- Divider under invoice ----
             var divider = new Panel
             {
-                Location = new Point(padX, 76),
+                Location = new Point(padX, 88),
                 Size = new Size(contentW, 1),
                 BackColor = Theme.Divider
             };
 
-            // ---- 4-column × 2-row meta grid ----
+            var metaBox = new RoundedPanel
+            {
+                Location = new Point(padX, 100),
+                Size = new Size(contentW, 100),
+                Radius = Theme.RadiusSmall,
+                BorderColor = Theme.Divider,
+                BorderSize = 1,
+                ShadowEnabled = false,
+                BackColor = Theme.Surface,
+                Padding = new Padding(16, 12, 16, 12),
+                Anchor = AnchorStyles.Top | AnchorStyles.Left
+            };
+
             var meta = new TableLayoutPanel
             {
                 ColumnCount = 4,
-                RowCount = 2,
-                Location = new Point(padX, 86),
-                Size = new Size(contentW, 60),
+                RowCount = 3,
+                Dock = DockStyle.Fill,
                 BackColor = Color.Transparent,
                 Margin = Padding.Empty,
                 Padding = Padding.Empty
             };
-            meta.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 80));
-            meta.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
-            meta.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 80));
-            meta.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
-            meta.RowStyles.Add(new RowStyle(SizeType.Absolute, 30));
-            meta.RowStyles.Add(new RowStyle(SizeType.Absolute, 30));
+            meta.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 15f));
+            meta.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 35f));
+            meta.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 15f));
+            meta.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 35f));
+
+            meta.RowStyles.Add(new RowStyle(SizeType.Percent, 33f));
+            meta.RowStyles.Add(new RowStyle(SizeType.Percent, 33f));
+            meta.RowStyles.Add(new RowStyle(SizeType.Percent, 34f));
 
             _metaDateValue = MakeMetaValue();
             _metaCashierValue = MakeMetaValue();
             _metaCustomerValue = MakeMetaValue();
             _metaPaymentValue = MakeMetaValue();
+            _metaReferenceValue = MakeMetaValue();
 
             meta.Controls.Add(MakeMetaLabel("Date"), 0, 0);
             meta.Controls.Add(_metaDateValue, 1, 0);
@@ -170,43 +169,54 @@ namespace TodangMotor.Forms
             meta.Controls.Add(MakeMetaLabel("Payment"), 2, 1);
             meta.Controls.Add(_metaPaymentValue, 3, 1);
 
+            meta.Controls.Add(MakeMetaLabel("Ref No"), 0, 2);
+            meta.Controls.Add(_metaReferenceValue, 1, 2);
+
+            metaBox.Controls.Add(meta);
+
             block.Controls.Add(caption);
             block.Controls.Add(_lblInvoiceNumber);
             block.Controls.Add(divider);
-            block.Controls.Add(meta);
+            block.Controls.Add(metaBox);
+
+            void AlignToBlockWidth()
+            {
+                int w = Math.Max(0, block.ClientSize.Width - (padX * 2));
+                caption.Width = w;
+                _lblInvoiceNumber.Width = w;
+                divider.Width = w;
+                metaBox.Width = w;
+            }
+            block.Resize += (s, e) => AlignToBlockWidth();
+            AlignToBlockWidth();
 
             return block;
         }
 
-        private static Label MakeMetaLabel(string text)
+        private static Label MakeMetaLabel(string text) => new Label
         {
-            return new Label
-            {
-                Text = text,
-                Font = Theme.FontSmall,
-                ForeColor = Theme.TextSecondary,
-                AutoSize = false,
-                Dock = DockStyle.Fill,
-                TextAlign = ContentAlignment.MiddleLeft,
-                BackColor = Color.Transparent,
-                Margin = new Padding(0)
-            };
-        }
+            Text = text,
+            Font = Theme.FontSmall,
+            ForeColor = Theme.TextSecondary,
+            AutoSize = false,
+            Dock = DockStyle.Fill,
+            TextAlign = ContentAlignment.MiddleLeft,
+            BackColor = Color.Transparent,
+            Margin = new Padding(0)
+        };
 
-        private static Label MakeMetaValue()
+        private static Label MakeMetaValue() => new Label
         {
-            return new Label
-            {
-                Text = string.Empty,
-                Font = Theme.FontBody,
-                ForeColor = Theme.TextPrimary,
-                AutoSize = false,
-                Dock = DockStyle.Fill,
-                TextAlign = ContentAlignment.MiddleLeft,
-                BackColor = Color.Transparent,
-                Margin = new Padding(0)
-            };
-        }
+            Text = string.Empty,
+            Font = Theme.FontBody,
+            ForeColor = Theme.TextPrimary,
+            AutoSize = false,
+            Dock = DockStyle.Fill,
+            TextAlign = ContentAlignment.MiddleLeft,
+            BackColor = Color.Transparent,
+            Margin = new Padding(0),
+            AutoEllipsis = true
+        };
 
         private Panel BuildGridBlock()
         {
@@ -220,10 +230,9 @@ namespace TodangMotor.Forms
             _linesGrid = new DataGridView
             {
                 Dock = DockStyle.Fill,
-                Margin = new Padding(0, 4, 0, 4)
+                Margin = new Padding(0)
             };
-            UiFactory.StyleGrid(_linesGrid);
-            _linesGrid.AlternatingRowsDefaultCellStyle.BackColor = Color.FromArgb(248, 249, 251);
+            UiFactory.StyleGridModern(_linesGrid);
             PrimeLinesColumns();
 
             block.Controls.Add(_linesGrid);
@@ -239,9 +248,9 @@ namespace TodangMotor.Forms
                 Padding = new Padding(32, 0, 32, 0)
             };
 
-            _lblSubtotal = MakeTotalLabel("Subtotal", 8, true);
-            _lblTendered = MakeTotalLabel("Tendered", 42, false);
-            _lblChange = MakeTotalLabel("Change", 72, false);
+            _lblSubtotal = MakeTotalLabel("Subtotal", 12, true);
+            _lblTendered = MakeTotalLabel("Tendered", 48, false);
+            _lblChange = MakeTotalLabel("Change", 78, false);
 
             block.Controls.Add(_lblSubtotal);
             block.Controls.Add(_lblTendered);
@@ -250,30 +259,23 @@ namespace TodangMotor.Forms
             return block;
         }
 
-        private Label MakeTotalLabel(string prefix, int y, bool bold)
+        private Label MakeTotalLabel(string prefix, int y, bool bold) => new Label
         {
-            return new Label
-            {
-                Text = prefix + ": ₱ 0.00",
-                Font = bold
-                    ? new Font(Theme.UiFontFamily, 13F, FontStyle.Bold)
-                    : Theme.FontBody,
-                ForeColor = bold ? Theme.TextPrimary : Theme.TextSecondary,
-                AutoSize = false,
-                Location = new Point(32, y),
-                Size = new Size(720, 28),
-                TextAlign = ContentAlignment.MiddleLeft,
-                BackColor = Color.Transparent
-            };
-        }
+            Text = prefix + ": ₱ 0.00",
+            Font = bold
+                ? new Font(Theme.UiFontFamily, 14F, FontStyle.Bold)
+                : Theme.FontBody,
+            ForeColor = bold ? Theme.TextPrimary : Theme.TextSecondary,
+            AutoSize = false,
+            Location = new Point(32, y),
+            Size = new Size(700, 30),
+            TextAlign = ContentAlignment.MiddleLeft,
+            BackColor = Color.Transparent
+        };
 
         private Panel BuildFooter()
         {
-            var footer = new Panel
-            {
-                Dock = DockStyle.Fill,
-                BackColor = Theme.Background
-            };
+            var footer = new Panel { Dock = DockStyle.Fill, BackColor = Theme.Background };
 
             var divider = new Panel
             {
@@ -283,18 +285,22 @@ namespace TodangMotor.Forms
             };
             footer.Controls.Add(divider);
 
-            const int btnW = 140;
-            const int btnH = 44;
+            int btnH = UiFactory.PrimaryButtonHeight;
 
-            _btnClose = UiFactory.CreateButton("Close", UiFactory.ButtonStyle.Ghost, btnW, btnH);
+            _btnPrint = UiFactory.CreateButton("Print", UiFactory.ButtonStyle.Primary, 120, btnH);
+            _btnPrint.Location = new Point(32, 26);
+            _btnPrint.Click += (s, e) => OnPrintClick();
+
+            _btnClose = UiFactory.CreateButton("Close", UiFactory.ButtonStyle.Ghost, 120, btnH);
             _btnClose.Anchor = AnchorStyles.Top | AnchorStyles.Right;
             _btnClose.Click += (s, e) => Close();
 
+            footer.Controls.Add(_btnPrint);
             footer.Controls.Add(_btnClose);
 
             footer.Resize += (s, e) =>
             {
-                _btnClose.Location = new Point(footer.ClientSize.Width - 32 - btnW, 22);
+                _btnClose.Location = new Point(footer.ClientSize.Width - 32 - _btnClose.Width, 26);
             };
 
             return footer;
@@ -324,13 +330,7 @@ namespace TodangMotor.Forms
             AddCol("Quantity", "Qty", 60, true);
             AddCol("UnitPrice", "Unit Price", 110, true);
             AddCol("LineTotal", "Line Total", 110, true);
-
-            _linesGrid.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill;
         }
-
-        // ============================================================
-        // LOAD
-        // ============================================================
 
         private async void SaleDetailForm_Load(object? sender, EventArgs e)
         {
@@ -344,11 +344,8 @@ namespace TodangMotor.Forms
 
             if (!success || detail == null)
             {
-                MessageBox.Show(
-                    error ?? "Could not load the sale.",
-                    "Error",
-                    MessageBoxButtons.OK,
-                    MessageBoxIcon.Error);
+                MessageBox.Show(error ?? "Could not load the sale.", "Error",
+                    MessageBoxButtons.OK, MessageBoxIcon.Error);
                 Close();
                 return;
             }
@@ -363,15 +360,11 @@ namespace TodangMotor.Forms
             var sale = _detail.Sale;
 
             _lblInvoiceNumber.Text = sale.InvoiceNo;
-
             _metaDateValue.Text = sale.SaleDate.ToString("MMM d, yyyy  h:mm tt");
-            _metaCashierValue.Text = string.IsNullOrEmpty(_detail.CashierName)
-                ? "—"
-                : _detail.CashierName;
-            _metaCustomerValue.Text = string.IsNullOrEmpty(sale.CustomerName)
-                ? "Walk-in"
-                : sale.CustomerName;
+            _metaCashierValue.Text = string.IsNullOrEmpty(_detail.CashierName) ? "—" : _detail.CashierName;
+            _metaCustomerValue.Text = string.IsNullOrEmpty(sale.CustomerName) ? "Walk-in" : sale.CustomerName;
             _metaPaymentValue.Text = sale.PaymentMethod ?? string.Empty;
+            _metaReferenceValue.Text = string.IsNullOrWhiteSpace(sale.ReferenceNo) ? "—" : sale.ReferenceNo;
 
             var lineRows = _detail.Lines
                 .Select(l => new
@@ -390,16 +383,41 @@ namespace TodangMotor.Forms
             _lblChange.Text = $"Change:    ₱ {sale.ChangeAmount:N2}";
         }
 
+        // -----------------------------------------------------------------
+        //  Printing
+        // -----------------------------------------------------------------
+
+        private void OnPrintClick()
+        {
+            if (_isBusy || _detail == null) return;
+
+            _isBusy = true;
+            _btnPrint.Enabled = false;
+            _btnClose.Enabled = false;
+            try
+            {
+                // Reuse the same print pipeline as ReceiptForm so the output
+                // is identical whether you print from a receipt or a sale.
+                ReceiptForm.PrintReceipt(_detail, this);
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show("Could not print the sale.\n\n" + ex.Message,
+                    "Print Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+            finally
+            {
+                _isBusy = false;
+                _btnPrint.Enabled = true;
+                _btnClose.Enabled = true;
+            }
+        }
+
         private static string BuildItemText(SaleLineDisplay l)
         {
             string name = l.ProductName ?? string.Empty;
-
-            if (!string.IsNullOrWhiteSpace(l.Brand))
-                name = $"{name} — {l.Brand}";
-
-            if (!string.IsNullOrWhiteSpace(l.Unit))
-                name = $"{name}  ·  {l.Unit}";
-
+            if (!string.IsNullOrWhiteSpace(l.Brand)) name = $"{name} — {l.Brand}";
+            if (!string.IsNullOrWhiteSpace(l.Unit)) name = $"{name}  ·  {l.Unit}";
             return name;
         }
     }

@@ -13,23 +13,13 @@ namespace TodangMotor.Forms
 {
     /// <summary>
     /// Add / Edit product popup. Owner-only.
-    /// Two-column layout. Includes SKU, Expiration Date, Description,
-    /// Primary Supplier, and Alternate Suppliers.
-    /// No Current Stock field — that is managed via Inventory.
+    /// Two-column stacked-label layout: label above each field.
     /// </summary>
     public class ProductForm : ShellForm
     {
-        // ============================================================
-        // SERVICES
-        // ============================================================
-
         private readonly ProductService _productService = new();
         private readonly CategoryService _categoryService = new(new CategoryRepository());
         private readonly SupplierService _supplierService = new();
-
-        // ============================================================
-        // STATE
-        // ============================================================
 
         private readonly Product? _productToEdit;
         private bool IsEditMode => _productToEdit != null;
@@ -37,11 +27,9 @@ namespace TodangMotor.Forms
         private List<Supplier> _allSuppliers = new();
         private List<Category> _allCategories = new();
 
-        // Display-name → object lookups (RoundedComboBox works with strings only).
         private readonly Dictionary<string, Supplier> _supplierByDisplay = new();
         private readonly Dictionary<string, Category> _categoryByDisplay = new();
 
-        /// <summary>Wrapper for checkbox-list items so we can store the SupplierId.</summary>
         private class SupplierCheckItem
         {
             public int SupplierId { get; set; }
@@ -54,36 +42,38 @@ namespace TodangMotor.Forms
         // ============================================================
 
         private const int PadX = 32;
-        private const int LabelW = 120;
-        private const int LeftFieldX = 152;
-        private const int RightLabelX = 412;
-        private const int RightFieldX = 532;
-        private const int HalfFieldW = 240;
-        private const int FullFieldW = 616;
-        private const int RowStep = 52;
+        private const int ColGap = 32;
+        private const int LabelH = 22;
+        private const int FieldH = 44;
+        private const int RowGap = 8;
+
+        private const int ColW = 402;
+        private const int LeftColX = PadX;
+        private const int RightColX = LeftColX + ColW + ColGap;
+
+        private const int PanelBlockH = 130;
 
         // ============================================================
         // UI CONTROLS
         // ============================================================
 
-        private RoundedTextBox _txtProductName;
-        private RoundedTextBox _txtBrand;
-        private RoundedTextBox _txtSku;
-        private RoundedComboBox _cmbCategory;
-        private RoundedTextBox _txtUnit;
-        private RoundedTextBox _txtCostPrice;
-        private RoundedTextBox _txtSellingPrice;
-        private RoundedTextBox _txtReorderLevel;
-        private DateTimePicker _dtpExpiration;
-        private RoundedComboBox _cmbSupplier;
-        private CheckedListBox _alternateSuppliersList;
-        private Panel _alternateSuppliersWrapper;
-        private Panel _descriptionWrapper;
-        private TextBox _txtDescription;
+        private RoundedTextBox _txtProductName = null!;
+        private RoundedTextBox _txtBrand = null!;
+        private RoundedComboBox _cmbCategory = null!;
+        private RoundedTextBox _txtUnit = null!;
+        private RoundedTextBox _txtCostPrice = null!;
+        private RoundedTextBox _txtSellingPrice = null!;
+        private RoundedTextBox _txtReorderLevel = null!;
+        private DateTimePicker _dtpExpiration = null!;
+        private RoundedComboBox _cmbSupplier = null!;
+        private CheckedListBox _alternateSuppliersList = null!;
+        private Panel _alternateSuppliersWrapper = null!;
+        private Panel _descriptionWrapper = null!;
+        private TextBox _txtDescription = null!;
 
-        private Button _btnSave;
-        private Button _btnCancel;
-        private Label _lblStatus;
+        private Button _btnSave = null!;
+        private Button _btnCancel = null!;
+        private Label _lblStatus = null!;
 
         // ============================================================
         // CONSTRUCTION
@@ -97,8 +87,8 @@ namespace TodangMotor.Forms
             ShowMaximizeButton = false;
             ShowMinimizeButton = true;
             StartPosition = FormStartPosition.CenterParent;
-            ClientSize = new Size(800, 740);
-            MinimumSize = new Size(780, 720);
+            ClientSize = new Size(900, 830);
+            MinimumSize = new Size(880, 800);
             BackColor = Theme.Background;
             KeyPreview = true;
 
@@ -114,16 +104,38 @@ namespace TodangMotor.Forms
 
         private void BuildLayout()
         {
-            // ---- Footer (docked bottom) ----
+            // ---------- Footer (docked bottom) ----------
             var footer = new Panel
             {
                 Dock = DockStyle.Bottom,
-                Height = 76,
+                Height = 88,
                 BackColor = Theme.Background
             };
 
-            const int btnW = 130;
-            const int btnH = 44;
+            var divider = new Panel
+            {
+                Dock = DockStyle.Top,
+                Height = 1,
+                BackColor = Theme.Divider
+            };
+            footer.Controls.Add(divider);
+
+            int btnW = 140;
+            int btnH = UiFactory.PrimaryButtonHeight;
+
+            // ---- Status label lives INSIDE the footer, left side ----
+            _lblStatus = new Label
+            {
+                Text = string.Empty,
+                Font = Theme.FontSmall,
+                ForeColor = Theme.Danger,
+                AutoSize = false,
+                Location = new Point(PadX, 22),
+                Height = btnH,
+                TextAlign = ContentAlignment.MiddleLeft,
+                BackColor = Color.Transparent,
+                Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right
+            };
 
             _btnSave = UiFactory.CreateButton("Save", UiFactory.ButtonStyle.Primary, btnW, btnH);
             _btnSave.Anchor = AnchorStyles.Top | AnchorStyles.Right;
@@ -133,81 +145,77 @@ namespace TodangMotor.Forms
             _btnCancel.Anchor = AnchorStyles.Top | AnchorStyles.Right;
             _btnCancel.Click += (s, e) => { DialogResult = DialogResult.Cancel; Close(); };
 
+            footer.Controls.Add(_lblStatus);
             footer.Controls.Add(_btnSave);
             footer.Controls.Add(_btnCancel);
 
             footer.Resize += (s, e) =>
             {
-                _btnSave.Location = new Point(footer.ClientSize.Width - PadX - btnW, 16);
-                _btnCancel.Location = new Point(footer.ClientSize.Width - PadX - btnW - 10 - btnW, 16);
+                _btnSave.Location = new Point(footer.ClientSize.Width - PadX - btnW, 22);
+                _btnCancel.Location = new Point(footer.ClientSize.Width - PadX - btnW - 8 - btnW, 22);
+                _lblStatus.Width = Math.Max(100,
+                    footer.ClientSize.Width - PadX - btnW * 2 - 8 - PadX - 16);
             };
 
             ContentPanel.Controls.Add(footer);
 
-            // ---- Form fields (absolute positions) ----
-            int y = 16;
+            // ---------- Form body ----------
+            int y = 24;
 
-            // Row 1: Product Name (full width)
-            AddLabel("Product Name:", PadX, y);
-            _txtProductName = UiFactory.CreateTextBox(FullFieldW);
-            _txtProductName.Location = new Point(LeftFieldX, y);
+            // Row 1 — Product Name (full width)
+            AddFieldLabel("Product Name", LeftColX, y, ColW * 2 + ColGap);
+            _txtProductName = UiFactory.CreateTextBox(ColW * 2 + ColGap);
+            _txtProductName.Location = new Point(LeftColX, y + LabelH + 4);
             _txtProductName.MaxLength = 150;
             ContentPanel.Controls.Add(_txtProductName);
-            y += RowStep;
+            y += LabelH + 4 + FieldH + 24;
 
-            // Row 2: Brand | SKU
-            AddLabel("Brand:", PadX, y);
-            _txtBrand = UiFactory.CreateTextBox(HalfFieldW);
-            _txtBrand.Location = new Point(LeftFieldX, y);
+            // Row 2 — Brand | Unit
+            AddFieldLabel("Brand", LeftColX, y, ColW);
+            _txtBrand = UiFactory.CreateTextBox(ColW);
+            _txtBrand.Location = new Point(LeftColX, y + LabelH + 4);
             _txtBrand.MaxLength = 100;
             ContentPanel.Controls.Add(_txtBrand);
 
-            AddLabel("SKU:", RightLabelX, y);
-            _txtSku = UiFactory.CreateTextBox(HalfFieldW);
-            _txtSku.Location = new Point(RightFieldX, y);
-            _txtSku.MaxLength = 50;
-            _txtSku.Placeholder = "Optional";
-            ContentPanel.Controls.Add(_txtSku);
-            y += RowStep;
+            AddFieldLabel("Unit", RightColX, y, ColW);
+            _txtUnit = UiFactory.CreateTextBox(ColW);
+            _txtUnit.Location = new Point(RightColX, y + LabelH + 4);
+            _txtUnit.MaxLength = 20;
+            ContentPanel.Controls.Add(_txtUnit);
+            y += LabelH + 4 + FieldH + RowGap;
 
-            // Row 3: Category | Unit
-            AddLabel("Category:", PadX, y);
+            // Row 3 — Category | Reorder Level
+            AddFieldLabel("Category", LeftColX, y, ColW);
             _cmbCategory = new RoundedComboBox
             {
-                Width = HalfFieldW,
-                Location = new Point(LeftFieldX, y)
+                Width = ColW,
+                Location = new Point(LeftColX, y + LabelH + 4)
             };
             ContentPanel.Controls.Add(_cmbCategory);
 
-            AddLabel("Unit:", RightLabelX, y);
-            _txtUnit = UiFactory.CreateTextBox(HalfFieldW);
-            _txtUnit.Location = new Point(RightFieldX, y);
-            _txtUnit.MaxLength = 20;
-            ContentPanel.Controls.Add(_txtUnit);
-            y += RowStep;
+            AddFieldLabel("Reorder Level", RightColX, y, ColW);
+            _txtReorderLevel = UiFactory.CreateTextBox(ColW);
+            _txtReorderLevel.Location = new Point(RightColX, y + LabelH + 4);
+            _txtReorderLevel.MaxLength = 6;
+            ContentPanel.Controls.Add(_txtReorderLevel);
+            y += LabelH + 4 + FieldH + RowGap;
 
-            // Row 4: Cost Price | Selling Price
-            AddLabel("Cost Price (PHP):", PadX, y);
-            _txtCostPrice = UiFactory.CreateTextBox(HalfFieldW);
-            _txtCostPrice.Location = new Point(LeftFieldX, y);
+            // Row 4 — Cost | Selling
+            AddFieldLabel("Cost Price (₱)", LeftColX, y, ColW);
+            _txtCostPrice = UiFactory.CreateTextBox(ColW);
+            _txtCostPrice.Location = new Point(LeftColX, y + LabelH + 4);
             _txtCostPrice.MaxLength = 12;
             ContentPanel.Controls.Add(_txtCostPrice);
 
-            AddLabel("Selling Price (PHP):", RightLabelX, y);
-            _txtSellingPrice = UiFactory.CreateTextBox(HalfFieldW);
-            _txtSellingPrice.Location = new Point(RightFieldX, y);
+            AddFieldLabel("Selling Price (₱)", RightColX, y, ColW);
+            _txtSellingPrice = UiFactory.CreateTextBox(ColW);
+            _txtSellingPrice.Location = new Point(RightColX, y + LabelH + 4);
             _txtSellingPrice.MaxLength = 12;
             ContentPanel.Controls.Add(_txtSellingPrice);
-            y += RowStep;
+            y += LabelH + 4 + FieldH + RowGap;
 
-            // Row 5: Reorder Level | Expiration Date
-            AddLabel("Reorder Level:", PadX, y);
-            _txtReorderLevel = UiFactory.CreateTextBox(HalfFieldW);
-            _txtReorderLevel.Location = new Point(LeftFieldX, y);
-            _txtReorderLevel.MaxLength = 6;
-            ContentPanel.Controls.Add(_txtReorderLevel);
-
-            AddLabel("Expiration Date:", RightLabelX, y);
+            // Row 5 — Expiration Date (half width, left)
+            AddFieldLabel("Expiration Date (optional)", LeftColX, y, ColW);
             _dtpExpiration = new DateTimePicker
             {
                 Format = DateTimePickerFormat.Custom,
@@ -215,39 +223,40 @@ namespace TodangMotor.Forms
                 ShowCheckBox = true,
                 Checked = false,
                 Font = Theme.FontBody,
-                Location = new Point(RightFieldX, y + 4),
-                Size = new Size(HalfFieldW, 32)
+                Location = new Point(LeftColX, y + LabelH + 4 + 6),
+                Size = new Size(220, 32)
             };
             ContentPanel.Controls.Add(_dtpExpiration);
-            y += RowStep;
+            y += LabelH + 4 + FieldH + 24;
 
-            // Row 6: Primary Supplier (full width)
-            AddLabel("Primary Supplier:", PadX, y);
+            // Row 6 — Primary Supplier (full width)
+            AddFieldLabel("Primary Supplier", LeftColX, y, ColW * 2 + ColGap);
             _cmbSupplier = new RoundedComboBox
             {
-                Width = FullFieldW,
-                Location = new Point(LeftFieldX, y)
+                Width = ColW * 2 + ColGap,
+                Location = new Point(LeftColX, y + LabelH + 4)
             };
             ContentPanel.Controls.Add(_cmbSupplier);
-            y += RowStep;
+            y += LabelH + 4 + FieldH + 24;
 
-            // Row 7: Alternate Suppliers | Description
-            AddLabel("Alternate Suppliers:", PadX, y);
+            // Row 7 — Alternate Suppliers | Description
+            AddFieldLabel("Alternate Suppliers", LeftColX, y, ColW);
+            AddFieldLabel("Description", RightColX, y, ColW);
 
             _alternateSuppliersWrapper = new Panel
             {
-                Location = new Point(LeftFieldX, y + 24),
-                Size = new Size(HalfFieldW, 120),
-                BackColor = Theme.InputBackground
+                Location = new Point(LeftColX, y + LabelH + 4),
+                Size = new Size(ColW, PanelBlockH),
+                BackColor = Theme.Surface
             };
             _alternateSuppliersWrapper.Paint += AlternateWrapper_Paint;
 
             _alternateSuppliersList = new CheckedListBox
             {
-                Location = new Point(4, 4),
-                Size = new Size(HalfFieldW - 8, 112),
+                Location = new Point(12, 10),
+                Size = new Size(ColW - 24, PanelBlockH - 20),
                 Font = Theme.FontBody,
-                BackColor = Theme.InputBackground,
+                BackColor = Theme.Surface,
                 ForeColor = Theme.TextPrimary,
                 BorderStyle = BorderStyle.None,
                 CheckOnClick = true,
@@ -257,24 +266,22 @@ namespace TodangMotor.Forms
             _alternateSuppliersWrapper.Controls.Add(_alternateSuppliersList);
             ContentPanel.Controls.Add(_alternateSuppliersWrapper);
 
-            AddLabel("Description:", RightLabelX, y);
-
             _descriptionWrapper = new Panel
             {
-                Location = new Point(RightFieldX, y + 24),
-                Size = new Size(HalfFieldW, 120),
-                BackColor = Theme.InputBackground
+                Location = new Point(RightColX, y + LabelH + 4),
+                Size = new Size(ColW, PanelBlockH),
+                BackColor = Theme.Surface
             };
             _descriptionWrapper.Paint += DescriptionWrapper_Paint;
 
             _txtDescription = new TextBox
             {
-                Location = new Point(8, 8),
-                Size = new Size(HalfFieldW - 16, 104),
+                Location = new Point(12, 12),
+                Size = new Size(ColW - 24, PanelBlockH - 24),
                 Multiline = true,
                 ScrollBars = ScrollBars.Vertical,
                 BorderStyle = BorderStyle.None,
-                BackColor = Theme.InputBackground,
+                BackColor = Theme.Surface,
                 ForeColor = Theme.TextPrimary,
                 Font = Theme.FontBody,
                 MaxLength = 500
@@ -283,26 +290,9 @@ namespace TodangMotor.Forms
             _txtDescription.Leave += (s, e) => _descriptionWrapper.Invalidate();
             _descriptionWrapper.Controls.Add(_txtDescription);
             ContentPanel.Controls.Add(_descriptionWrapper);
-
-            y += 152;
-
-            // ---- Status label ----
-            _lblStatus = new Label
-            {
-                Text = string.Empty,
-                Font = Theme.FontSmall,
-                ForeColor = Theme.Danger,
-                AutoSize = false,
-                Location = new Point(PadX, y),
-                Size = new Size(ClientSize.Width - PadX * 2, 24),
-                TextAlign = ContentAlignment.MiddleLeft,
-                BackColor = Color.Transparent,
-                Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right
-            };
-            ContentPanel.Controls.Add(_lblStatus);
         }
 
-        private void AddLabel(string text, int x, int y)
+        private void AddFieldLabel(string text, int x, int y, int width)
         {
             var lbl = new Label
             {
@@ -310,8 +300,8 @@ namespace TodangMotor.Forms
                 Font = Theme.FontSmall,
                 ForeColor = Theme.TextSecondary,
                 AutoSize = false,
-                Size = new Size(LabelW, 40),
                 Location = new Point(x, y),
+                Size = new Size(width, LabelH),
                 TextAlign = ContentAlignment.MiddleLeft,
                 BackColor = Color.Transparent
             };
@@ -366,6 +356,7 @@ namespace TodangMotor.Forms
             {
                 _txtUnit.Text = "pcs";
                 _txtCostPrice.Text = "0";
+                _txtSellingPrice.Text = "0";
                 _txtReorderLevel.Text = "5";
 
                 if (_cmbCategory.Items.Count > 0)
@@ -412,8 +403,6 @@ namespace TodangMotor.Forms
 
                 _allSuppliers = suppliers ?? new List<Supplier>();
 
-                // Primary supplier dropdown — items are display names,
-                // mapped back to Supplier objects via dictionary.
                 _supplierByDisplay.Clear();
                 _cmbSupplier.Items.Clear();
                 foreach (var s in _allSuppliers)
@@ -422,7 +411,6 @@ namespace TodangMotor.Forms
                     _cmbSupplier.Items.Add(s.SupplierName);
                 }
 
-                // Alternate suppliers checkbox list.
                 _alternateSuppliersList.Items.Clear();
                 foreach (var s in _allSuppliers)
                 {
@@ -443,14 +431,12 @@ namespace TodangMotor.Forms
         {
             _txtProductName.Text = p.ProductName ?? string.Empty;
             _txtBrand.Text = p.Brand ?? string.Empty;
-            _txtSku.Text = p.SKU ?? string.Empty;
             _txtUnit.Text = p.Unit ?? "pcs";
             _txtCostPrice.Text = p.CostPrice.ToString("0.00");
             _txtSellingPrice.Text = p.SellingPrice.ToString("0.00");
             _txtReorderLevel.Text = p.ReorderLevel.ToString();
             _txtDescription.Text = p.Description ?? string.Empty;
 
-            // Category — select by name.
             if (p.CategoryId > 0 && _cmbCategory.Items.Count > 0)
             {
                 var cat = _allCategories.FirstOrDefault(c => c.CategoryId == p.CategoryId);
@@ -458,7 +444,6 @@ namespace TodangMotor.Forms
                     _cmbCategory.SelectedItem = cat.CategoryName;
             }
 
-            // Primary Supplier — select by name.
             if (p.SupplierId.HasValue && p.SupplierId.Value > 0)
             {
                 var sup = _allSuppliers.FirstOrDefault(s => s.SupplierId == p.SupplierId.Value);
@@ -466,7 +451,6 @@ namespace TodangMotor.Forms
                     _cmbSupplier.SelectedItem = sup.SupplierName;
             }
 
-            // Expiration Date
             if (p.ExpirationDate.HasValue)
             {
                 _dtpExpiration.Value = p.ExpirationDate.Value;
@@ -477,7 +461,6 @@ namespace TodangMotor.Forms
                 _dtpExpiration.Checked = false;
             }
 
-            // Alternate Suppliers — check the ones that match.
             if (p.AlternateSupplierIds != null && p.AlternateSupplierIds.Count > 0)
             {
                 for (int i = 0; i < _alternateSuppliersList.Items.Count; i++)
@@ -500,7 +483,9 @@ namespace TodangMotor.Forms
 
         private async Task SaveAsync()
         {
-            // ---- Read selected category ----
+            // Clear previous error
+            _lblStatus.Text = string.Empty;
+
             string? selectedCatName = _cmbCategory.SelectedItem as string;
             if (string.IsNullOrEmpty(selectedCatName)
                 || !_categoryByDisplay.TryGetValue(selectedCatName, out var selectedCategory))
@@ -509,7 +494,6 @@ namespace TodangMotor.Forms
                 return;
             }
 
-            // ---- Read selected supplier ----
             string? selectedSupName = _cmbSupplier.SelectedItem as string;
             if (string.IsNullOrEmpty(selectedSupName)
                 || !_supplierByDisplay.TryGetValue(selectedSupName, out var selectedSupplier))
@@ -525,7 +509,6 @@ namespace TodangMotor.Forms
                 ? _dtpExpiration.Value.Date
                 : (DateTime?)null;
 
-            // Gather alternate supplier IDs (excluding the primary one).
             var alternateIds = new List<int>();
             foreach (var obj in _alternateSuppliersList.CheckedItems)
             {
@@ -550,8 +533,8 @@ namespace TodangMotor.Forms
                         _txtCostPrice.Text,
                         _txtSellingPrice.Text,
                         _txtReorderLevel.Text,
-                        string.Empty, // Notes — hidden in UI
-                        _txtSku.Text,
+                        string.Empty,
+                        sku: null,
                         expiration,
                         _txtDescription.Text,
                         supplierId,
@@ -573,8 +556,8 @@ namespace TodangMotor.Forms
                         _txtCostPrice.Text,
                         _txtSellingPrice.Text,
                         _txtReorderLevel.Text,
-                        string.Empty, // Notes
-                        _txtSku.Text,
+                        string.Empty,
+                        sku: null,
                         expiration,
                         _txtDescription.Text,
                         supplierId,
@@ -619,7 +602,6 @@ namespace TodangMotor.Forms
             _btnCancel.Enabled = !busy;
             _txtProductName.Enabled = !busy;
             _txtBrand.Enabled = !busy;
-            _txtSku.Enabled = !busy;
             _cmbCategory.Enabled = !busy;
             _txtUnit.Enabled = !busy;
             _txtCostPrice.Enabled = !busy;

@@ -12,40 +12,36 @@ namespace TodangMotor.Forms
 {
     /// <summary>
     /// Purchase Order detail popup. View-only.
-    /// Shows one PO with its line items and offers a "Generate PDF" action
-    /// so the Owner can re-export an old PO if needed.
+    /// Shows one PO with its line items and offers a "Generate PDF" action.
     /// </summary>
     public class PurchaseOrderDetailForm : ShellForm
     {
-        // ============================================================
-        // SERVICES
-        // ============================================================
-
         private readonly PurchaseOrderService _poService = new();
         private readonly int _purchaseOrderId;
-
-        // ============================================================
-        // STATE
-        // ============================================================
 
         private PurchaseOrderDetail? _detail;
         private bool _isBusy;
 
-        // ============================================================
-        // UI CONTROLS
-        // ============================================================
+        // ---- Header ----
+        private Label _lblPoNumber = null!;
+        private Label _metaDateValue = null!;
+        private Label _metaSupplierValue = null!;
+        private Label _lblNotes = null!;
 
-        private Label _lblPoNumber;
-        private Label _lblMeta;
-        private Label _lblNotes;
-        private DataGridView _linesGrid;
-        private Label _lblItemCount;
-        private Button _btnExportPdf;
-        private Button _btnClose;
+        // ---- Grid ----
+        private DataGridView _linesGrid = null!;
 
-        // ============================================================
-        // CONSTRUCTION
-        // ============================================================
+        // ---- Totals ----
+        private Label _lblItemCount = null!;
+
+        // ---- Footer ----
+        private Button _btnExportPdf = null!;
+        private Button _btnClose = null!;
+        private Label _lblStatus = null!;
+
+        private const int ColBrandW = 160;
+        private const int ColUnitW = 80;
+        private const int ColQtyW = 90;
 
         public PurchaseOrderDetailForm(int purchaseOrderId)
         {
@@ -55,8 +51,8 @@ namespace TodangMotor.Forms
             ShowMaximizeButton = false;
             ShowMinimizeButton = true;
             StartPosition = FormStartPosition.CenterParent;
-            ClientSize = new Size(720, 720);
-            MinimumSize = new Size(680, 640);
+            ClientSize = new Size(820, 760);
+            MinimumSize = new Size(760, 700);
             BackColor = Theme.Background;
             KeyPreview = true;
 
@@ -75,7 +71,6 @@ namespace TodangMotor.Forms
 
         private void BuildLayout()
         {
-            // Root: 4 rows — info / grid / totals / footer
             var root = new TableLayoutPanel
             {
                 Dock = DockStyle.Fill,
@@ -85,9 +80,9 @@ namespace TodangMotor.Forms
                 Margin = Padding.Empty,
                 Padding = Padding.Empty
             };
-            root.RowStyles.Add(new RowStyle(SizeType.Absolute, 168)); // header info
+            root.RowStyles.Add(new RowStyle(SizeType.Absolute, 200)); // header info
             root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));  // grid
-            root.RowStyles.Add(new RowStyle(SizeType.Absolute, 60));  // item count
+            root.RowStyles.Add(new RowStyle(SizeType.Absolute, 60));  // totals
             root.RowStyles.Add(new RowStyle(SizeType.Absolute, 88));  // footer
 
             root.Controls.Add(BuildInfoBlock(), 0, 0);
@@ -107,48 +102,107 @@ namespace TodangMotor.Forms
                 Padding = new Padding(32, 16, 32, 0)
             };
 
-            _lblPoNumber = new Label
+            const int contentW = 740;
+
+            var caption = new Label
             {
-                Text = "Loading…",
-                Font = new Font(Theme.UiFontFamily, 20F, FontStyle.Bold),
-                ForeColor = Theme.TextPrimary,
+                Text = "PURCHASE ORDER",
+                Font = new Font(Theme.UiFontFamily, 9.5F, FontStyle.Bold),
+                ForeColor = Theme.TextMuted,
                 AutoSize = false,
                 Location = new Point(32, 16),
-                Size = new Size(640, 36),
+                Size = new Size(contentW, 18),
                 TextAlign = ContentAlignment.MiddleLeft,
                 BackColor = Color.Transparent
             };
 
-            _lblMeta = new Label
+            _lblPoNumber = new Label
             {
-                Text = string.Empty,
-                Font = Theme.FontBody,
-                ForeColor = Theme.TextSecondary,
+                Text = "—",
+                Font = new Font(Theme.UiFontFamily, 20F, FontStyle.Bold),
+                ForeColor = Theme.TextPrimary,
                 AutoSize = false,
-                Location = new Point(32, 58),
-                Size = new Size(640, 44),
-                TextAlign = ContentAlignment.TopLeft,
+                Location = new Point(32, 36),
+                Size = new Size(contentW, 40),
+                TextAlign = ContentAlignment.MiddleLeft,
                 BackColor = Color.Transparent
             };
+
+            var divider = new Panel
+            {
+                Location = new Point(32, 88),
+                Size = new Size(contentW, 1),
+                BackColor = Theme.Divider
+            };
+
+            var meta = new TableLayoutPanel
+            {
+                ColumnCount = 4,
+                RowCount = 1,
+                Location = new Point(32, 100),
+                Size = new Size(contentW, 32),
+                BackColor = Color.Transparent,
+                Margin = Padding.Empty,
+                Padding = Padding.Empty
+            };
+            meta.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 96));
+            meta.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
+            meta.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 96));
+            meta.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
+            meta.RowStyles.Add(new RowStyle(SizeType.Absolute, 32));
+
+            _metaDateValue = MakeMetaValue();
+            _metaSupplierValue = MakeMetaValue();
+
+            meta.Controls.Add(MakeMetaLabel("Order Date"), 0, 0);
+            meta.Controls.Add(_metaDateValue, 1, 0);
+            meta.Controls.Add(MakeMetaLabel("Supplier"), 2, 0);
+            meta.Controls.Add(_metaSupplierValue, 3, 0);
 
             _lblNotes = new Label
             {
                 Text = string.Empty,
                 Font = Theme.FontSmall,
-                ForeColor = Theme.TextMuted,
+                ForeColor = Theme.TextSecondary,
                 AutoSize = false,
-                Location = new Point(32, 106),
-                Size = new Size(640, 44),
+                Location = new Point(32, 140),
+                Size = new Size(contentW, 40),
                 TextAlign = ContentAlignment.TopLeft,
                 BackColor = Color.Transparent
             };
 
+            block.Controls.Add(caption);
             block.Controls.Add(_lblPoNumber);
-            block.Controls.Add(_lblMeta);
+            block.Controls.Add(divider);
+            block.Controls.Add(meta);
             block.Controls.Add(_lblNotes);
 
             return block;
         }
+
+        private static Label MakeMetaLabel(string text) => new Label
+        {
+            Text = text,
+            Font = Theme.FontSmall,
+            ForeColor = Theme.TextSecondary,
+            AutoSize = false,
+            Dock = DockStyle.Fill,
+            TextAlign = ContentAlignment.MiddleLeft,
+            BackColor = Color.Transparent,
+            Margin = new Padding(0)
+        };
+
+        private static Label MakeMetaValue() => new Label
+        {
+            Text = string.Empty,
+            Font = Theme.FontBody,
+            ForeColor = Theme.TextPrimary,
+            AutoSize = false,
+            Dock = DockStyle.Fill,
+            TextAlign = ContentAlignment.MiddleLeft,
+            BackColor = Color.Transparent,
+            Margin = new Padding(0)
+        };
 
         private Panel BuildGridBlock()
         {
@@ -162,11 +216,14 @@ namespace TodangMotor.Forms
             _linesGrid = new DataGridView
             {
                 Dock = DockStyle.Fill,
-                Margin = new Padding(0, 4, 0, 4)
+                Margin = new Padding(0)
             };
-            UiFactory.StyleGrid(_linesGrid);
-            _linesGrid.AlternatingRowsDefaultCellStyle.BackColor = Color.FromArgb(248, 249, 251);
+            UiFactory.StyleGridModern(_linesGrid);
+            _linesGrid.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.None;
+
             PrimeLinesColumns();
+
+            _linesGrid.Resize += (s, e) => FitProductColumn();
 
             block.Controls.Add(_linesGrid);
             return block;
@@ -184,11 +241,11 @@ namespace TodangMotor.Forms
             _lblItemCount = new Label
             {
                 Text = "—",
-                Font = new Font(Theme.UiFontFamily, 12F, FontStyle.Bold),
+                Font = new Font(Theme.UiFontFamily, 13F, FontStyle.Bold),
                 ForeColor = Theme.TextPrimary,
                 AutoSize = false,
-                Location = new Point(32, 4),
-                Size = new Size(640, 40),
+                Location = new Point(32, 8),
+                Size = new Size(740, 40),
                 TextAlign = ContentAlignment.MiddleLeft,
                 BackColor = Color.Transparent
             };
@@ -213,30 +270,45 @@ namespace TodangMotor.Forms
             };
             footer.Controls.Add(divider);
 
-            const int btnW = 160;
-            const int btnH = 44;
+            int btnW = 160;
+            int btnH = UiFactory.PrimaryButtonHeight;
+
+            _lblStatus = new Label
+            {
+                Text = string.Empty,
+                Font = Theme.FontSmall,
+                ForeColor = Theme.TextSecondary,
+                AutoSize = false,
+                Location = new Point(32, 26),
+                Height = btnH,
+                Width = 300,
+                TextAlign = ContentAlignment.MiddleLeft,
+                BackColor = Color.Transparent
+            };
 
             _btnExportPdf = UiFactory.CreateButton(
                 "Generate PDF",
                 UiFactory.ButtonStyle.Primary,
                 btnW, btnH);
-            _btnExportPdf.Location = new Point(32, 22);
+            _btnExportPdf.Location = new Point(360, 26);
             _btnExportPdf.Click += async (s, e) => await ExportPdfAsync();
 
             _btnClose = UiFactory.CreateButton(
                 "Close",
                 UiFactory.ButtonStyle.Ghost,
-                btnW, btnH);
+                120, btnH);
             _btnClose.Anchor = AnchorStyles.Top | AnchorStyles.Right;
             _btnClose.Click += (s, e) => Close();
 
+            footer.Controls.Add(_lblStatus);
             footer.Controls.Add(_btnExportPdf);
             footer.Controls.Add(_btnClose);
 
             footer.Resize += (s, e) =>
             {
-                _btnClose.Location = new Point(
-                    footer.ClientSize.Width - 32 - btnW, 22);
+                _btnClose.Location = new Point(footer.ClientSize.Width - 32 - _btnClose.Width, 26);
+                _btnExportPdf.Location = new Point(_btnClose.Left - 8 - _btnExportPdf.Width, 26);
+                _lblStatus.Width = Math.Max(100, _btnExportPdf.Left - _lblStatus.Left - 16);
             };
 
             return footer;
@@ -247,25 +319,39 @@ namespace TodangMotor.Forms
             _linesGrid.AutoGenerateColumns = false;
             _linesGrid.Columns.Clear();
 
-            void AddCol(string prop, string header, int weight, bool rightAlign = false)
+            void AddCol(string prop, string header, int width,
+                DataGridViewContentAlignment align = DataGridViewContentAlignment.MiddleLeft)
             {
                 var col = new DataGridViewTextBoxColumn
                 {
                     Name = prop,
                     DataPropertyName = prop,
                     HeaderText = header,
-                    FillWeight = weight,
-                    ReadOnly = true
+                    Width = width,
+                    ReadOnly = true,
+                    SortMode = DataGridViewColumnSortMode.NotSortable,
+                    Resizable = DataGridViewTriState.False
                 };
-                if (rightAlign)
-                    col.DefaultCellStyle.Alignment = DataGridViewContentAlignment.MiddleRight;
+                if (align != DataGridViewContentAlignment.MiddleLeft)
+                    col.DefaultCellStyle.Alignment = align;
                 _linesGrid.Columns.Add(col);
             }
 
-            AddCol("ProductName", "Product", 300);
-            AddCol("ProductBrand", "Brand", 160);
-            AddCol("ProductUnit", "Unit", 80);
-            AddCol("Quantity", "Qty", 90, true);
+            AddCol("ProductName", "Product", 400);
+            AddCol("ProductBrand", "Brand", ColBrandW);
+            AddCol("ProductUnit", "Unit", ColUnitW, DataGridViewContentAlignment.MiddleCenter);
+            AddCol("Quantity", "Qty", ColQtyW, DataGridViewContentAlignment.MiddleRight);
+        }
+
+        private void FitProductColumn()
+        {
+            if (_linesGrid == null || !_linesGrid.Columns.Contains("ProductName")) return;
+
+            int others = ColBrandW + ColUnitW + ColQtyW;
+            int available = _linesGrid.ClientSize.Width - others - 24;
+            if (available < 220) available = 220;
+
+            _linesGrid.Columns["ProductName"].Width = available;
         }
 
         // ============================================================
@@ -303,16 +389,13 @@ namespace TodangMotor.Forms
             var order = _detail.Order;
 
             _lblPoNumber.Text = order.PONumber ?? "—";
-
-            _lblMeta.Text =
-                $"Order Date:    {order.OrderDate:MMMM d, yyyy}\n" +
-                $"Supplier:      {order.SupplierName ?? "—"}";
+            _metaDateValue.Text = order.OrderDate.ToString("MMMM d, yyyy");
+            _metaSupplierValue.Text = order.SupplierName ?? "—";
 
             _lblNotes.Text = string.IsNullOrWhiteSpace(order.Notes)
                 ? string.Empty
                 : $"Notes:  {order.Notes}";
 
-            // Line items
             var rows = _detail.Items
                 .Select(i => new
                 {
@@ -324,10 +407,13 @@ namespace TodangMotor.Forms
                 .ToList();
 
             _linesGrid.DataSource = rows;
+            _linesGrid.ClearSelection();
 
             int totalQty = _detail.Items.Sum(i => i.Quantity);
             _lblItemCount.Text =
                 $"{_detail.Items.Count} item(s)   ·   {totalQty} total unit(s)";
+
+            FitProductColumn();
         }
 
         // ============================================================
@@ -336,29 +422,15 @@ namespace TodangMotor.Forms
 
         private async Task ExportPdfAsync()
         {
-            // ---- Guard: detail not loaded yet ----
             if (_detail == null)
             {
-                MessageBox.Show(
-                    "The Purchase Order is still loading. Please wait a moment and try again.",
-                    "Not Ready",
-                    MessageBoxButtons.OK,
-                    MessageBoxIcon.Information);
+                _lblStatus.ForeColor = Theme.Danger;
+                _lblStatus.Text = "Still loading. Please wait a moment.";
                 return;
             }
 
-            // ---- Guard: another operation in progress ----
-            if (_isBusy)
-            {
-                MessageBox.Show(
-                    "Another operation is already in progress. Please wait.",
-                    "Busy",
-                    MessageBoxButtons.OK,
-                    MessageBoxIcon.Information);
-                return;
-            }
+            if (_isBusy) return;
 
-            // ---- Choose destination ----
             string suggestedName;
             try
             {
@@ -390,35 +462,25 @@ namespace TodangMotor.Forms
             string path = sfd.FileName;
 
             SetBusy(true);
+            _lblStatus.ForeColor = Theme.TextSecondary;
+            _lblStatus.Text = "Generating PDF…";
             try
             {
                 var table = BuildReportTable(_detail);
-
-                // Run the synchronous QuestPDF call on a background thread.
                 await Task.Run(() => ReportService.ExportPdf(table, path));
 
-                // ---- Verify the file was actually written ----
-                if (!System.IO.File.Exists(path))
+                if (!File.Exists(path))
                 {
-                    MessageBox.Show(
-                        "The export completed but no file was created at:\n\n" +
-                        path + "\n\n" +
-                        "This usually means the folder is read-only, or the path " +
-                        "contains characters Windows rejected. Try saving to " +
-                        "your Desktop or Documents folder.",
-                        "File Not Created",
-                        MessageBoxButtons.OK,
-                        MessageBoxIcon.Error);
+                    _lblStatus.ForeColor = Theme.Danger;
+                    _lblStatus.Text = "File was not created.";
                     return;
                 }
 
-                long sizeKb = new System.IO.FileInfo(path).Length / 1024;
+                _lblStatus.ForeColor = Theme.Success;
+                _lblStatus.Text = $"Saved: {Path.GetFileName(path)}";
 
                 var openIt = MessageBox.Show(
-                    $"PDF saved successfully.\n\n" +
-                    $"Location: {path}\n" +
-                    $"Size:     {sizeKb} KB\n\n" +
-                    "Open the folder?",
+                    $"PDF saved successfully.\n\nLocation: {path}\n\nOpen the folder?",
                     "PDF Saved",
                     MessageBoxButtons.YesNo,
                     MessageBoxIcon.Information);
@@ -429,19 +491,15 @@ namespace TodangMotor.Forms
                     {
                         System.Diagnostics.Process.Start("explorer.exe", $"/select,\"{path}\"");
                     }
-                    catch { /* ignore — folder open is optional */ }
+                    catch { /* ignore */ }
                 }
             }
             catch (Exception ex)
             {
+                _lblStatus.ForeColor = Theme.Danger;
+                _lblStatus.Text = "PDF export failed.";
                 MessageBox.Show(
-                    "Could not generate PDF.\n\n" +
-                    $"Type:    {ex.GetType().Name}\n" +
-                    $"Message: {ex.Message}\n\n" +
-                    (ex.InnerException != null
-                        ? $"Inner:   {ex.InnerException.Message}\n\n"
-                        : string.Empty) +
-                    $"Stack:\n{ex.StackTrace}",
+                    "Could not generate PDF.\n\n" + ex.Message,
                     "PDF Error",
                     MessageBoxButtons.OK,
                     MessageBoxIcon.Error);
@@ -456,10 +514,6 @@ namespace TodangMotor.Forms
         // SHARED REPORT TABLE BUILDER
         // ============================================================
 
-        /// <summary>
-        /// Builds the ReportTable for a PO — used both here and by
-        /// PurchaseOrdersControl after saving a new PO.
-        /// </summary>
         public static ReportTable BuildReportTable(PurchaseOrderDetail detail)
         {
             var order = detail.Order;
@@ -511,10 +565,6 @@ namespace TodangMotor.Forms
                 return Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
             }
         }
-
-        // ============================================================
-        // HELPERS
-        // ============================================================
 
         private void SetBusy(bool busy)
         {

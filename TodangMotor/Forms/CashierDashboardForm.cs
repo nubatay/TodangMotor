@@ -9,18 +9,8 @@ using TodangMotor.Controls;
 
 namespace TodangMotor.Forms
 {
-    /// <summary>
-    /// Cashier dashboard shell.
-    /// Same visual design as the Owner dashboard but with a shorter sidebar:
-    /// Dashboard, POS, Sales History, Inventory, Logout.
-    /// Header shows page title + user chip (Change Password dropdown).
-    /// </summary>
     public class CashierDashboardForm : ShellForm
     {
-        // ============================================================
-        // NAV DEFINITION
-        // ============================================================
-
         private const string KeyDashboard = "dashboard";
         private const string KeyPos = "pos";
         private const string KeySalesHistory = "saleshistory";
@@ -34,9 +24,12 @@ namespace TodangMotor.Forms
         private const string IconPerson = "\uE77B";
         private const string IconChevronDown = "\uE70D";
 
-        // ============================================================
-        // FIELDS
-        // ============================================================
+        // Local fonts — slightly larger for readability and premium feel
+        private static readonly Font NavFont = new(Theme.UiFontFamily, 10.5F, FontStyle.Regular);
+        private static readonly Font NavFontActive = new(Theme.UiFontFamily, 10.5F, FontStyle.Bold);
+        private static readonly Font SectionFont = new(Theme.UiFontFamily, 9F, FontStyle.Bold);
+        private static readonly Font ChipFont = new(Theme.UiFontFamily, 10.5F, FontStyle.Bold);
+        private static readonly Font HeaderTitleFont = new(Theme.UiFontFamily, 18F, FontStyle.Bold);
 
         private TableLayoutPanel _rootLayout;
         private Panel _mainArea;
@@ -50,32 +43,29 @@ namespace TodangMotor.Forms
         private Control _currentContent;
         private string _currentKey = KeyDashboard;
 
-        // ============================================================
-        // CONSTRUCTION
-        // ============================================================
-
         public CashierDashboardForm()
         {
             HeaderTitle = "Dashboard";
             ShowMaximizeButton = true;
             ShowMinimizeButton = true;
             StartPosition = FormStartPosition.CenterScreen;
-            ClientSize = new Size(1400, 900);
-            MinimumSize = new Size(1100, 700);
+            ClientSize = new Size(1440, 920);
+            MinimumSize = new Size(1150, 720);
             WindowState = FormWindowState.Maximized;
             BackColor = Theme.Background;
 
-            HeaderTitleLabel.Padding = new Padding(20, 0, 0, 0);
+            HeaderTitleLabel.Font = HeaderTitleFont;
+            HeaderTitleLabel.ForeColor = Theme.TextPrimary;
+            HeaderTitleLabel.Padding = new Padding(32, 0, 0, 0);
 
-            // ---- Add user chip to the header bar ----
             var chipPanel = BuildUserChipPanel();
 
             HeaderPanel.Controls.Remove(ChromeContainer);
             HeaderPanel.Controls.Remove(HeaderTitleLabel);
 
-            HeaderPanel.Controls.Add(HeaderTitleLabel);   // docks Left
-            HeaderPanel.Controls.Add(chipPanel);           // docks Right
-            HeaderPanel.Controls.Add(ChromeContainer);     // docks Right (rightmost)
+            HeaderPanel.Controls.Add(HeaderTitleLabel);
+            HeaderPanel.Controls.Add(chipPanel);
+            HeaderPanel.Controls.Add(ChromeContainer);
 
             RestructureLayout();
 
@@ -89,15 +79,24 @@ namespace TodangMotor.Forms
         }
 
         // ============================================================
-        // USER CHIP (header)
+        // USER CHIP
         // ============================================================
 
         private Panel BuildUserChipPanel()
         {
+            string fullName = SessionManager.CurrentUser?.FullName ?? "User";
+            string firstName = fullName.Split(' ').FirstOrDefault() ?? "User";
+            string greeting = GetGreeting() + ", " + firstName;
+
+            Size measuredSize = TextRenderer.MeasureText(greeting, ChipFont);
+            int textWidth = Math.Max(120, measuredSize.Width + 16);
+            int chipWidth = 48 + textWidth + 32;   // icon (32) + gap (16) + text + gap (16) + chevron (16)
+            int containerWidth = chipWidth + 32;
+
             var panel = new Panel
             {
                 Dock = DockStyle.Right,
-                Width = 300,
+                Width = containerWidth,
                 BackColor = Color.Transparent
             };
 
@@ -113,35 +112,31 @@ namespace TodangMotor.Forms
 
             var chip = new Panel
             {
-                Width = 280,
-                Height = 40,
-                Location = new Point(10, 8),
+                Width = chipWidth,
+                Height = 44,
+                Location = new Point(0, (Theme.HeaderHeight - 44) / 2),
                 BackColor = Theme.Surface,
                 Cursor = Cursors.Hand
             };
-            Theme.ApplyRoundedRegion(chip, 8);
+            Theme.ApplyRoundedRegion(chip, 10);
 
             chip.Paint += (s, e) =>
             {
                 e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
                 using var path = Theme.RoundedRect(
-                    new Rectangle(0, 0, chip.Width - 1, chip.Height - 1), 8);
-                using var pen = new Pen(Theme.Divider, 1f);
+                    new Rectangle(0, 0, chip.Width - 1, chip.Height - 1), 10);
+                using var pen = new Pen(Theme.InputBorder, 1f);
                 e.Graphics.DrawPath(pen, path);
             };
-
-            string fullName = SessionManager.CurrentUser?.FullName ?? "User";
-            string firstName = fullName.Split(' ').FirstOrDefault() ?? "User";
-            string greeting = GetGreeting() + ", " + firstName;
 
             var iconLabel = new Label
             {
                 Text = IconPerson,
                 Font = new Font(Theme.IconFontFamily, 12F),
-                ForeColor = Theme.TextSecondary,
+                ForeColor = Theme.Primary,
                 AutoSize = false,
-                Size = new Size(28, 40),
-                Location = new Point(10, 0),
+                Size = new Size(32, 44),
+                Location = new Point(16, 0),
                 TextAlign = ContentAlignment.MiddleCenter,
                 BackColor = Color.Transparent,
                 Cursor = Cursors.Hand
@@ -150,11 +145,11 @@ namespace TodangMotor.Forms
             var textLabel = new Label
             {
                 Text = greeting,
-                Font = Theme.FontBodyBold,
+                Font = ChipFont,
                 ForeColor = Theme.TextPrimary,
                 AutoSize = false,
-                Size = new Size(210, 40),
-                Location = new Point(40, 0),
+                Size = new Size(textWidth, 44),
+                Location = new Point(48, 0),
                 TextAlign = ContentAlignment.MiddleLeft,
                 BackColor = Color.Transparent,
                 Cursor = Cursors.Hand,
@@ -164,11 +159,11 @@ namespace TodangMotor.Forms
             var chevronLabel = new Label
             {
                 Text = IconChevronDown,
-                Font = new Font(Theme.IconFontFamily, 8F),
+                Font = new Font(Theme.IconFontFamily, 9F),
                 ForeColor = Theme.TextMuted,
                 AutoSize = false,
-                Size = new Size(14, 40),
-                Location = new Point(256, 0),
+                Size = new Size(16, 44),
+                Location = new Point(48 + textWidth + 8, 0),
                 TextAlign = ContentAlignment.MiddleCenter,
                 BackColor = Color.Transparent,
                 Cursor = Cursors.Hand
@@ -179,13 +174,13 @@ namespace TodangMotor.Forms
             chip.Controls.Add(chevronLabel);
 
             EventHandler click = (s, e) =>
-                _chipMenu.Show(chip, new Point(0, chip.Height + 4));
+                _chipMenu.Show(chip, new Point(0, chip.Height + 8));
             chip.Click += click;
             iconLabel.Click += click;
             textLabel.Click += click;
             chevronLabel.Click += click;
 
-            EventHandler enter = (s, e) => chip.BackColor = Color.FromArgb(232, 238, 255);
+            EventHandler enter = (s, e) => chip.BackColor = Color.FromArgb(239, 246, 255);
             EventHandler leave = (s, e) => chip.BackColor = Theme.Surface;
 
             chip.MouseEnter += enter;
@@ -228,8 +223,9 @@ namespace TodangMotor.Forms
             CloseButton.Visible = true;
 
             const int size = 40;
-            const int y = 8;
+            int y = (Theme.HeaderHeight - size) / 2;
             ChromeContainer.Width = size * 3;
+            ChromeContainer.Height = Theme.HeaderHeight;
 
             MinimizeButton.Size = new Size(size, size);
             MaximizeButton.Size = new Size(size, size);
@@ -279,6 +275,7 @@ namespace TodangMotor.Forms
             };
 
             HeaderPanel.Dock = DockStyle.Top;
+            HeaderPanel.Height = Theme.HeaderHeight;
             ContentPanel.Dock = DockStyle.Fill;
 
             _mainArea.Controls.Add(ContentPanel);
@@ -315,13 +312,14 @@ namespace TodangMotor.Forms
                 WrapContents = false,
                 AutoScroll = true,
                 BackColor = Theme.SidebarBg,
-                Padding = new Padding(0, 4, 0, 4)
+                Padding = new Padding(16, 8, 16, 16)
             };
 
             var footer = new Panel
             {
                 Dock = DockStyle.Bottom,
-                Height = 56,
+                Height = 72,
+                Padding = new Padding(16, 8, 16, 16),
                 BackColor = Theme.SidebarBg
             };
 
@@ -332,7 +330,6 @@ namespace TodangMotor.Forms
 
             var header = BuildSidebarHeader();
 
-            // Sections
             AddSectionHeader("Main");
             AddNavItem(KeyDashboard, IconDashboard, "Dashboard");
             AddNavItem(KeyPos, IconPos, "POS");
@@ -352,17 +349,14 @@ namespace TodangMotor.Forms
             var header = new Panel
             {
                 Dock = DockStyle.Top,
-                Height = 130,
+                Height = 128,
                 BackColor = Theme.SidebarBg
             };
 
-            // Real logo drawn directly on the light sidebar — no tile,
-            // no border. Aspect ratio is preserved automatically.
-            // Widened to fill nearly the whole sidebar width.
             var logo = new LogoPlaceholder
             {
-                Width = 205,
-                Height = 110,
+                Width = 200,
+                Height = 104,
                 Radius = 0,
                 TileColor = Color.Transparent,
                 LetterColor = Theme.Primary,
@@ -386,15 +380,15 @@ namespace TodangMotor.Forms
             var label = new Label
             {
                 Text = text.ToUpperInvariant(),
-                Font = new Font(Theme.UiFontFamily, 8F, FontStyle.Bold),
+                Font = SectionFont,
                 ForeColor = Theme.SidebarSectionHeader,
                 AutoSize = false,
-                Width = Theme.SidebarWidth,
-                Height = 24,
-                Padding = new Padding(20, 0, 0, 0),
+                Width = Theme.SidebarWidth - 32,
+                Height = 28,
+                Padding = new Padding(16, 0, 0, 0),
                 TextAlign = ContentAlignment.MiddleLeft,
                 BackColor = Color.Transparent,
-                Margin = new Padding(0, 12, 0, 4)
+                Margin = new Padding(0, 24, 0, 8)
             };
             _navList.Controls.Add(label);
         }
@@ -517,7 +511,7 @@ namespace TodangMotor.Forms
         }
 
         // ============================================================
-        // NAV ITEM CONTROL (light theme)
+        // NAV ITEM CONTROL
         // ============================================================
 
         private class NavItemControl : Panel
@@ -533,20 +527,22 @@ namespace TodangMotor.Forms
             {
                 Key = key;
 
-                Height = 42;
-                Width = Theme.SidebarWidth;
-                Margin = new Padding(0);
+                Height = 44;
+                Width = Theme.SidebarWidth - 32;
+                Margin = new Padding(0, 4, 0, 4);
                 BackColor = Theme.SidebarBg;
                 Cursor = Cursors.Hand;
+
+                Theme.ApplyRoundedRegion(this, Theme.Radius);
 
                 _iconLabel = new Label
                 {
                     Text = icon,
-                    Font = new Font(Theme.IconFontFamily, 11F, FontStyle.Regular),
+                    Font = new Font(Theme.IconFontFamily, 12F, FontStyle.Regular),
                     ForeColor = Theme.SidebarNavIcon,
                     AutoSize = false,
-                    Size = new Size(28, 42),
-                    Location = new Point(20, 0),
+                    Size = new Size(32, 44),
+                    Location = new Point(16, 0),
                     TextAlign = ContentAlignment.MiddleCenter,
                     BackColor = Color.Transparent,
                     Cursor = Cursors.Hand
@@ -555,12 +551,12 @@ namespace TodangMotor.Forms
                 _textLabel = new Label
                 {
                     Text = text,
-                    Font = Theme.FontBody,
+                    Font = NavFont,
                     ForeColor = Theme.SidebarNavText,
                     AutoSize = false,
-                    Height = 42,
-                    Location = new Point(54, 0),
-                    Width = Theme.SidebarWidth - 54 - 8,
+                    Height = 44,
+                    Location = new Point(56, 0),
+                    Width = Width - 56 - 16,
                     TextAlign = ContentAlignment.MiddleLeft,
                     BackColor = Color.Transparent,
                     Cursor = Cursors.Hand,
@@ -572,7 +568,8 @@ namespace TodangMotor.Forms
 
                 Resize += (s, e) =>
                 {
-                    _textLabel.Width = Math.Max(0, Width - _textLabel.Left - 8);
+                    Theme.ApplyRoundedRegion(this, Theme.Radius);
+                    _textLabel.Width = Math.Max(0, Width - _textLabel.Left - 16);
                 };
 
                 MouseEnter += (s, e) => ApplyHover(true);
@@ -603,12 +600,14 @@ namespace TodangMotor.Forms
                         BackColor = Theme.SidebarActive;
                         _iconLabel.ForeColor = Theme.SidebarActiveText;
                         _textLabel.ForeColor = Theme.SidebarActiveText;
+                        _textLabel.Font = NavFontActive;
                     }
                     else
                     {
                         BackColor = Theme.SidebarBg;
                         _iconLabel.ForeColor = Theme.SidebarNavIcon;
                         _textLabel.ForeColor = Theme.SidebarNavText;
+                        _textLabel.Font = NavFont;
                     }
                 }
             }

@@ -9,26 +9,30 @@ using TodangMotor.Services;
 namespace TodangMotor.Controls
 {
     /// <summary>
-    /// Owner-only Settings screen. Hosts the Backup and Restore feature:
-    /// two large action tiles plus a status area showing the last backup.
+    /// Owner-only Settings screen. Compact action cards for Backup / Restore
+    /// plus a compact info card showing the last backup at a glance.
     /// </summary>
     public class SettingsControl : UserControl
     {
         private readonly BackupRestoreService _backupService = new();
 
-        private RoundedPanel _backupTile;
-        private RoundedPanel _restoreTile;
-        private Label _lastBackupTimeLabel;
-        private Label _lastBackupPathLabel;
-        private Button _btnOpenFolder;
-        private Label _statusLabel;
+        private Button _btnBackup = null!;
+        private Button _btnRestore = null!;
+
+        private Label _valDate = null!;
+        private Label _valSize = null!;
+        private Label _valAge = null!;
+        private Label _valLocation = null!;
+
+        private Button _btnOpenFolder = null!;
+        private Label _statusLabel = null!;
         private bool _isBusy;
 
         public SettingsControl()
         {
             Dock = DockStyle.Fill;
             BackColor = Theme.Background;
-            Padding = new Padding(Theme.SpacingLg);
+            Padding = new Padding(UiFactory.PagePadding);
 
             BuildLayout();
 
@@ -41,23 +45,26 @@ namespace TodangMotor.Controls
 
         private void BuildLayout()
         {
-            // Root: 3 rows — header (fixed), tiles (fill), bottom (fixed).
             var root = new TableLayoutPanel
             {
                 Dock = DockStyle.Fill,
                 ColumnCount = 1,
-                RowCount = 3,
+                RowCount = 5,
                 BackColor = Theme.Background,
                 Margin = Padding.Empty,
                 Padding = Padding.Empty
             };
-            root.RowStyles.Add(new RowStyle(SizeType.Absolute, 72));
-            root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-            root.RowStyles.Add(new RowStyle(SizeType.Absolute, 170));
+            root.RowStyles.Add(new RowStyle(SizeType.Absolute, 72));   // header
+            root.RowStyles.Add(new RowStyle(SizeType.Absolute, 200));  // action cards
+            root.RowStyles.Add(new RowStyle(SizeType.Absolute, 240));  // info card
+            root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));   // empty filler
+            root.RowStyles.Add(new RowStyle(SizeType.Absolute, 56));   // status
 
             root.Controls.Add(BuildHeaderBar(), 0, 0);
-            root.Controls.Add(BuildTilesArea(), 0, 1);
-            root.Controls.Add(BuildBottomPanel(), 0, 2);
+            root.Controls.Add(BuildActionsRow(), 0, 1);
+            root.Controls.Add(BuildInfoCard(), 0, 2);
+            root.Controls.Add(new Panel { Dock = DockStyle.Fill, BackColor = Theme.Background }, 0, 3);
+            root.Controls.Add(BuildStatusBar(), 0, 4);
 
             Controls.Add(root);
         }
@@ -76,8 +83,9 @@ namespace TodangMotor.Controls
                 Font = new Font(Theme.UiFontFamily, 10F, FontStyle.Bold),
                 ForeColor = Theme.Primary,
                 AutoSize = false,
-                Location = new Point(0, 4),
-                Size = new Size(800, 22),
+                Location = new Point(0, 8),
+                Height = 24,
+                Width = 800,
                 TextAlign = ContentAlignment.MiddleLeft,
                 BackColor = Color.Transparent
             };
@@ -88,85 +96,110 @@ namespace TodangMotor.Controls
                 Font = Theme.FontSmall,
                 ForeColor = Theme.TextSecondary,
                 AutoSize = false,
-                Location = new Point(0, 28),
-                Size = new Size(900, 20),
+                Location = new Point(0, 34),
+                Height = 22,
+                Width = 900,
                 TextAlign = ContentAlignment.MiddleLeft,
                 BackColor = Color.Transparent
             };
 
             bar.Controls.Add(title);
             bar.Controls.Add(subtitle);
-
             return bar;
         }
 
-        private Panel BuildTilesArea()
+        private TableLayoutPanel BuildActionsRow()
         {
-            var grid = new TableLayoutPanel
+            var row = new TableLayoutPanel
             {
                 Dock = DockStyle.Fill,
                 ColumnCount = 2,
                 RowCount = 1,
                 BackColor = Theme.Background,
-                Margin = new Padding(0, 4, 0, 4),
-                Padding = Padding.Empty
+                Margin = Padding.Empty,
+                Padding = new Padding(0, 8, 0, 16)
             };
-            grid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50f));
-            grid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50f));
-            grid.RowStyles.Add(new RowStyle(SizeType.Percent, 100f));
+            row.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50f));
+            row.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50f));
+            row.RowStyles.Add(new RowStyle(SizeType.Percent, 100f));
 
-            _backupTile = BuildActionTile(
+            var backupCard = BuildActionCard(
                 icon: "\uE74E",
                 title: "Backup",
-                body: "Save a complete copy of the current database to a .bak file. " +
-                          "Choose a USB drive or any folder for extra safety.",
+                body: "Save a complete copy of the current database to a .bak file.",
                 buttonTx: "Backup Now",
                 buttonStyle: UiFactory.ButtonStyle.Primary,
-                onClick: async (s, e) => await DoBackupAsync());
+                onClick: async (s, e) => await DoBackupAsync(),
+                out _btnBackup);
 
-            _restoreTile = BuildActionTile(
+            var restoreCard = BuildActionCard(
                 icon: "\uE777",
                 title: "Restore",
-                body: "Replace all current data with a previously saved backup. " +
-                          "The app will close after restore so you can reopen it with the recovered data.",
+                body: "Replace all current data with a previously saved backup.",
                 buttonTx: "Restore Now",
                 buttonStyle: UiFactory.ButtonStyle.Secondary,
-                onClick: async (s, e) => await DoRestoreAsync());
+                onClick: async (s, e) => await DoRestoreAsync(),
+                out _btnRestore);
 
-            _backupTile.Margin = new Padding(0, 0, Theme.SpacingSm, 0);
-            _restoreTile.Margin = new Padding(Theme.SpacingSm, 0, 0, 0);
+            backupCard.Margin = new Padding(0, 0, 8, 0);
+            restoreCard.Margin = new Padding(8, 0, 0, 0);
 
-            grid.Controls.Add(_backupTile, 0, 0);
-            grid.Controls.Add(_restoreTile, 1, 0);
-
-            return grid;
+            row.Controls.Add(backupCard, 0, 0);
+            row.Controls.Add(restoreCard, 1, 0);
+            return row;
         }
 
-        private RoundedPanel BuildActionTile(
-            string icon,
-            string title,
-            string body,
-            string buttonTx,
-            UiFactory.ButtonStyle buttonStyle,
-            EventHandler onClick)
+        private RoundedPanel BuildActionCard(
+    string icon,
+    string title,
+    string body,
+    string buttonTx,
+    UiFactory.ButtonStyle buttonStyle,
+    EventHandler onClick,
+    out Button button)
         {
-            var tile = new RoundedPanel
+            var card = UiFactory.CreateCard();
+            card.Dock = DockStyle.Fill;
+
+            // ---- Bottom bar (button) docked so it never overlaps the content ----
+            var bottomBar = new Panel
+            {
+                Dock = DockStyle.Bottom,
+                Height = 56,
+                BackColor = Color.Transparent
+            };
+
+            var btn = UiFactory.CreateButton(buttonTx, buttonStyle, 140, UiFactory.PrimaryButtonHeight);
+            btn.Anchor = AnchorStyles.Bottom | AnchorStyles.Right;
+            btn.Click += onClick;
+            bottomBar.Controls.Add(btn);
+
+            bottomBar.Resize += (s, e) =>
+            {
+                btn.Location = new Point(
+                    bottomBar.ClientSize.Width - btn.Width,
+                    bottomBar.ClientSize.Height - btn.Height);
+            };
+
+            // ---- Content area above the bottom bar ----
+            var content = new Panel
             {
                 Dock = DockStyle.Fill,
-                Radius = Theme.RadiusCard,
-                BorderColor = Theme.Divider,
-                BorderSize = 1,
-                BackColor = Theme.Surface,
-                Padding = new Padding(28)
+                BackColor = Color.Transparent
             };
+
+            // 44px tall row holds both the icon and the title so their
+            // vertical centers line up perfectly.
+            const int headerRowH = 44;
 
             var iconLabel = new Label
             {
                 Text = icon,
-                Font = new Font(Theme.IconFontFamily, 52F, FontStyle.Regular),
+                Font = new Font(Theme.IconFontFamily, 24F, FontStyle.Regular),
                 ForeColor = Theme.Primary,
                 AutoSize = false,
-                Size = new Size(120, 120),
+                Size = new Size(56, headerRowH),
+                Location = new Point(0, 4),
                 TextAlign = ContentAlignment.MiddleCenter,
                 BackColor = Color.Transparent
             };
@@ -174,139 +207,233 @@ namespace TodangMotor.Controls
             var titleLabel = new Label
             {
                 Text = title,
-                Font = new Font(Theme.UiFontFamily, 22F, FontStyle.Bold),
+                Font = new Font(Theme.UiFontFamily, 16F, FontStyle.Bold),
                 ForeColor = Theme.TextPrimary,
                 AutoSize = false,
-                Size = new Size(320, 40),
-                TextAlign = ContentAlignment.MiddleCenter,
-                BackColor = Color.Transparent
+                Location = new Point(72, 4),
+                Height = headerRowH,
+                TextAlign = ContentAlignment.MiddleLeft,
+                BackColor = Color.Transparent,
+                Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right
             };
 
             var bodyLabel = new Label
             {
                 Text = body,
-                Font = Theme.FontBody,
+                Font = Theme.FontSmall,
                 ForeColor = Theme.TextSecondary,
                 AutoSize = false,
-                Size = new Size(340, 80),
-                TextAlign = ContentAlignment.TopCenter,
+                Location = new Point(72, 52),
+                Height = 44,
+                TextAlign = ContentAlignment.TopLeft,
+                BackColor = Color.Transparent,
+                Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right
+            };
+
+            content.Controls.Add(iconLabel);
+            content.Controls.Add(titleLabel);
+            content.Controls.Add(bodyLabel);
+
+            content.Resize += (s, e) =>
+            {
+                int w = Math.Max(100, content.ClientSize.Width - 72);
+                titleLabel.Width = w;
+                bodyLabel.Width = w;
+            };
+
+            card.Controls.Add(content);
+            card.Controls.Add(bottomBar);
+
+            button = btn;
+            return card;
+        }
+
+        private RoundedPanel BuildInfoCard()
+        {
+            var card = UiFactory.CreateCard();
+            card.Dock = DockStyle.Fill;
+            card.Margin = new Padding(0);
+
+            // ---- Top row: title + "Open Backup Folder" button ----
+            var topRow = new Panel
+            {
+                Dock = DockStyle.Top,
+                Height = 56,
                 BackColor = Color.Transparent
             };
 
-            var btn = UiFactory.CreateButton(buttonTx, buttonStyle, 200, 46);
-            btn.Click += onClick;
+            var titleLabel = new Label
+            {
+                Text = "Last Backup",
+                Font = new Font(Theme.UiFontFamily, 13F, FontStyle.Bold),
+                ForeColor = Theme.TextPrimary,
+                AutoSize = false,
+                Location = new Point(0, 12),
+                Height = 32,
+                Width = 300,
+                TextAlign = ContentAlignment.MiddleLeft,
+                BackColor = Color.Transparent
+            };
 
-            tile.Controls.Add(iconLabel);
-            tile.Controls.Add(titleLabel);
-            tile.Controls.Add(bodyLabel);
-            tile.Controls.Add(btn);
+            _btnOpenFolder = UiFactory.CreateButton(
+                "Open Backup Folder",
+                UiFactory.ButtonStyle.Secondary,
+                190,
+                UiFactory.SecondaryButtonHeight);
+            _btnOpenFolder.Anchor = AnchorStyles.Top | AnchorStyles.Right;
+            _btnOpenFolder.Click += (s, e) => OpenBackupFolder();
 
-            tile.Resize += (s, e) => CenterTileContent(tile, iconLabel, titleLabel, bodyLabel, btn);
-            CenterTileContent(tile, iconLabel, titleLabel, bodyLabel, btn);
+            topRow.Controls.Add(titleLabel);
+            topRow.Controls.Add(_btnOpenFolder);
 
-            return tile;
+            topRow.Resize += (s, e) =>
+            {
+                _btnOpenFolder.Location = new Point(
+                    topRow.ClientSize.Width - _btnOpenFolder.Width,
+                    (topRow.ClientSize.Height - _btnOpenFolder.Height) / 2);
+            };
+
+            // ---- Stat row: Date | Size | Age ----
+            var statRow = new TableLayoutPanel
+            {
+                Dock = DockStyle.Top,
+                Height = 90,
+                ColumnCount = 3,
+                RowCount = 1,
+                BackColor = Color.Transparent,
+                Margin = Padding.Empty,
+                Padding = Padding.Empty
+            };
+            statRow.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50f));
+            statRow.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 25f));
+            statRow.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 25f));
+            statRow.RowStyles.Add(new RowStyle(SizeType.Percent, 100f));
+
+            statRow.Controls.Add(BuildStatBlock("Date", out _valDate), 0, 0);
+            statRow.Controls.Add(BuildStatBlock("Size", out _valSize), 1, 0);
+            statRow.Controls.Add(BuildStatBlock("Age", out _valAge), 2, 0);
+
+            // ---- Location row ----
+            var locRow = new Panel
+            {
+                Dock = DockStyle.Top,
+                Height = 56,
+                BackColor = Color.Transparent
+            };
+
+            var lblLocKey = new Label
+            {
+                Text = "Location",
+                Font = Theme.FontSmall,
+                ForeColor = Theme.TextSecondary,
+                AutoSize = false,
+                Location = new Point(0, 0),
+                Height = 20,
+                Width = 200,
+                TextAlign = ContentAlignment.MiddleLeft,
+                BackColor = Color.Transparent
+            };
+
+            _valLocation = new Label
+            {
+                Text = "—",
+                Font = Theme.FontBody,
+                ForeColor = Theme.TextPrimary,
+                AutoSize = false,
+                Location = new Point(0, 22),
+                Height = 24,
+                TextAlign = ContentAlignment.MiddleLeft,
+                BackColor = Color.Transparent,
+                AutoEllipsis = true,
+                Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right
+            };
+
+            locRow.Controls.Add(lblLocKey);
+            locRow.Controls.Add(_valLocation);
+
+            locRow.Resize += (s, e) =>
+            {
+                _valLocation.Width = locRow.ClientSize.Width;
+            };
+
+            // Add order: bottom-most row first
+            card.Controls.Add(locRow);
+            card.Controls.Add(statRow);
+            card.Controls.Add(topRow);
+
+            return card;
         }
 
-        private void CenterTileContent(
-            RoundedPanel tile,
-            Control icon,
-            Control title,
-            Control body,
-            Control button)
+        private Panel BuildStatBlock(string labelText, out Label valueLabel)
         {
-            if (tile.Width <= 0 || tile.Height <= 0) return;
+            var block = new Panel
+            {
+                Dock = DockStyle.Fill,
+                BackColor = Color.Transparent,
+                Padding = new Padding(0, 0, 16, 0)
+            };
 
-            int cx = tile.ClientSize.Width / 2;
+            var label = new Label
+            {
+                Text = labelText,
+                Font = Theme.FontSmall,
+                ForeColor = Theme.TextSecondary,
+                AutoSize = false,
+                Location = new Point(0, 0),
+                Height = 20,
+                Width = 200,
+                TextAlign = ContentAlignment.MiddleLeft,
+                BackColor = Color.Transparent
+            };
 
-            const int iconH = 120;
-            const int titleH = 40;
-            const int bodyH = 80;
-            const int buttonH = 46;
-            const int gap = 14;
+            var value = new Label
+            {
+                Text = "—",
+                Font = new Font(Theme.UiFontFamily, 14F, FontStyle.Bold),
+                ForeColor = Theme.TextPrimary,
+                AutoSize = false,
+                Location = new Point(0, 24),
+                Height = 32,
+                TextAlign = ContentAlignment.MiddleLeft,
+                BackColor = Color.Transparent,
+                AutoEllipsis = true,
+                Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right
+            };
+            valueLabel = value;
 
-            int totalH = iconH + titleH + bodyH + buttonH + gap * 3;
-            int startY = Math.Max(24, (tile.ClientSize.Height - totalH) / 2);
+            block.Controls.Add(label);
+            block.Controls.Add(value);
 
-            icon.Location = new Point(cx - icon.Width / 2, startY);
-            title.Location = new Point(cx - title.Width / 2, startY + iconH + gap);
-            body.Location = new Point(cx - body.Width / 2, startY + iconH + titleH + gap * 2);
-            button.Location = new Point(cx - button.Width / 2, startY + iconH + titleH + bodyH + gap * 3);
+            block.Resize += (s, e) =>
+            {
+                value.Width = Math.Max(80, block.ClientSize.Width - 16);
+                label.Width = value.Width;
+            };
+
+            return block;
         }
 
-        private Panel BuildBottomPanel()
+        private Panel BuildStatusBar()
         {
-            var panel = new Panel
+            var bar = new Panel
             {
                 Dock = DockStyle.Fill,
                 BackColor = Theme.Background
             };
 
-            var divider = new Panel
-            {
-                Dock = DockStyle.Top,
-                Height = 1,
-                BackColor = Theme.Divider
-            };
-            panel.Controls.Add(divider);
-
-            _lastBackupTimeLabel = new Label
-            {
-                Text = "Last backup:  —",
-                Font = Theme.FontBodyBold,
-                ForeColor = Theme.TextPrimary,
-                AutoSize = false,
-                Location = new Point(0, 16),
-                Size = new Size(900, 22),
-                TextAlign = ContentAlignment.MiddleLeft,
-                BackColor = Color.Transparent
-            };
-            panel.Controls.Add(_lastBackupTimeLabel);
-
-            _lastBackupPathLabel = new Label
-            {
-                Text = string.Empty,
-                Font = Theme.FontSmall,
-                ForeColor = Theme.TextSecondary,
-                AutoSize = false,
-                Location = new Point(0, 40),
-                Size = new Size(900, 18),
-                TextAlign = ContentAlignment.MiddleLeft,
-                BackColor = Color.Transparent,
-                AutoEllipsis = true
-            };
-            panel.Controls.Add(_lastBackupPathLabel);
-
-            _btnOpenFolder = UiFactory.CreateButton(
-                "Open Backup Folder",
-                UiFactory.ButtonStyle.Secondary,
-                200, 38);
-            _btnOpenFolder.Location = new Point(0, 66);
-            _btnOpenFolder.Click += (s, e) => OpenBackupFolder();
-            panel.Controls.Add(_btnOpenFolder);
-
             _statusLabel = new Label
             {
-                Text = string.Empty,
+                Text = "Ready.",
                 Font = Theme.FontSmall,
                 ForeColor = Theme.TextSecondary,
                 AutoSize = false,
-                Location = new Point(0, 116),
-                Size = new Size(900, 22),
+                Dock = DockStyle.Fill,
                 TextAlign = ContentAlignment.MiddleLeft,
                 BackColor = Color.Transparent
             };
-            panel.Controls.Add(_statusLabel);
 
-            // Keep labels stretched to full width on resize.
-            panel.Resize += (s, e) =>
-            {
-                int w = panel.ClientSize.Width;
-                _lastBackupTimeLabel.Width = Math.Max(200, w);
-                _lastBackupPathLabel.Width = Math.Max(200, w);
-                _statusLabel.Width = Math.Max(200, w);
-            };
-
-            return panel;
+            bar.Controls.Add(_statusLabel);
+            return bar;
         }
 
         // ============================================================
@@ -355,8 +482,7 @@ namespace TodangMotor.Controls
                 RefreshLastBackupInfo();
 
                 MessageBox.Show(
-                    $"Backup completed successfully.\n\n" +
-                    $"Saved to:\n{sfd.FileName}",
+                    $"Backup completed successfully.\n\nSaved to:\n{sfd.FileName}",
                     "Backup Successful",
                     MessageBoxButtons.OK,
                     MessageBoxIcon.Information);
@@ -445,30 +571,77 @@ namespace TodangMotor.Controls
         }
 
         // ============================================================
-        // INFO ROW
+        // LAST BACKUP INFO
         // ============================================================
 
         private void RefreshLastBackupInfo()
         {
-            if (_lastBackupTimeLabel == null) return;
-
             var (time, path) = BackupRestoreService.GetLastBackupInfo();
 
             if (time == null)
             {
-                _lastBackupTimeLabel.Text = "No backup has been made yet.";
-                _lastBackupTimeLabel.ForeColor = Theme.TextMuted;
-                _lastBackupPathLabel.Text = string.Empty;
+                _valDate.Text = "No backup yet";
+                _valDate.ForeColor = Theme.TextMuted;
+                _valSize.Text = "—";
+                _valSize.ForeColor = Theme.TextMuted;
+                _valAge.Text = "—";
+                _valAge.ForeColor = Theme.TextMuted;
+                _valLocation.Text = "—";
+                _valLocation.ForeColor = Theme.TextMuted;
                 return;
             }
 
-            _lastBackupTimeLabel.Text =
-                $"Last backup:  {time.Value:MMMM d, yyyy  h:mm tt}";
-            _lastBackupTimeLabel.ForeColor = Theme.TextPrimary;
+            _valDate.Text = time.Value.ToString("MMM d, yyyy  h:mm tt");
+            _valDate.ForeColor = Theme.TextPrimary;
 
-            _lastBackupPathLabel.Text = string.IsNullOrEmpty(path)
-                ? string.Empty
-                : $"Location:  {path}";
+            _valSize.Text = TryGetFileSize(path);
+            _valSize.ForeColor = Theme.TextPrimary;
+
+            _valAge.Text = BuildAgeHint(time.Value);
+            _valAge.ForeColor = GetAgeColor(time.Value);
+
+            _valLocation.Text = string.IsNullOrEmpty(path) ? "—" : path;
+            _valLocation.ForeColor = Theme.TextPrimary;
+        }
+
+        private static string TryGetFileSize(string? path)
+        {
+            try
+            {
+                if (string.IsNullOrWhiteSpace(path)) return "—";
+                if (!File.Exists(path)) return "File not found";
+
+                long bytes = new FileInfo(path).Length;
+                double kb = bytes / 1024.0;
+                if (kb < 1024) return $"{kb:0.0} KB";
+
+                double mb = kb / 1024.0;
+                return $"{mb:0.00} MB";
+            }
+            catch
+            {
+                return "—";
+            }
+        }
+
+        private static string BuildAgeHint(DateTime time)
+        {
+            var span = DateTime.Now - time;
+            if (span.TotalMinutes < 1) return "just now";
+            if (span.TotalMinutes < 60) return $"{(int)span.TotalMinutes} min ago";
+            if (span.TotalHours < 24) return $"{(int)span.TotalHours} hr ago";
+            if (span.TotalDays < 30) return $"{(int)span.TotalDays} days ago";
+
+            int months = (int)(span.TotalDays / 30);
+            return $"{months} mo ago";
+        }
+
+        private static Color GetAgeColor(DateTime time)
+        {
+            var span = DateTime.Now - time;
+            if (span.TotalDays <= 7) return Theme.Success;
+            if (span.TotalDays <= 30) return Color.FromArgb(200, 130, 40);
+            return Theme.Danger;
         }
 
         private void OpenBackupFolder()
@@ -495,12 +668,8 @@ namespace TodangMotor.Controls
         private void SetBusy(bool busy)
         {
             _isBusy = busy;
-
-            foreach (Control c in _backupTile.Controls)
-                c.Enabled = !busy;
-            foreach (Control c in _restoreTile.Controls)
-                c.Enabled = !busy;
-
+            _btnBackup.Enabled = !busy;
+            _btnRestore.Enabled = !busy;
             _btnOpenFolder.Enabled = !busy;
         }
 

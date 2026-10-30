@@ -10,31 +10,21 @@ using TodangMotor.Services;
 
 namespace TodangMotor.Controls
 {
-    /// <summary>
-    /// Supplier management view — list + toolbar, lives inside the
-    /// Owner dashboard content area as a UserControl.
-    /// Single-record Add/Edit is delegated to SupplierForm (popup).
-    /// </summary>
     public class SupplierControl : UserControl
     {
-        // ============================================================
-        // SERVICES
-        // ============================================================
-
         private readonly SupplierService _supplierService = new();
-
-        // ============================================================
-        // STATE
-        // ============================================================
 
         private List<Supplier> _allSuppliers = new();
 
         private bool _isLoaded;
-        private bool _isBusy;
 
-        // ============================================================
-        // UI CONTROLS
-        // ============================================================
+        private const string PencilIcon = "\uE70F";
+        private const string BanIcon = "\uE711";
+        private const string CheckIcon = "\uE73E";
+
+        private const int ColContactW = 180;
+        private const int ColStatusW = 140;
+        private const int ColActionW = 60;
 
         private RoundedTextBox _searchBox;
         private RoundedComboBox _statusFilter;
@@ -43,21 +33,13 @@ namespace TodangMotor.Controls
         private DataGridView _grid;
 
         private Button _btnAdd;
-        private Button _btnEdit;
-        private Button _btnDeactivate;
-        private Button _btnReactivate;
-
         private Label _statusLabel;
-
-        // ============================================================
-        // CONSTRUCTION
-        // ============================================================
 
         public SupplierControl()
         {
             Dock = DockStyle.Fill;
             BackColor = Theme.Background;
-            Padding = new Padding(Theme.SpacingLg);
+            Padding = new Padding(UiFactory.PagePadding);
 
             BuildLayout();
 
@@ -71,15 +53,11 @@ namespace TodangMotor.Controls
             await ReloadAllAsync();
         }
 
-        // ============================================================
-        // LAYOUT
-        // ============================================================
-
         private void BuildLayout()
         {
-            Controls.Add(BuildGrid());        // Fill — added first, docked last
-            Controls.Add(BuildBottomBar());   // Bottom
-            Controls.Add(BuildFilterBar());   // Top
+            Controls.Add(BuildGrid());
+            Controls.Add(BuildBottomBar());
+            Controls.Add(BuildFilterBar());
         }
 
         private Panel BuildFilterBar()
@@ -87,12 +65,12 @@ namespace TodangMotor.Controls
             var bar = new Panel
             {
                 Dock = DockStyle.Top,
-                Height = 96,
+                Height = 108,
                 BackColor = Theme.Background
             };
 
             _searchBox = UiFactory.CreateTextBox(320);
-            _searchBox.Location = new Point(4, 12);
+            _searchBox.Location = new Point(0, 16);
             _searchBox.Placeholder = "Search supplier or contact…";
             _searchBox.MaxLength = 150;
             _searchBox.TextChanged += (s, e) => ApplyFilters();
@@ -102,15 +80,17 @@ namespace TodangMotor.Controls
                 Text = "Status:",
                 Font = Theme.FontSmall,
                 ForeColor = Theme.TextSecondary,
-                AutoSize = true,
-                Location = new Point(344, 24),
+                AutoSize = false,
+                Size = new Size(56, 24),
+                Location = new Point(_searchBox.Right + 24, 24),
+                TextAlign = ContentAlignment.MiddleLeft,
                 BackColor = Color.Transparent
             };
 
             _statusFilter = new RoundedComboBox
             {
-                Width = 150,
-                Location = new Point(397, 18)
+                Width = 160,
+                Location = new Point(lblStatus.Right + 8, 16)
             };
             _statusFilter.Items.Add("Active");
             _statusFilter.Items.Add("Inactive");
@@ -124,8 +104,8 @@ namespace TodangMotor.Controls
                 Font = Theme.FontSmall,
                 ForeColor = Theme.TextSecondary,
                 AutoSize = false,
-                Location = new Point(4, 68),
-                Height = 20,
+                Location = new Point(0, 76),
+                Height = 22,
                 Width = 700,
                 TextAlign = ContentAlignment.MiddleLeft,
                 Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right,
@@ -145,13 +125,175 @@ namespace TodangMotor.Controls
             _grid = new DataGridView
             {
                 Dock = DockStyle.Fill,
-                Margin = new Padding(0, 4, 0, 4)
+                Margin = new Padding(0, 8, 0, 0)
             };
-            UiFactory.StyleGrid(_grid);
-            _grid.AlternatingRowsDefaultCellStyle.BackColor = Color.FromArgb(248, 249, 251);
+            UiFactory.StyleGridModern(_grid);
+            _grid.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.None;
             _grid.CellDoubleClick += Grid_CellDoubleClick;
+            _grid.CellClick += Grid_CellClick;
+            _grid.CellPainting += Grid_CellPainting;
+            _grid.CellMouseEnter += Grid_CellMouseEnter;
+            _grid.CellMouseLeave += (s, e) => _grid.Cursor = Cursors.Default;
             _grid.KeyDown += Grid_KeyDown;
+
+            PrimeGridColumns();
+            _grid.Resize += (s, e) => FitDynamicColumns();
+
             return _grid;
+        }
+
+        private void PrimeGridColumns()
+        {
+            _grid.AutoGenerateColumns = false;
+            _grid.Columns.Clear();
+            _grid.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.None;
+
+            void AddTextCol(string prop, string header, int width, bool readOnly,
+                DataGridViewContentAlignment align = DataGridViewContentAlignment.MiddleLeft)
+            {
+                var col = new DataGridViewTextBoxColumn
+                {
+                    Name = prop,
+                    DataPropertyName = prop,
+                    HeaderText = header,
+                    Width = width,
+                    ReadOnly = readOnly,
+                    SortMode = DataGridViewColumnSortMode.NotSortable,
+                    Resizable = DataGridViewTriState.False
+                };
+                if (align != DataGridViewContentAlignment.MiddleLeft)
+                    col.DefaultCellStyle.Alignment = align;
+                _grid.Columns.Add(col);
+            }
+
+            AddTextCol("SupplierName", "Supplier", 300, true);
+            AddTextCol("ContactNumber", "Contact", ColContactW, true);
+            AddTextCol("Address", "Address", 300, true);
+            AddTextCol("Status", "Status", ColStatusW, true, DataGridViewContentAlignment.MiddleCenter);
+
+            _grid.Columns.Add(new DataGridViewTextBoxColumn
+            {
+                Name = "EditIcon",
+                HeaderText = "",
+                Width = ColActionW,
+                ReadOnly = true,
+                SortMode = DataGridViewColumnSortMode.NotSortable,
+                Resizable = DataGridViewTriState.False
+            });
+
+            _grid.Columns.Add(new DataGridViewTextBoxColumn
+            {
+                Name = "ToggleIcon",
+                HeaderText = "",
+                Width = ColActionW,
+                ReadOnly = true,
+                SortMode = DataGridViewColumnSortMode.NotSortable,
+                Resizable = DataGridViewTriState.False
+            });
+
+            _grid.Columns.Add(new DataGridViewTextBoxColumn
+            {
+                Name = "SupplierId",
+                DataPropertyName = "SupplierId",
+                Visible = false
+            });
+        }
+
+        private void FitDynamicColumns()
+        {
+            if (_grid == null) return;
+            if (!_grid.Columns.Contains("SupplierName")) return;
+            if (!_grid.Columns.Contains("Address")) return;
+
+            int fixedW = ColContactW + ColStatusW + ColActionW + ColActionW;
+            int available = _grid.ClientSize.Width - fixedW - 24;
+            if (available < 400) available = 400;
+
+            int half = available / 2;
+            _grid.Columns["SupplierName"].Width = half;
+            _grid.Columns["Address"].Width = available - half;
+        }
+
+        private void Grid_CellPainting(object? sender, DataGridViewCellPaintingEventArgs e)
+        {
+            if (e.RowIndex < 0 || e.ColumnIndex < 0) return;
+
+            string colName = _grid.Columns[e.ColumnIndex].Name;
+            if (colName != "EditIcon" && colName != "ToggleIcon") return;
+
+            e.PaintBackground(e.CellBounds, true);
+
+            string glyph;
+            Color color;
+
+            if (colName == "EditIcon")
+            {
+                glyph = PencilIcon;
+                color = Theme.Primary;
+            }
+            else
+            {
+                string status = _grid.Rows[e.RowIndex].Cells["Status"].Value?.ToString() ?? "";
+                bool isActive = status == "Active";
+
+                if (isActive)
+                {
+                    glyph = BanIcon;
+                    color = Color.FromArgb(200, 130, 40);
+                }
+                else
+                {
+                    glyph = CheckIcon;
+                    color = Theme.Success;
+                }
+            }
+
+            using var font = new Font(Theme.IconFontFamily, 14F, FontStyle.Regular);
+            TextRenderer.DrawText(
+                e.Graphics,
+                glyph,
+                font,
+                e.CellBounds,
+                color,
+                TextFormatFlags.HorizontalCenter |
+                TextFormatFlags.VerticalCenter |
+                TextFormatFlags.NoPrefix);
+
+            e.Handled = true;
+        }
+
+        private void Grid_CellMouseEnter(object? sender, DataGridViewCellEventArgs e)
+        {
+            if (e.RowIndex < 0 || e.ColumnIndex < 0) return;
+            string colName = _grid.Columns[e.ColumnIndex].Name;
+            _grid.Cursor = (colName == "EditIcon" || colName == "ToggleIcon")
+                ? Cursors.Hand
+                : Cursors.Default;
+        }
+
+        private void Grid_CellClick(object? sender, DataGridViewCellEventArgs e)
+        {
+            if (e.RowIndex < 0 || e.ColumnIndex < 0) return;
+
+            string colName = _grid.Columns[e.ColumnIndex].Name;
+            if (colName != "EditIcon" && colName != "ToggleIcon") return;
+
+            var idCell = _grid.Rows[e.RowIndex].Cells["SupplierId"];
+            if (idCell?.Value == null) return;
+
+            int id = Convert.ToInt32(idCell.Value);
+            var supplier = _allSuppliers.FirstOrDefault(s => s.SupplierId == id);
+            if (supplier == null) return;
+
+            if (colName == "EditIcon")
+            {
+                OpenSupplierFormForEdit(supplier);
+            }
+            else
+            {
+                if (supplier.IsActive) _ = DeactivateSupplierAsync(supplier);
+                else _ = ReactivateSupplierAsync(supplier);
+            }
         }
 
         private Panel BuildBottomBar()
@@ -159,25 +301,13 @@ namespace TodangMotor.Controls
             var bar = new Panel
             {
                 Dock = DockStyle.Bottom,
-                Height = 68,
+                Height = 88,
                 BackColor = Theme.Background
             };
 
-            _btnAdd = UiFactory.CreateButton("Add New", UiFactory.ButtonStyle.Primary, 110, 40);
-            _btnAdd.Location = new Point(4, 12);
+            _btnAdd = UiFactory.CreateButton("Add New", UiFactory.ButtonStyle.Primary, 140, UiFactory.PrimaryButtonHeight);
+            _btnAdd.Location = new Point(0, 20);
             _btnAdd.Click += (s, e) => OpenSupplierFormForAdd();
-
-            _btnEdit = UiFactory.CreateButton("Edit", UiFactory.ButtonStyle.Secondary, 90, 40);
-            _btnEdit.Location = new Point(122, 12);
-            _btnEdit.Click += (s, e) => EditSelectedSupplier();
-
-            _btnDeactivate = UiFactory.CreateButton("Deactivate", UiFactory.ButtonStyle.Ghost, 110, 40);
-            _btnDeactivate.Location = new Point(220, 12);
-            _btnDeactivate.Click += async (s, e) => await DeactivateSelectedSupplierAsync();
-
-            _btnReactivate = UiFactory.CreateButton("Reactivate", UiFactory.ButtonStyle.Ghost, 110, 40);
-            _btnReactivate.Location = new Point(338, 12);
-            _btnReactivate.Click += async (s, e) => await ReactivateSelectedSupplierAsync();
 
             _statusLabel = new Label
             {
@@ -185,26 +315,19 @@ namespace TodangMotor.Controls
                 Font = Theme.FontSmall,
                 ForeColor = Theme.TextSecondary,
                 AutoSize = false,
-                Location = new Point(468, 12),
-                Height = 40,
-                Width = 500,
+                Location = new Point(_btnAdd.Right + 24, 20),
+                Height = UiFactory.PrimaryButtonHeight,
+                Width = 600,
                 TextAlign = ContentAlignment.MiddleLeft,
                 Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right,
                 BackColor = Color.Transparent
             };
 
             bar.Controls.Add(_btnAdd);
-            bar.Controls.Add(_btnEdit);
-            bar.Controls.Add(_btnDeactivate);
-            bar.Controls.Add(_btnReactivate);
             bar.Controls.Add(_statusLabel);
 
             return bar;
         }
-
-        // ============================================================
-        // DATA LOAD
-        // ============================================================
 
         private async Task ReloadAllAsync()
         {
@@ -228,10 +351,6 @@ namespace TodangMotor.Controls
                 SetBusy(false);
             }
         }
-
-        // ============================================================
-        // FILTERS + GRID BINDING
-        // ============================================================
 
         private void ApplyFilters()
         {
@@ -261,16 +380,32 @@ namespace TodangMotor.Controls
                 {
                     s.SupplierId,
                     SupplierName = s.SupplierName ?? string.Empty,
-                    ContactNumber = s.ContactNumber ?? string.Empty,
-                    Address = s.Address ?? string.Empty,
+                    ContactNumber = string.IsNullOrEmpty(s.ContactNumber) ? "—" : s.ContactNumber,
+                    Address = string.IsNullOrEmpty(s.Address) ? "—" : s.Address,
                     Status = s.IsActive ? "Active" : "Inactive"
                 })
                 .ToList();
 
             _grid.DataSource = rows;
-            ApplyColumnLayout();
-            ClearSelection();
+
+            if (_grid.Columns.Contains("SupplierId"))
+                _grid.Columns["SupplierId"].Visible = false;
+
+            if (_grid.Rows.Count > 0)
+                _grid.ClearSelection();
+
+            foreach (DataGridViewRow row in _grid.Rows)
+            {
+                if (row.Cells["Status"].Value is string s)
+                {
+                    row.Cells["Status"].Style.ForeColor =
+                        s == "Active" ? Theme.Success : Theme.TextMuted;
+                    row.Cells["Status"].Style.Font = Theme.FontBodyBold;
+                }
+            }
+
             UpdateCountLabel(rows.Count);
+            FitDynamicColumns();
         }
 
         private void UpdateCountLabel(int shownCount)
@@ -289,73 +424,31 @@ namespace TodangMotor.Controls
                 $"Active: {active}   Inactive: {inactive}";
         }
 
-        private void ApplyColumnLayout()
-        {
-            if (_grid == null || _grid.Columns.Count == 0) return;
-
-            _grid.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill;
-
-            void SetWeight(string col, int weight, string header = null)
-            {
-                if (!_grid.Columns.Contains(col)) return;
-                _grid.Columns[col].FillWeight = weight;
-                if (header != null) _grid.Columns[col].HeaderText = header;
-            }
-
-            if (_grid.Columns.Contains("SupplierId"))
-                _grid.Columns["SupplierId"].Visible = false;
-
-            SetWeight("SupplierName", 220, "Supplier");
-            SetWeight("ContactNumber", 140, "Contact");
-            SetWeight("Address", 260, "Address");
-            SetWeight("Status", 80, "Status");
-        }
-
-        private void ClearSelection()
-        {
-            if (_grid != null && _grid.Rows.Count > 0)
-                _grid.ClearSelection();
-        }
-
-        // ============================================================
-        // SELECTION HELPER
-        // ============================================================
-
-        private Supplier? GetSelectedSupplier()
-        {
-            if (_grid == null || _grid.SelectedRows.Count == 0) return null;
-            var row = _grid.SelectedRows[0];
-            if (!_grid.Columns.Contains("SupplierId")) return null;
-
-            var value = row.Cells["SupplierId"].Value;
-            if (value == null) return null;
-
-            int id = Convert.ToInt32(value);
-            return _allSuppliers.FirstOrDefault(s => s.SupplierId == id);
-        }
-
-        // ============================================================
-        // ROW EVENTS
-        // ============================================================
-
         private void Grid_CellDoubleClick(object sender, DataGridViewCellEventArgs e)
         {
             if (e.RowIndex < 0) return;
-            EditSelectedSupplier();
+
+            var idCell = _grid.Rows[e.RowIndex].Cells["SupplierId"];
+            if (idCell?.Value == null) return;
+
+            int id = Convert.ToInt32(idCell.Value);
+            var supplier = _allSuppliers.FirstOrDefault(s => s.SupplierId == id);
+            if (supplier != null) OpenSupplierFormForEdit(supplier);
         }
 
         private void Grid_KeyDown(object sender, KeyEventArgs e)
         {
-            if (e.KeyCode == Keys.Enter)
-            {
-                e.SuppressKeyPress = true;
-                EditSelectedSupplier();
-            }
-        }
+            if (e.KeyCode != Keys.Enter) return;
+            e.SuppressKeyPress = true;
 
-        // ============================================================
-        // ADD / EDIT
-        // ============================================================
+            if (_grid.CurrentRow == null) return;
+            var idCell = _grid.CurrentRow.Cells["SupplierId"];
+            if (idCell?.Value == null) return;
+
+            int id = Convert.ToInt32(idCell.Value);
+            var supplier = _allSuppliers.FirstOrDefault(s => s.SupplierId == id);
+            if (supplier != null) OpenSupplierFormForEdit(supplier);
+        }
 
         private void OpenSupplierFormForAdd()
         {
@@ -364,9 +457,7 @@ namespace TodangMotor.Controls
                 var parent = FindForm();
                 using var form = new Forms.SupplierForm();
                 if (form.ShowDialog(parent) == DialogResult.OK)
-                {
                     _ = ReloadAllAsync();
-                }
             }
             catch (Exception ex)
             {
@@ -374,23 +465,14 @@ namespace TodangMotor.Controls
             }
         }
 
-        private void EditSelectedSupplier()
+        private void OpenSupplierFormForEdit(Supplier supplier)
         {
-            var s = GetSelectedSupplier();
-            if (s == null)
-            {
-                ShowStatus("Please select a supplier first.", isError: true);
-                return;
-            }
-
             try
             {
                 var parent = FindForm();
-                using var form = new Forms.SupplierForm(s);
+                using var form = new Forms.SupplierForm(supplier);
                 if (form.ShowDialog(parent) == DialogResult.OK)
-                {
                     _ = ReloadAllAsync();
-                }
             }
             catch (Exception ex)
             {
@@ -398,24 +480,8 @@ namespace TodangMotor.Controls
             }
         }
 
-        // ============================================================
-        // DEACTIVATE / REACTIVATE
-        // ============================================================
-
-        private async Task DeactivateSelectedSupplierAsync()
+        private async Task DeactivateSupplierAsync(Supplier s)
         {
-            var s = GetSelectedSupplier();
-            if (s == null)
-            {
-                ShowStatus("Please select a supplier first.", isError: true);
-                return;
-            }
-            if (!s.IsActive)
-            {
-                ShowStatus("This supplier is already inactive.", isError: true);
-                return;
-            }
-
             var confirm = MessageBox.Show(
                 $"Are you sure you want to deactivate \"{s.SupplierName}\"?",
                 "Confirm Deactivate",
@@ -443,20 +509,8 @@ namespace TodangMotor.Controls
             }
         }
 
-        private async Task ReactivateSelectedSupplierAsync()
+        private async Task ReactivateSupplierAsync(Supplier s)
         {
-            var s = GetSelectedSupplier();
-            if (s == null)
-            {
-                ShowStatus("Please select a supplier first.", isError: true);
-                return;
-            }
-            if (s.IsActive)
-            {
-                ShowStatus("This supplier is already active.", isError: true);
-                return;
-            }
-
             SetBusy(true);
             try
             {
@@ -477,17 +531,10 @@ namespace TodangMotor.Controls
             }
         }
 
-        // ============================================================
-        // HELPERS
-        // ============================================================
-
         private void SetBusy(bool busy)
         {
-            _isBusy = busy;
             _btnAdd.Enabled = !busy;
-            _btnEdit.Enabled = !busy;
-            _btnDeactivate.Enabled = !busy;
-            _btnReactivate.Enabled = !busy;
+            _grid.Enabled = !busy;
         }
 
         private void ShowStatus(string message, bool isError)

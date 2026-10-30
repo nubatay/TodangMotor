@@ -18,21 +18,19 @@ namespace TodangMotor.Forms
         private readonly ProductService _productService = new();
         private readonly Product _product;
 
-        // ============================================================
-        // UI
-        // ============================================================
+        private Label _lblItemName = null!;
+        private Label _lblItemSub = null!;
+        private Label _lblCurrentQty = null!;
+        private RoundedTextBox _txtNewQty = null!;
+        private RoundedTextBox _txtNotes = null!;
+        private Button _btnSave = null!;
+        private Button _btnCancel = null!;
+        private Label _lblStatus = null!;
 
-        private Label _lblItemName;
-        private Label _lblCurrentQty;
-        private RoundedTextBox _txtNewQty;
-        private RoundedTextBox _txtNotes;
-        private Button _btnSave;
-        private Button _btnCancel;
-        private Label _lblStatus;
-
-        // ============================================================
-        // CONSTRUCTION
-        // ============================================================
+        private const int PadX = 32;
+        private const int LabelH = 22;
+        private const int FieldH = 44;
+        private const int RowGap = 16;
 
         public AdjustStockForm(Product product)
         {
@@ -42,8 +40,8 @@ namespace TodangMotor.Forms
             ShowMaximizeButton = false;
             ShowMinimizeButton = true;
             StartPosition = FormStartPosition.CenterParent;
-            ClientSize = new Size(520, 400);
-            MinimumSize = new Size(500, 380);
+            ClientSize = new Size(560, 580);
+            MinimumSize = new Size(540, 560);
             BackColor = Theme.Background;
             KeyPreview = true;
 
@@ -59,19 +57,37 @@ namespace TodangMotor.Forms
 
         private void BuildLayout()
         {
-            const int padX = 32;
-            int fieldW = ClientSize.Width - padX * 2;
-
-            // ---- Footer (Bottom) ----
+            // ---------- Footer ----------
             var footer = new Panel
             {
                 Dock = DockStyle.Bottom,
-                Height = 76,
+                Height = 88,
                 BackColor = Theme.Background
             };
 
-            const int btnW = 120;
-            const int btnH = 42;
+            var divider = new Panel
+            {
+                Dock = DockStyle.Top,
+                Height = 1,
+                BackColor = Theme.Divider
+            };
+            footer.Controls.Add(divider);
+
+            int btnW = 140;
+            int btnH = UiFactory.PrimaryButtonHeight;
+
+            _lblStatus = new Label
+            {
+                Text = string.Empty,
+                Font = Theme.FontSmall,
+                ForeColor = Theme.Danger,
+                AutoSize = false,
+                Location = new Point(PadX, 22),
+                Height = btnH,
+                TextAlign = ContentAlignment.MiddleLeft,
+                BackColor = Color.Transparent,
+                Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right
+            };
 
             _btnSave = UiFactory.CreateButton("Save", UiFactory.ButtonStyle.Primary, btnW, btnH);
             _btnSave.Anchor = AnchorStyles.Top | AnchorStyles.Right;
@@ -81,88 +97,151 @@ namespace TodangMotor.Forms
             _btnCancel.Anchor = AnchorStyles.Top | AnchorStyles.Right;
             _btnCancel.Click += (s, e) => { DialogResult = DialogResult.Cancel; Close(); };
 
+            footer.Controls.Add(_lblStatus);
             footer.Controls.Add(_btnSave);
             footer.Controls.Add(_btnCancel);
 
             footer.Resize += (s, e) =>
             {
-                _btnSave.Location = new Point(footer.ClientSize.Width - padX - btnW, 16);
-                _btnCancel.Location = new Point(footer.ClientSize.Width - padX - btnW - 10 - btnW, 16);
+                _btnSave.Location = new Point(footer.ClientSize.Width - PadX - btnW, 22);
+                _btnCancel.Location = new Point(footer.ClientSize.Width - PadX - btnW - 8 - btnW, 22);
+                _lblStatus.Width = Math.Max(100,
+                    footer.ClientSize.Width - PadX - btnW * 2 - 8 - PadX - 16);
             };
 
-            ContentPanel.Controls.Add(footer);
+            // ---------- Body Panel ----------
+            var bodyPanel = new Panel
+            {
+                Dock = DockStyle.Fill,
+                BackColor = Theme.Background
+            };
 
-            // ---- Content ----
-            int y = 24;
+            int fieldW = ClientSize.Width - PadX * 2;
+            int y = 28; // Top padding
 
-            // Item (read-only)
-            AddLabel("Item:", padX, y);
+            // ---- Item info (read-only card) ----
+            var infoCard = new RoundedPanel
+            {
+                Location = new Point(PadX, y),
+                Size = new Size(fieldW, 88),
+                BackColor = Theme.Surface,
+                Radius = Theme.RadiusSmall,
+                BorderColor = Theme.PanelBorder,
+                BorderSize = 1,
+                ShadowEnabled = false,
+                Padding = new Padding(16, 12, 16, 12)
+            };
+
+            var caption = new Label
+            {
+                Text = "ADJUSTING",
+                Font = new Font(Theme.UiFontFamily, 8F, FontStyle.Bold),
+                ForeColor = Theme.TextMuted,
+                AutoSize = false,
+                Location = new Point(16, 10),
+                Size = new Size(fieldW - 32, 14),
+                TextAlign = ContentAlignment.MiddleLeft,
+                BackColor = Color.Transparent
+            };
+
             _lblItemName = new Label
             {
-                Text = string.Empty,
-                Font = Theme.FontBodyBold,
+                Text = "—",
+                Font = new Font(Theme.UiFontFamily, 13F, FontStyle.Bold),
                 ForeColor = Theme.TextPrimary,
                 AutoSize = false,
-                Location = new Point(padX + 130, y),
-                Size = new Size(fieldW - 130, 30),
+                Location = new Point(16, 26),
+                Size = new Size(fieldW - 32, 24),
                 TextAlign = ContentAlignment.MiddleLeft,
                 BackColor = Color.Transparent,
                 AutoEllipsis = true
             };
-            ContentPanel.Controls.Add(_lblItemName);
-            y += 46;
 
-            // Current Quantity (read-only)
-            AddLabel("Current Qty:", padX, y);
-            _lblCurrentQty = new Label
+            _lblItemSub = new Label
             {
-                Text = "0",
-                Font = new Font(Theme.UiFontFamily, 14F, FontStyle.Bold),
-                ForeColor = Theme.Primary,
+                Text = "—",
+                Font = Theme.FontSmall,
+                ForeColor = Theme.TextSecondary,
                 AutoSize = false,
-                Location = new Point(padX + 130, y - 4),
-                Size = new Size(fieldW - 130, 32),
+                Location = new Point(16, 52),
+                Size = new Size(fieldW - 32, 20),
+                TextAlign = ContentAlignment.MiddleLeft,
+                BackColor = Color.Transparent,
+                AutoEllipsis = true
+            };
+
+            infoCard.Controls.Add(caption);
+            infoCard.Controls.Add(_lblItemName);
+            infoCard.Controls.Add(_lblItemSub);
+            bodyPanel.Controls.Add(infoCard);
+
+            y += 88 + RowGap;
+
+            // ---- Current quantity (read-only stat) ----
+            var qtyLabel = new Label
+            {
+                Text = "Current Quantity",
+                Font = Theme.FontSmall,
+                ForeColor = Theme.TextSecondary,
+                AutoSize = false,
+                Location = new Point(PadX, y),
+                Size = new Size(fieldW, LabelH),
                 TextAlign = ContentAlignment.MiddleLeft,
                 BackColor = Color.Transparent
             };
-            ContentPanel.Controls.Add(_lblCurrentQty);
-            y += 52;
+            bodyPanel.Controls.Add(qtyLabel);
 
-            // New Quantity (editable)
-            AddLabel("New Qty:", padX, y);
-            _txtNewQty = UiFactory.CreateTextBox(fieldW - 130);
-            _txtNewQty.Location = new Point(padX + 130, y);
+            _lblCurrentQty = new Label
+            {
+                Text = "0",
+                Font = new Font(Theme.UiFontFamily, 24F, FontStyle.Bold),
+                ForeColor = Theme.Primary,
+                AutoSize = false,
+                Location = new Point(PadX, y + LabelH + 2),
+                Size = new Size(fieldW, 44),
+                TextAlign = ContentAlignment.MiddleLeft,
+                BackColor = Color.Transparent
+            };
+            bodyPanel.Controls.Add(_lblCurrentQty);
+
+            var unitsLabel = new Label
+            {
+                Text = "units on hand",
+                Font = Theme.FontSmall,
+                ForeColor = Theme.TextMuted,
+                AutoSize = false,
+                Location = new Point(PadX + 60, y + LabelH + 16),
+                Size = new Size(fieldW - 60, 22),
+                TextAlign = ContentAlignment.MiddleLeft,
+                BackColor = Color.Transparent
+            };
+            bodyPanel.Controls.Add(unitsLabel);
+
+            y += LabelH + 2 + 44 + RowGap;
+
+            // ---- New quantity ----
+            AddFieldLabel(bodyPanel, "New Quantity", PadX, y, fieldW);
+            _txtNewQty = UiFactory.CreateTextBox(fieldW);
+            _txtNewQty.Location = new Point(PadX, y + LabelH + 4);
             _txtNewQty.MaxLength = 9;
             _txtNewQty.Placeholder = "Enter new on-hand quantity";
-            ContentPanel.Controls.Add(_txtNewQty);
-            y += 62;
+            bodyPanel.Controls.Add(_txtNewQty);
+            y += LabelH + 4 + FieldH + RowGap;
 
-            // Notes (optional)
-            AddLabel("Notes:", padX, y);
-            _txtNotes = UiFactory.CreateTextBox(fieldW - 130);
-            _txtNotes.Location = new Point(padX + 130, y);
+            // ---- Notes ----
+            AddFieldLabel(bodyPanel, "Notes (optional)", PadX, y, fieldW);
+            _txtNotes = UiFactory.CreateTextBox(fieldW);
+            _txtNotes.Location = new Point(PadX, y + LabelH + 4);
             _txtNotes.MaxLength = 200;
-            _txtNotes.Placeholder = "Optional — e.g. Found extra units during recount";
-            ContentPanel.Controls.Add(_txtNotes);
-            y += 62;
+            _txtNotes.Placeholder = "e.g. Found extra units during recount";
+            bodyPanel.Controls.Add(_txtNotes);
 
-            // Status
-            _lblStatus = new Label
-            {
-                Text = string.Empty,
-                Font = Theme.FontSmall,
-                ForeColor = Theme.Danger,
-                AutoSize = false,
-                Location = new Point(padX, y),
-                Size = new Size(fieldW, 40),
-                TextAlign = ContentAlignment.TopLeft,
-                BackColor = Color.Transparent,
-                Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right
-            };
-            ContentPanel.Controls.Add(_lblStatus);
+            // ---------- Add to ContentPanel ----------
+            ContentPanel.Controls.Add(bodyPanel);
+            ContentPanel.Controls.Add(footer);
         }
 
-        private void AddLabel(string text, int x, int y)
+        private void AddFieldLabel(Control parent, string text, int x, int y, int width)
         {
             var lbl = new Label
             {
@@ -170,12 +249,12 @@ namespace TodangMotor.Forms
                 Font = Theme.FontSmall,
                 ForeColor = Theme.TextSecondary,
                 AutoSize = false,
-                Size = new Size(120, 40),
                 Location = new Point(x, y),
+                Size = new Size(width, LabelH),
                 TextAlign = ContentAlignment.MiddleLeft,
                 BackColor = Color.Transparent
             };
-            ContentPanel.Controls.Add(lbl);
+            parent.Controls.Add(lbl);
         }
 
         // ============================================================
@@ -186,12 +265,12 @@ namespace TodangMotor.Forms
         {
             Animator.SlideFadeInForm(this, 180, 12);
 
-            string display = string.IsNullOrWhiteSpace(_product.Brand)
-                ? (_product.ProductName ?? string.Empty)
-                : $"{_product.ProductName} — {_product.Brand}";
+            _lblItemName.Text = _product.ProductName ?? string.Empty;
+            _lblItemSub.Text = string.IsNullOrWhiteSpace(_product.Brand)
+                ? "No brand"
+                : _product.Brand;
 
-            _lblItemName.Text = display;
-            _lblCurrentQty.Text = _product.QuantityOnHand.ToString();
+            _lblCurrentQty.Text = _product.QuantityOnHand.ToString("N0");
             _txtNewQty.Text = _product.QuantityOnHand.ToString();
 
             _txtNewQty.FocusInput();
@@ -204,6 +283,8 @@ namespace TodangMotor.Forms
 
         private async Task SaveAsync()
         {
+            _lblStatus.Text = string.Empty;
+
             string raw = (_txtNewQty.Text ?? string.Empty).Trim();
 
             if (!int.TryParse(raw, out int newQty))

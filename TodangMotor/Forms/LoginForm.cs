@@ -9,21 +9,21 @@ namespace TodangMotor.Forms
 {
     public class LoginForm : ShellForm
     {
-        private const int LeftPanelPercent = 45;
+        private const int LeftPanelPercent = 42;
 
         private readonly AuthService _authService = new();
 
-        private RoundedTextBox _usernameBox;
-        private RoundedTextBox _passwordBox;
-        private Button _signInButton;
-        private Label _errorLabel;
-        private Panel _rightPanel;
-        private Panel _leftPanel;
-        private Button _closeBtn;
-        private Button _minBtn;
+        private RoundedTextBox _usernameBox = null!;
+        private RoundedTextBox _passwordBox = null!;
+        private Button _signInButton = null!;
+        private Label _errorLabel = null!;
+        private Panel _rightPanel = null!;
+        private Panel _leftPanel = null!;
+        private Button _closeBtn = null!;
+        private Button _minBtn = null!;
         private bool _isBusy;
 
-        private System.Windows.Forms.Timer _lockoutTimer;
+        private System.Windows.Forms.Timer _lockoutTimer = null!;
         private int _lockoutSecondsRemaining;
         private bool _lockoutActive;
 
@@ -33,9 +33,9 @@ namespace TodangMotor.Forms
             ShowMaximizeButton = false;
             ShowMinimizeButton = false;
 
-            Text = "Todang Motor - Login";
-            ClientSize = new Size(900, 560);
-            MinimumSize = new Size(820, 520);
+            Text = "Todang Motor — Sign In";
+            ClientSize = new Size(960, 600);
+            MinimumSize = new Size(860, 560);
             StartPosition = FormStartPosition.CenterScreen;
             KeyPreview = true;
             BackColor = Theme.Background;
@@ -78,7 +78,7 @@ namespace TodangMotor.Forms
             ContentPanel.Controls.Add(split);
         }
 
-        // ---------------- LEFT PANEL — just a big logo ----------------
+        // ---------------- LEFT PANEL — brand ----
 
         private Panel BuildLeftPanel()
         {
@@ -88,12 +88,10 @@ namespace TodangMotor.Forms
                 BackColor = Theme.Primary
             };
 
-            // Large white card with the logo inside — aspect preserved.
-            // Large white card with the logo inside — aspect preserved.
             var logo = new LogoPlaceholder
             {
-                Width = 500,
-                Height = 170,
+                Width = 420,
+                Height = 150,
                 Radius = 24,
                 TileColor = Color.White,
                 LetterColor = Theme.Primary,
@@ -102,12 +100,26 @@ namespace TodangMotor.Forms
 
             var footer = new Label
             {
-                Text = "v1.0  ·  Offline Mode",
+                Text = "Inventory & Sales Management System",
                 Font = Theme.FontSmall,
-                ForeColor = Color.FromArgb(190, 205, 245),
+                ForeColor = Color.FromArgb(210, 220, 250),
                 AutoSize = false,
                 TextAlign = ContentAlignment.MiddleCenter,
-                Size = new Size(340, 22)
+                Height = 22,
+                Width = 400,
+                BackColor = Color.Transparent
+            };
+
+            var version = new Label
+            {
+                Text = "v1.0  ·  Offline Mode",
+                Font = Theme.FontTiny,
+                ForeColor = Color.FromArgb(170, 188, 240),
+                AutoSize = false,
+                TextAlign = ContentAlignment.MiddleCenter,
+                Height = 18,
+                Width = 400,
+                BackColor = Color.Transparent
             };
 
             panel.Resize += (s, e) =>
@@ -115,19 +127,23 @@ namespace TodangMotor.Forms
                 int cx = panel.ClientSize.Width / 2;
 
                 logo.Left = cx - logo.Width / 2;
-                logo.Top = (panel.ClientSize.Height - logo.Height) / 2 - 20;
+                logo.Top = (panel.ClientSize.Height - logo.Height) / 2 - 30;
 
                 footer.Left = cx - footer.Width / 2;
-                footer.Top = panel.ClientSize.Height - 40;
+                footer.Top = panel.ClientSize.Height - 60;
+
+                version.Left = cx - version.Width / 2;
+                version.Top = panel.ClientSize.Height - 34;
             };
 
             panel.Controls.Add(logo);
             panel.Controls.Add(footer);
+            panel.Controls.Add(version);
 
             return panel;
         }
 
-        // ---------------- RIGHT PANEL — login card ----------------
+        // ---------------- RIGHT PANEL — login card ----
 
         private Panel BuildRightPanel()
         {
@@ -148,8 +164,10 @@ namespace TodangMotor.Forms
 
             panel.Resize += (s, e) =>
             {
-                _closeBtn.Location = new Point(panel.ClientSize.Width - _closeBtn.Width - 6, 6);
-                _minBtn.Location = new Point(panel.ClientSize.Width - _closeBtn.Width - _minBtn.Width - 6, 6);
+                _closeBtn.Location = new Point(panel.ClientSize.Width - _closeBtn.Width - 8, 8);
+                _minBtn.Location = new Point(
+                    panel.ClientSize.Width - _closeBtn.Width - _minBtn.Width - 8,
+                    8);
             };
 
             var card = BuildLoginCard();
@@ -168,25 +186,35 @@ namespace TodangMotor.Forms
         {
             var card = new RoundedPanel
             {
-                Width = 360,
-                Height = 410,
+                Width = 440,
+                Height = 480,
                 BackColor = Theme.Surface,
                 Radius = Theme.RadiusCard,
-                BorderColor = Theme.Divider,
-                BorderSize = 1
+                BorderColor = Theme.PanelBorder,
+                BorderSize = 1,
+                ShadowEnabled = true,
+                Padding = new Padding(40)
             };
 
+            // In panel coordinates the visible card border sits at +4 (shadow ring).
+            // Add 4 so offsets land 40px inside the visible card.
+            const int x = 44;
+            const int w = 352;
+
+            // ---- Title ----
             var title = new Label
             {
                 Text = "Welcome Back",
-                Font = new Font(Theme.UiFontFamily, 22F, FontStyle.Bold),
+                Font = new Font(Theme.UiFontFamily, 24F, FontStyle.Bold),
                 ForeColor = Theme.TextPrimary,
                 AutoSize = false,
                 TextAlign = ContentAlignment.MiddleLeft,
-                Location = new Point(32, 26),
-                Size = new Size(296, 42)
+                Location = new Point(x, 44),
+                Size = new Size(w, 44),
+                BackColor = Color.Transparent
             };
 
+            // ---- Subtitle ----
             var subtitle = new Label
             {
                 Text = "Sign in to continue",
@@ -194,41 +222,49 @@ namespace TodangMotor.Forms
                 ForeColor = Theme.TextSecondary,
                 AutoSize = false,
                 TextAlign = ContentAlignment.MiddleLeft,
-                Location = new Point(32, 72),
-                Size = new Size(296, 22)
+                Location = new Point(x, 100),
+                Size = new Size(w, 24),
+                BackColor = Color.Transparent
             };
 
+            // ---- Username ----
             var userLabel = new Label
             {
                 Text = "Username",
                 Font = Theme.FontSmall,
                 ForeColor = Theme.TextSecondary,
                 AutoSize = false,
-                Location = new Point(32, 114),
-                Size = new Size(296, 18)
+                TextAlign = ContentAlignment.MiddleLeft,
+                Location = new Point(x, 156),
+                Size = new Size(w, 22),
+                BackColor = Color.Transparent
             };
 
-            _usernameBox = UiFactory.CreateTextBox(296);
-            _usernameBox.Location = new Point(32, 136);
+            _usernameBox = UiFactory.CreateTextBox(w);
+            _usernameBox.Location = new Point(x, 180);
             _usernameBox.Placeholder = "Enter your username";
             _usernameBox.MaxLength = 50;
 
+            // ---- Password ----
             var passLabel = new Label
             {
                 Text = "Password",
                 Font = Theme.FontSmall,
                 ForeColor = Theme.TextSecondary,
                 AutoSize = false,
-                Location = new Point(32, 188),
-                Size = new Size(296, 18)
+                TextAlign = ContentAlignment.MiddleLeft,
+                Location = new Point(x, 244),
+                Size = new Size(w, 22),
+                BackColor = Color.Transparent
             };
 
-            _passwordBox = UiFactory.CreateTextBox(296, isPassword: true);
-            _passwordBox.Location = new Point(32, 210);
+            _passwordBox = UiFactory.CreateTextBox(w, isPassword: true);
+            _passwordBox.Location = new Point(x, 268);
             _passwordBox.Placeholder = "Enter your password";
             _passwordBox.MaxLength = 100;
             _passwordBox.ShowPasswordToggle = true;
 
+            // ---- Error line ----
             _errorLabel = new Label
             {
                 Text = string.Empty,
@@ -236,12 +272,18 @@ namespace TodangMotor.Forms
                 ForeColor = Theme.Danger,
                 AutoSize = false,
                 TextAlign = ContentAlignment.MiddleLeft,
-                Location = new Point(32, 260),
-                Size = new Size(296, 22)
+                Location = new Point(x, 328),
+                Size = new Size(w, 22),
+                BackColor = Color.Transparent
             };
 
-            _signInButton = UiFactory.CreateButton("Sign In", UiFactory.ButtonStyle.Primary, 296, 44);
-            _signInButton.Location = new Point(32, 296);
+            // ---- Sign In ----
+            _signInButton = UiFactory.CreateButton(
+                "Sign In",
+                UiFactory.ButtonStyle.Primary,
+                w,
+                48);
+            _signInButton.Location = new Point(x, 368);
             _signInButton.Click += async (s, e) => await DoSignInAsync();
 
             _usernameBox.InputKeyDown += Input_KeyDown;
@@ -264,7 +306,7 @@ namespace TodangMotor.Forms
             var b = new Button
             {
                 Text = glyph,
-                Font = Theme.FontIcon,
+                Font = new Font(Theme.IconFontFamily, 10F, FontStyle.Regular),
                 ForeColor = Theme.TextSecondary,
                 BackColor = Theme.Background,
                 FlatStyle = FlatStyle.Flat,

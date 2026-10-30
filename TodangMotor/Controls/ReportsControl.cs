@@ -13,46 +13,57 @@ using TodangMotor.Services;
 namespace TodangMotor.Controls
 {
     /// <summary>
-    /// Reports Hub — tile-based. Owner-only.
-    /// From/To date pickers at the top drive all range-dependent reports.
-    /// All exports are PDF only.
+    /// Reports Hub — Owner-only. Currently a single Sales Revenue Report.
+    /// Date chips pick the range; the preview updates automatically;
+    /// "Generate PDF" exports whatever is currently shown.
     /// </summary>
     public class ReportsControl : UserControl
     {
-        // ============================================================
-        // SERVICES
-        // ============================================================
-
         private readonly SalesService _salesService = new();
-        private readonly ProductService _productService = new();
-        private readonly CategoryService _categoryService = new(new CategoryRepository());
-        private readonly StockMovementService _stockMovementService = new();
-
-        // ============================================================
-        // STATE
-        // ============================================================
 
         private bool _isBusy;
+        private RevenueReportResult? _currentResult;
+        private string _currentRangeLabel = string.Empty;
 
-        // ============================================================
-        // UI CONTROLS
-        // ============================================================
+        // ---- Date chips ----
+        private readonly List<Button> _dateChips = new();
+        private Button? _activeDateChip;
+        private Panel _customPickerPanel = null!;
+        private DateTimePicker _dtpFrom = null!;
+        private DateTimePicker _dtpTo = null!;
 
-        private DateTimePicker _dtpFrom;
-        private DateTimePicker _dtpTo;
-        private Label _lblStatus;
+        // ---- Preview ----
+        private Label _countLabel = null!;
+        private DataGridView _previewGrid = null!;
+        private Label _revenueValue = null!;
+        private Label _costValue = null!;
+        private Label _netValue = null!;
+        private Label _txValue = null!;
 
-        // ============================================================
-        // CONSTRUCTION
-        // ============================================================
+        // ---- Actions ----
+        private Button _btnGenerate = null!;
+        private Label _lblStatus = null!;
+
+        // Fixed preview grid widths (Date is dynamic).
+        private const int ColTxW = 150;
+        private const int ColRevW = 150;
+        private const int ColCostW = 150;
+        private const int ColNetW = 180;
 
         public ReportsControl()
         {
             Dock = DockStyle.Fill;
             BackColor = Theme.Background;
-            Padding = new Padding(Theme.SpacingLg);
+            Padding = new Padding(UiFactory.PagePadding);
 
             BuildLayout();
+
+            Load += ReportsControl_Load;
+        }
+
+        private async void ReportsControl_Load(object? sender, EventArgs e)
+        {
+            await RefreshPreviewAsync();
         }
 
         // ============================================================
@@ -70,18 +81,18 @@ namespace TodangMotor.Controls
                 Margin = Padding.Empty,
                 Padding = Padding.Empty
             };
-            root.RowStyles.Add(new RowStyle(SizeType.Absolute, 48));
-            root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-            root.RowStyles.Add(new RowStyle(SizeType.Absolute, 40));
+            root.RowStyles.Add(new RowStyle(SizeType.Absolute, 72));   // date chips
+            root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));   // main
+            root.RowStyles.Add(new RowStyle(SizeType.Absolute, 88));   // bottom bar
 
-            root.Controls.Add(BuildDateBar(), 0, 0);
-            root.Controls.Add(BuildTilesRow(), 0, 1);
-            root.Controls.Add(BuildStatusBar(), 0, 2);
+            root.Controls.Add(BuildFilterBar(), 0, 0);
+            root.Controls.Add(BuildMainArea(), 0, 1);
+            root.Controls.Add(BuildBottomBar(), 0, 2);
 
             Controls.Add(root);
         }
 
-        private Panel BuildDateBar()
+        private Panel BuildFilterBar()
         {
             var bar = new Panel
             {
@@ -89,14 +100,43 @@ namespace TodangMotor.Controls
                 BackColor = Theme.Background
             };
 
+            var presets = new (string Label, string Key)[]
+            {
+                ("Today",        "today"),
+                ("Last 7 days",  "7d"),
+                ("Last 30 days", "30d"),
+                ("This month",   "month"),
+                ("Custom",       "custom")
+            };
+
+            int x = 0;
+            foreach (var (label, key) in presets)
+            {
+                var chip = CreateDateChip(label, key);
+                chip.Location = new Point(x, 12);
+                bar.Controls.Add(chip);
+                _dateChips.Add(chip);
+                x += chip.Width + 8;
+            }
+
+            // ---- Custom pickers (hidden until "Custom" is selected) ----
+            _customPickerPanel = new Panel
+            {
+                Location = new Point(x + 8, 12),
+                Height = 40,
+                Width = 424,
+                BackColor = Color.Transparent,
+                Visible = false
+            };
+
             var lblFrom = new Label
             {
-                Text = "From:",
+                Text = "From",
                 Font = Theme.FontSmall,
                 ForeColor = Theme.TextSecondary,
                 AutoSize = false,
-                Size = new Size(46, 20),
-                Location = new Point(0, 14),
+                Size = new Size(44, 40),
+                Location = new Point(0, 0),
                 TextAlign = ContentAlignment.MiddleLeft,
                 BackColor = Color.Transparent
             };
@@ -107,19 +147,20 @@ namespace TodangMotor.Controls
                 CustomFormat = "MMM d, yyyy",
                 Font = Theme.FontBody,
                 Location = new Point(48, 6),
-                Size = new Size(170, 32),
+                Size = new Size(160, 32),
                 MaxDate = DateTime.Today,
-                Value = DateTime.Today
+                Value = DateTime.Today.AddDays(-29)
             };
+            _dtpFrom.ValueChanged += async (s, e) => await RefreshPreviewAsync();
 
             var lblTo = new Label
             {
-                Text = "To:",
+                Text = "To",
                 Font = Theme.FontSmall,
                 ForeColor = Theme.TextSecondary,
                 AutoSize = false,
-                Size = new Size(28, 20),
-                Location = new Point(232, 14),
+                Size = new Size(28, 40),
+                Location = new Point(216, 0),
                 TextAlign = ContentAlignment.MiddleLeft,
                 BackColor = Color.Transparent
             };
@@ -129,74 +170,309 @@ namespace TodangMotor.Controls
                 Format = DateTimePickerFormat.Custom,
                 CustomFormat = "MMM d, yyyy",
                 Font = Theme.FontBody,
-                Location = new Point(262, 6),
-                Size = new Size(170, 32),
+                Location = new Point(248, 6),
+                Size = new Size(160, 32),
                 MaxDate = DateTime.Today,
                 Value = DateTime.Today
             };
+            _dtpTo.ValueChanged += async (s, e) => await RefreshPreviewAsync();
 
-            bar.Controls.Add(lblFrom);
-            bar.Controls.Add(_dtpFrom);
-            bar.Controls.Add(lblTo);
-            bar.Controls.Add(_dtpTo);
+            _customPickerPanel.Controls.Add(lblFrom);
+            _customPickerPanel.Controls.Add(_dtpFrom);
+            _customPickerPanel.Controls.Add(lblTo);
+            _customPickerPanel.Controls.Add(_dtpTo);
+            bar.Controls.Add(_customPickerPanel);
+
+            // Default = Last 30 days
+            var defaultChip = _dateChips.FirstOrDefault(c => (string?)c.Tag == "30d");
+            if (defaultChip != null) SetActiveDateChip(defaultChip);
+            _dtpFrom.Value = DateTime.Today.AddDays(-29);
+            _dtpTo.Value = DateTime.Today;
 
             return bar;
         }
 
-        private TableLayoutPanel BuildTilesRow()
+        private Button CreateDateChip(string label, string key)
         {
-            var grid = new TableLayoutPanel
+            var chip = new Button
+            {
+                Text = label,
+                Font = Theme.FontBodyBold,
+                FlatStyle = FlatStyle.Flat,
+                BackColor = Theme.Surface,
+                ForeColor = Theme.TextSecondary,
+                Cursor = Cursors.Hand,
+                Height = 40,
+                AutoSize = false,
+                Tag = key,
+                Padding = new Padding(0)
+            };
+            chip.FlatAppearance.BorderSize = 1;
+            chip.FlatAppearance.BorderColor = Theme.PanelBorder;
+            chip.FlatAppearance.MouseOverBackColor = Color.FromArgb(240, 244, 255);
+
+            using (var g = chip.CreateGraphics())
+            {
+                var size = g.MeasureString(label, chip.Font);
+                chip.Width = (int)size.Width + 32;
+            }
+
+            Theme.ApplyRoundedRegion(chip, Theme.Radius);
+            chip.Resize += (s, e) => Theme.ApplyRoundedRegion(chip, Theme.Radius);
+
+            chip.Click += async (s, e) =>
+            {
+                SetActiveDateChip(chip);
+                await ApplyDatePresetAsync(key);
+            };
+
+            return chip;
+        }
+
+        private void SetActiveDateChip(Button chip)
+        {
+            _activeDateChip = chip;
+
+            foreach (var c in _dateChips)
+            {
+                bool active = (c == chip);
+                c.BackColor = active ? Theme.Primary : Theme.Surface;
+                c.ForeColor = active ? Color.White : Theme.TextSecondary;
+                c.FlatAppearance.BorderColor = active ? Theme.Primary : Theme.PanelBorder;
+                c.FlatAppearance.MouseOverBackColor = active
+                    ? Theme.PrimaryHover
+                    : Color.FromArgb(240, 244, 255);
+            }
+        }
+
+        private async Task ApplyDatePresetAsync(string key)
+        {
+            DateTime today = DateTime.Today;
+
+            switch (key)
+            {
+                case "today":
+                    _dtpFrom.Value = today;
+                    _dtpTo.Value = today;
+                    _customPickerPanel.Visible = false;
+                    break;
+                case "7d":
+                    _dtpFrom.Value = today.AddDays(-6);
+                    _dtpTo.Value = today;
+                    _customPickerPanel.Visible = false;
+                    break;
+                case "30d":
+                    _dtpFrom.Value = today.AddDays(-29);
+                    _dtpTo.Value = today;
+                    _customPickerPanel.Visible = false;
+                    break;
+                case "month":
+                    _dtpFrom.Value = new DateTime(today.Year, today.Month, 1);
+                    _dtpTo.Value = today;
+                    _customPickerPanel.Visible = false;
+                    break;
+                case "custom":
+                    _customPickerPanel.Visible = true;
+                    _dtpFrom.Focus();
+                    return; // wait for user to change dates
+            }
+
+            await RefreshPreviewAsync();
+        }
+
+        private Panel BuildMainArea()
+        {
+            var main = new TableLayoutPanel
             {
                 Dock = DockStyle.Fill,
-                ColumnCount = 2,
-                RowCount = 2,
+                ColumnCount = 1,
+                RowCount = 3,
+                BackColor = Theme.Background,
+                Margin = new Padding(0, 8, 0, 8),
+                Padding = Padding.Empty
+            };
+            main.RowStyles.Add(new RowStyle(SizeType.Absolute, 48));   // title + count
+            main.RowStyles.Add(new RowStyle(SizeType.Absolute, 148));  // summary cards
+            main.RowStyles.Add(new RowStyle(SizeType.Percent, 100));   // grid
+
+            main.Controls.Add(BuildTitleRow(), 0, 0);
+            main.Controls.Add(BuildSummaryRow(), 0, 1);
+            main.Controls.Add(BuildPreviewGrid(), 0, 2);
+
+            return main;
+        }
+
+        private Panel BuildTitleRow()
+        {
+            var row = new Panel
+            {
+                Dock = DockStyle.Fill,
+                BackColor = Theme.Background
+            };
+
+            var title = new Label
+            {
+                Text = "Sales Revenue Report — Preview",
+                Font = new Font(Theme.UiFontFamily, 14F, FontStyle.Bold),
+                ForeColor = Theme.TextPrimary,
+                AutoSize = false,
+                Location = new Point(0, 12),
+                Height = 32,
+                Width = 500,
+                TextAlign = ContentAlignment.MiddleLeft,
+                BackColor = Color.Transparent
+            };
+
+            _countLabel = new Label
+            {
+                Text = string.Empty,
+                Font = Theme.FontSmall,
+                ForeColor = Theme.TextSecondary,
+                AutoSize = false,
+                Location = new Point(0, 12),
+                Height = 32,
+                Width = 500,
+                TextAlign = ContentAlignment.MiddleRight,
+                Anchor = AnchorStyles.Top | AnchorStyles.Right,
+                BackColor = Color.Transparent
+            };
+
+            row.Controls.Add(title);
+            row.Controls.Add(_countLabel);
+
+            row.Resize += (s, e) =>
+            {
+                _countLabel.Left = row.ClientSize.Width - _countLabel.Width;
+            };
+
+            return row;
+        }
+
+        private TableLayoutPanel BuildSummaryRow()
+        {
+            var row = new TableLayoutPanel
+            {
+                Dock = DockStyle.Fill,
+                ColumnCount = 4,
+                RowCount = 1,
                 BackColor = Theme.Background,
                 Margin = Padding.Empty,
                 Padding = Padding.Empty
             };
-            grid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50f));
-            grid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50f));
-            grid.RowStyles.Add(new RowStyle(SizeType.Percent, 50f));
-            grid.RowStyles.Add(new RowStyle(SizeType.Percent, 50f));
+            for (int i = 0; i < 4; i++)
+                row.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 25f));
+            row.RowStyles.Add(new RowStyle(SizeType.Percent, 100f));
 
-            var salesTile = BuildTile(
-                "\uE9D9",
-                "Sales Report",
-                "Revenue, cost, and net income per day for the selected range.",
-                async (s, e) => await GenerateSalesReportAsync());
+            row.Controls.Add(BuildStatCard("Total Revenue", out _revenueValue), 0, 0);
+            row.Controls.Add(BuildStatCard("Total Cost", out _costValue), 1, 0);
+            row.Controls.Add(BuildStatCard("Net Income", out _netValue), 2, 0);
+            row.Controls.Add(BuildStatCard("Transactions", out _txValue), 3, 0);
 
-            var movementTile = BuildTile(
-                "\uE81C",
-                "Movement Report",
-                "Every stock movement in the range — sales, deliveries, adjustments.",
-                async (s, e) => await GenerateMovementReportAsync());
-
-            var inventoryTile = BuildTile(
-                "\uE7B8",
-                "Inventory Snapshot",
-                "Current stock levels for all active products. Ignores the date range.",
-                async (s, e) => await GenerateInventorySnapshotAsync());
-
-            var lowStockTile = BuildTile(
-                "\uE7BA",
-                "Low Stock Report",
-                "All items at or below their reorder level. Ignores the date range.",
-                async (s, e) => await GenerateLowStockReportAsync());
-
-            salesTile.Margin = new Padding(Theme.SpacingSm);
-            movementTile.Margin = new Padding(Theme.SpacingSm);
-            inventoryTile.Margin = new Padding(Theme.SpacingSm);
-            lowStockTile.Margin = new Padding(Theme.SpacingSm);
-
-            grid.Controls.Add(salesTile, 0, 0);
-            grid.Controls.Add(movementTile, 1, 0);
-            grid.Controls.Add(inventoryTile, 0, 1);
-            grid.Controls.Add(lowStockTile, 1, 1);
-
-            return grid;
+            return row;
         }
 
-        private Panel BuildStatusBar()
+        private RoundedPanel BuildStatCard(string titleText, out Label valueLabel)
+        {
+            var card = UiFactory.CreateCard();
+            card.Dock = DockStyle.Fill;
+            card.Margin = new Padding(12, 8, 12, 8);
+
+            var title = new Label
+            {
+                Text = titleText,
+                Font = Theme.FontSmall,
+                ForeColor = Theme.TextSecondary,
+                AutoSize = false,
+                Location = new Point(20, 16),
+                Height = 20,
+                Width = 240,
+                TextAlign = ContentAlignment.MiddleLeft,
+                BackColor = Color.Transparent
+            };
+
+            var value = new Label
+            {
+                Text = "—",
+                Font = new Font(Theme.UiFontFamily, 20F, FontStyle.Bold),
+                ForeColor = Theme.TextPrimary,
+                AutoSize = false,
+                Location = new Point(20, 52),
+                Height = 50,
+                Width = 260,
+                TextAlign = ContentAlignment.MiddleLeft,
+                BackColor = Color.Transparent,
+                AutoEllipsis = true
+            };
+            valueLabel = value;
+
+            card.Controls.Add(title);
+            card.Controls.Add(value);
+
+            return card;
+        }
+
+        private DataGridView BuildPreviewGrid()
+        {
+            _previewGrid = new DataGridView
+            {
+                Dock = DockStyle.Fill,
+                Margin = new Padding(8, 0, 8, 0),
+                AllowUserToAddRows = false,
+                AllowUserToDeleteRows = false,
+                ReadOnly = true
+            };
+            UiFactory.StyleGridModern(_previewGrid);
+            _previewGrid.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.None;
+
+            PrimePreviewColumns();
+
+            _previewGrid.Resize += (s, e) => FitPreviewDateColumn();
+
+            return _previewGrid;
+        }
+
+        private void PrimePreviewColumns()
+        {
+            _previewGrid.AutoGenerateColumns = false;
+            _previewGrid.Columns.Clear();
+
+            void AddTextCol(string prop, string header, int width,
+                DataGridViewContentAlignment align = DataGridViewContentAlignment.MiddleLeft)
+            {
+                var col = new DataGridViewTextBoxColumn
+                {
+                    Name = prop,
+                    DataPropertyName = prop,
+                    HeaderText = header,
+                    Width = width,
+                    ReadOnly = true,
+                    SortMode = DataGridViewColumnSortMode.NotSortable,
+                    Resizable = DataGridViewTriState.False
+                };
+                if (align != DataGridViewContentAlignment.MiddleLeft)
+                    col.DefaultCellStyle.Alignment = align;
+                _previewGrid.Columns.Add(col);
+            }
+
+            AddTextCol("Date", "Date", 400, DataGridViewContentAlignment.MiddleLeft);
+            AddTextCol("Transactions", "Transactions", ColTxW, DataGridViewContentAlignment.MiddleRight);
+            AddTextCol("Revenue", "Revenue (₱)", ColRevW, DataGridViewContentAlignment.MiddleRight);
+            AddTextCol("Cost", "Cost (₱)", ColCostW, DataGridViewContentAlignment.MiddleRight);
+            AddTextCol("NetIncome", "Net Income (₱)", ColNetW, DataGridViewContentAlignment.MiddleRight);
+        }
+
+        private void FitPreviewDateColumn()
+        {
+            if (_previewGrid == null || !_previewGrid.Columns.Contains("Date")) return;
+
+            int others = ColTxW + ColRevW + ColCostW + ColNetW;
+            int available = _previewGrid.ClientSize.Width - others - 24;
+            if (available < 200) available = 200;
+
+            _previewGrid.Columns["Date"].Width = available;
+        }
+
+        private Panel BuildBottomBar()
         {
             var bar = new Panel
             {
@@ -206,110 +482,45 @@ namespace TodangMotor.Controls
 
             _lblStatus = new Label
             {
-                Text = string.Empty,
+                Text = "Ready.",
                 Font = Theme.FontSmall,
                 ForeColor = Theme.TextSecondary,
                 AutoSize = false,
-                Dock = DockStyle.Fill,
+                Location = new Point(0, 20),
+                Height = UiFactory.PrimaryButtonHeight,
+                Width = 600,
                 TextAlign = ContentAlignment.MiddleLeft,
                 BackColor = Color.Transparent
             };
 
+            _btnGenerate = UiFactory.CreateButton(
+                "Generate PDF",
+                UiFactory.ButtonStyle.Primary,
+                200,
+                UiFactory.PrimaryButtonHeight);
+            _btnGenerate.Anchor = AnchorStyles.Top | AnchorStyles.Right;
+            _btnGenerate.Click += async (s, e) => await GeneratePdfAsync();
+
             bar.Controls.Add(_lblStatus);
+            bar.Controls.Add(_btnGenerate);
+
+            bar.Resize += (s, e) =>
+            {
+                _btnGenerate.Left = bar.ClientSize.Width - _btnGenerate.Width;
+                _lblStatus.Width = Math.Max(200, _btnGenerate.Left - 16);
+            };
+
             return bar;
         }
 
-        private RoundedPanel BuildTile(string icon, string title, string description, EventHandler onClick)
-        {
-            var tile = new RoundedPanel
-            {
-                Dock = DockStyle.Fill,
-                Radius = Theme.RadiusCard,
-                BorderColor = Theme.Divider,
-                BorderSize = 1,
-                BackColor = Theme.Surface,
-                Padding = new Padding(28)
-            };
-
-            var iconLabel = new Label
-            {
-                Text = icon,
-                Font = new Font(Theme.IconFontFamily, 32F, FontStyle.Regular),
-                ForeColor = Theme.Primary,
-                AutoSize = false,
-                Size = new Size(56, 56),
-                TextAlign = ContentAlignment.MiddleCenter,
-                BackColor = Color.Transparent
-            };
-
-            // AutoSize=true + MaximumSize.Width = wrap without clipping.
-            // WinForms computes the exact height needed for the font, including
-            // ascenders and descenders. No fixed Height → nothing can clip.
-            var titleLabel = new Label
-            {
-                Text = title,
-                Font = new Font(Theme.UiFontFamily, 16F, FontStyle.Bold),
-                ForeColor = Theme.TextPrimary,
-                AutoSize = true,
-                TextAlign = ContentAlignment.MiddleLeft,
-                BackColor = Color.Transparent
-            };
-
-            var descLabel = new Label
-            {
-                Text = description,
-                Font = Theme.FontSmall,
-                ForeColor = Theme.TextSecondary,
-                AutoSize = true,
-                TextAlign = ContentAlignment.TopLeft,
-                BackColor = Color.Transparent
-            };
-
-            var btn = UiFactory.CreateButton("Generate PDF", UiFactory.ButtonStyle.Primary, 160, 42);
-            btn.Click += onClick;
-
-            tile.Controls.Add(iconLabel);
-            tile.Controls.Add(titleLabel);
-            tile.Controls.Add(descLabel);
-            tile.Controls.Add(btn);
-
-            tile.Resize += (s, e) =>
-            {
-                const int padLeft = 28;
-                const int padTop = 28;
-                const int textColX = 68;
-
-                int contentW = Math.Max(200, tile.ClientSize.Width - padLeft * 2);
-                int textW = Math.Max(120, contentW - textColX);
-
-                // Icon anchored at top of the text block.
-                iconLabel.Location = new Point(padLeft, padTop);
-
-                // Title: wrap at textW, height auto-computed by WinForms.
-                titleLabel.MaximumSize = new Size(textW, 0);
-                titleLabel.Location = new Point(padLeft + textColX, padTop);
-
-                // Description: sits right below the title's actual height.
-                descLabel.MaximumSize = new Size(textW, 0);
-                descLabel.Location = new Point(padLeft + textColX,
-                                               titleLabel.Bottom + 4);
-
-                // Button sits right below the description.
-                btn.Location = new Point(padLeft + textColX, tile.ClientSize.Height - btn.Height - 28);
-            };
-
-            return tile;
-        }
-
         // ============================================================
-        // RANGE HELPERS
+        // PREVIEW REFRESH
         // ============================================================
 
         private (DateTime From, DateTime ToExclusive, string Label) GetSelectedRange()
         {
             DateTime from = _dtpFrom.Value.Date;
             DateTime to = _dtpTo.Value.Date;
-
             if (to < from) to = from;
 
             string label = from == to
@@ -319,15 +530,12 @@ namespace TodangMotor.Controls
             return (from, to.AddDays(1), label);
         }
 
-        // ============================================================
-        // SALES REPORT
-        // ============================================================
-
-        private async Task GenerateSalesReportAsync()
+        private async Task RefreshPreviewAsync()
         {
             if (_isBusy) return;
 
             var (from, toExclusive, rangeLabel) = GetSelectedRange();
+            _currentRangeLabel = rangeLabel;
 
             SetBusy(true);
             try
@@ -336,300 +544,58 @@ namespace TodangMotor.Controls
 
                 if (!result.Success)
                 {
+                    _currentResult = null;
+                    ClearPreview();
                     ShowStatus(result.ErrorMessage, true);
-                    MessageBox.Show(result.ErrorMessage, "Report Failed",
-                        MessageBoxButtons.OK, MessageBoxIcon.Warning);
                     return;
                 }
 
-                if (result.DailyRows.Count == 0)
-                {
-                    ShowStatus("No sales found in the selected range.", true);
-                    MessageBox.Show("No sales found in the selected range.", "No Data",
-                        MessageBoxButtons.OK, MessageBoxIcon.Information);
-                    return;
-                }
+                _currentResult = result;
 
-                var table = new ReportTable
-                {
-                    Title = "Sales Revenue Report",
-                    Subtitle = $"{rangeLabel}   ·   Generated {DateTime.Now:MMM d, yyyy h:mm tt}",
-                    FooterNote = result.IsCostComplete
-                        ? "All rows have complete cost data. Net Income is exact."
-                        : $"{result.DaysWithMissingCost} day(s) have incomplete cost data.",
-                    SummaryItems = new List<(string Label, string Value)>
+                // ---- Summary cards ----
+                _revenueValue.Text = "₱ " + result.TotalRevenue.ToString("N2");
+                _costValue.Text = "₱ " + result.TotalCost.ToString("N2");
+                _netValue.Text = "₱ " + result.TotalNetIncome.ToString("N2");
+                _txValue.Text = result.TotalTransactions.ToString("N0");
+
+                // ---- Grid rows ----
+                var rows = result.DailyRows
+                    .OrderByDescending(r => r.SaleDay)
+                    .Select(r => new
                     {
-                        ("Total Revenue",  "₱ " + result.TotalRevenue.ToString("N2")),
-                        ("Total Cost",     "₱ " + result.TotalCost.ToString("N2")),
-                        ("Net Income",     "₱ " + result.TotalNetIncome.ToString("N2")),
-                        ("Transactions",   result.TotalTransactions.ToString("N0"))
-                    },
-                    Headers = new List<string>
-                    {
-                        "Date", "Transactions", "Revenue (PHP)", "Cost (PHP)", "Net Income (PHP)"
-                    }
-                };
-
-                foreach (var row in result.DailyRows.OrderByDescending(r => r.SaleDay))
-                {
-                    string netIncome = row.HasCompleteCost
-                        ? row.NetIncome!.Value.ToString("N2")
-                        : "—";
-
-                    table.Rows.Add(new List<string>
-                    {
-                        row.SaleDay.ToString("MMM d, yyyy"),
-                        row.TransactionCount.ToString(),
-                        row.Revenue.ToString("N2"),
-                        row.HasCompleteCost ? row.KnownCost.ToString("N2") : "—",
-                        netIncome
-                    });
-                }
-
-                await SaveAndReportAsync(table, "SalesReport");
-            }
-            finally
-            {
-                SetBusy(false);
-            }
-        }
-
-        // ============================================================
-        // MOVEMENT REPORT
-        // ============================================================
-
-        private async Task GenerateMovementReportAsync()
-        {
-            if (_isBusy) return;
-
-            var (from, toExclusive, rangeLabel) = GetSelectedRange();
-
-            SetBusy(true);
-            try
-            {
-                var (success, error, movements) =
-                    await _stockMovementService.GetFilteredAsync(from, toExclusive, null, null);
-
-                if (!success)
-                {
-                    ShowStatus(error, true);
-                    MessageBox.Show(error, "Report Failed",
-                        MessageBoxButtons.OK, MessageBoxIcon.Warning);
-                    return;
-                }
-
-                if (movements.Count == 0)
-                {
-                    ShowStatus("No stock movements in the selected range.", true);
-                    MessageBox.Show("No stock movements in the selected range.", "No Data",
-                        MessageBoxButtons.OK, MessageBoxIcon.Information);
-                    return;
-                }
-
-                var table = new ReportTable
-                {
-                    Title = "Stock Movement Report",
-                    Subtitle = $"{rangeLabel}   ·   Generated {DateTime.Now:MMM d, yyyy h:mm tt}",
-                    FooterNote = $"{movements.Count} movement(s) recorded",
-                    SummaryItems = new List<(string Label, string Value)>
-                    {
-                        ("Movements",   movements.Count.ToString("N0")),
-                        ("Sales",       movements.Count(m => m.MovementType == "Sale").ToString("N0")),
-                        ("Stock-Ins",   movements.Count(m => m.MovementType == "StockIn").ToString("N0")),
-                        ("Adjustments", movements.Count(m => m.MovementType == "Adjustment").ToString("N0"))
-                    },
-                    Headers = new List<string>
-                    {
-                        "Date & Time", "Item", "Type", "Stock In", "Stock Out", "Start Qty", "End Qty"
-                    }
-                };
-
-                foreach (var m in movements.OrderByDescending(x => x.MovementDate))
-                {
-                    string item = string.IsNullOrWhiteSpace(m.ProductBrand)
-                        ? (m.ProductName ?? "(unknown item)")
-                        : $"{m.ProductName} — {m.ProductBrand}";
-
-                    string typeLabel = m.MovementType switch
-                    {
-                        "StockIn" => "Stock-In",
-                        "Sale" => "Sale",
-                        "Adjustment" => "Adjustment",
-                        "Initial" => "Initial",
-                        _ => m.MovementType
-                    };
-
-                    table.Rows.Add(new List<string>
-                    {
-                        m.MovementDate.ToString("MMM d, yyyy · h:mm tt"),
-                        item,
-                        typeLabel,
-                        m.QuantityChange > 0 ? $"+{m.QuantityChange}" : "",
-                        m.QuantityChange < 0 ? $"{m.QuantityChange}" : "",
-                        m.QuantityBefore.ToString(),
-                        m.QuantityAfter.ToString()
-                    });
-                }
-
-                await SaveAndReportAsync(table, "StockMovement");
-            }
-            finally
-            {
-                SetBusy(false);
-            }
-        }
-
-        // ============================================================
-        // INVENTORY SNAPSHOT
-        // ============================================================
-
-        private async Task GenerateInventorySnapshotAsync()
-        {
-            if (_isBusy) return;
-
-            SetBusy(true);
-            try
-            {
-                var (prodOk, prodErr, products) = await _productService.GetAllAsync();
-                if (!prodOk)
-                {
-                    ShowStatus(prodErr, true);
-                    return;
-                }
-
-                var categories = (await _categoryService.GetAllCategoriesAsync())?.ToList()
-                    ?? new List<Category>();
-                var catById = categories.ToDictionary(c => c.CategoryId);
-
-                var active = products.Where(p => p.IsActive).ToList();
-
-                if (active.Count == 0)
-                {
-                    ShowStatus("No active items to report.", true);
-                    MessageBox.Show("No active items to report.", "No Data",
-                        MessageBoxButtons.OK, MessageBoxIcon.Information);
-                    return;
-                }
-
-                var table = new ReportTable
-                {
-                    Title = "Inventory Snapshot",
-                    Subtitle = $"Generated {DateTime.Now:MMM d, yyyy h:mm tt}",
-                    FooterNote = $"{active.Count} active item(s)",
-                    SummaryItems = new List<(string Label, string Value)>
-                    {
-                        ("Total Items",   active.Count.ToString("N0")),
-                        ("OK",            active.Count(p => p.QuantityOnHand > p.ReorderLevel).ToString("N0")),
-                        ("Low",           active.Count(p => p.QuantityOnHand > 0 && p.QuantityOnHand <= p.ReorderLevel).ToString("N0")),
-                        ("Out of Stock",  active.Count(p => p.QuantityOnHand == 0).ToString("N0"))
-                    },
-                    Headers = new List<string>
-                    {
-                        "Product", "Brand", "Category", "Unit", "On Hand", "Reorder At", "Status"
-                    }
-                };
-
-                foreach (var p in active.OrderBy(p => p.ProductName).ThenBy(p => p.Brand))
-                {
-                    string category = catById.TryGetValue(p.CategoryId, out var c) ? c.CategoryName : "—";
-                    string status = p.QuantityOnHand == 0
-                        ? "Out of stock"
-                        : (p.QuantityOnHand <= p.ReorderLevel ? "Low" : "OK");
-
-                    table.Rows.Add(new List<string>
-                    {
-                        p.ProductName ?? string.Empty,
-                        p.Brand ?? string.Empty,
-                        category,
-                        p.Unit ?? string.Empty,
-                        p.QuantityOnHand.ToString(),
-                        p.ReorderLevel.ToString(),
-                        status
-                    });
-                }
-
-                await SaveAndReportAsync(table, "InventorySnapshot");
-            }
-            finally
-            {
-                SetBusy(false);
-            }
-        }
-
-        // ============================================================
-        // LOW STOCK REPORT
-        // ============================================================
-
-        private async Task GenerateLowStockReportAsync()
-        {
-            if (_isBusy) return;
-
-            SetBusy(true);
-            try
-            {
-                var (prodOk, prodErr, products) = await _productService.GetAllAsync();
-                if (!prodOk)
-                {
-                    ShowStatus(prodErr, true);
-                    return;
-                }
-
-                var categories = (await _categoryService.GetAllCategoriesAsync())?.ToList()
-                    ?? new List<Category>();
-                var catById = categories.ToDictionary(c => c.CategoryId);
-
-                var low = products
-                    .Where(p => p.IsActive && p.QuantityOnHand <= p.ReorderLevel)
-                    .OrderBy(p => p.QuantityOnHand)
-                    .ThenBy(p => p.ProductName)
+                        Date = r.SaleDay.ToString("MMM d, yyyy"),
+                        Transactions = r.TransactionCount,
+                        Revenue = r.Revenue.ToString("N2"),
+                        Cost = r.HasCompleteCost ? r.KnownCost.ToString("N2") : "—",
+                        NetIncome = r.HasCompleteCost ? r.NetIncome!.Value.ToString("N2") : "—"
+                    })
                     .ToList();
 
-                if (low.Count == 0)
+                _previewGrid.DataSource = rows;
+                if (_previewGrid.Rows.Count > 0)
+                    _previewGrid.ClearSelection();
+
+                FitPreviewDateColumn();
+
+                // ---- Count label ----
+                if (result.DailyRows.Count == 0)
                 {
-                    ShowStatus("No items are currently low in stock.", false);
-                    MessageBox.Show("No items are currently low in stock.", "No Data",
-                        MessageBoxButtons.OK, MessageBoxIcon.Information);
-                    return;
+                    _countLabel.Text = "No sales in this period.";
+                    _countLabel.ForeColor = Theme.TextMuted;
+                    ShowStatus("No sales in the selected range.", false);
                 }
-
-                int outCount = low.Count(p => p.QuantityOnHand == 0);
-                int lowOnly = low.Count - outCount;
-
-                var table = new ReportTable
+                else
                 {
-                    Title = "Low Stock Report",
-                    Subtitle = $"Generated {DateTime.Now:MMM d, yyyy h:mm tt}",
-                    FooterNote = $"{low.Count} item(s) at or below reorder level",
-                    SummaryItems = new List<(string Label, string Value)>
-                    {
-                        ("Total",         low.Count.ToString("N0")),
-                        ("Out of Stock",  outCount.ToString("N0")),
-                        ("Low Stock",     lowOnly.ToString("N0"))
-                    },
-                    Headers = new List<string>
-                    {
-                        "Product", "Brand", "Category", "Unit", "On Hand", "Reorder At", "Status"
-                    }
-                };
-
-                foreach (var p in low)
-                {
-                    string category = catById.TryGetValue(p.CategoryId, out var c) ? c.CategoryName : "—";
-                    string status = p.QuantityOnHand == 0 ? "Out of stock" : "Low";
-
-                    table.Rows.Add(new List<string>
-                    {
-                        p.ProductName ?? string.Empty,
-                        p.Brand ?? string.Empty,
-                        category,
-                        p.Unit ?? string.Empty,
-                        p.QuantityOnHand.ToString(),
-                        p.ReorderLevel.ToString(),
-                        status
-                    });
+                    _countLabel.Text = $"{result.DailyRows.Count} day(s)   ·   {rangeLabel}";
+                    _countLabel.ForeColor = Theme.TextSecondary;
+                    ShowStatus("Preview ready. Click Generate PDF to export.", false);
                 }
-
-                await SaveAndReportAsync(table, "LowStock");
+            }
+            catch (Exception ex)
+            {
+                _currentResult = null;
+                ClearPreview();
+                ShowStatus($"Could not load preview: {ex.Message}", true);
             }
             finally
             {
@@ -637,46 +603,128 @@ namespace TodangMotor.Controls
             }
         }
 
+        private void ClearPreview()
+        {
+            _revenueValue.Text = "—";
+            _costValue.Text = "—";
+            _netValue.Text = "—";
+            _txValue.Text = "—";
+            _previewGrid.DataSource = null;
+            _countLabel.Text = string.Empty;
+        }
+
         // ============================================================
-        // SAVE DIALOG + EXPORT
+        // PDF EXPORT
         // ============================================================
 
-        private async Task SaveAndReportAsync(ReportTable table, string filePrefix)
+        private async Task GeneratePdfAsync()
         {
+            if (_isBusy) return;
+
+            if (_currentResult == null || _currentResult.DailyRows.Count == 0)
+            {
+                MessageBox.Show(
+                    "There is no data to export for the selected range.",
+                    "Nothing to Export",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Information);
+                return;
+            }
+
+            var table = BuildReportTable(_currentResult, _currentRangeLabel);
+
             using var sfd = new SaveFileDialog
             {
                 Filter = "PDF files (*.pdf)|*.pdf",
                 DefaultExt = ".pdf",
                 AddExtension = true,
-                FileName = $"{filePrefix}_{DateTime.Now:yyyyMMdd_HHmmss}.pdf",
+                FileName = $"SalesReport_{DateTime.Now:yyyyMMdd_HHmmss}.pdf",
                 InitialDirectory = GetDefaultReportFolder()
             };
 
             if (sfd.ShowDialog(FindForm()) != DialogResult.OK)
             {
-                ShowStatus("Report cancelled.", false);
+                ShowStatus("Export cancelled.", false);
                 return;
             }
 
             string path = sfd.FileName;
-            await Task.Run(() => ReportService.ExportPdf(table, path));
-
-            var openIt = MessageBox.Show(
-                $"PDF saved to:\n{path}\n\nOpen the folder?",
-                "Report Saved",
-                MessageBoxButtons.YesNo,
-                MessageBoxIcon.Information);
-
-            if (openIt == DialogResult.Yes)
+            SetBusy(true);
+            try
             {
-                try
+                await Task.Run(() => ReportService.ExportPdf(table, path));
+
+                var openIt = MessageBox.Show(
+                    $"PDF saved to:\n{path}\n\nOpen the folder?",
+                    "Report Saved",
+                    MessageBoxButtons.YesNo,
+                    MessageBoxIcon.Information);
+
+                if (openIt == DialogResult.Yes)
                 {
-                    System.Diagnostics.Process.Start("explorer.exe", $"/select,\"{path}\"");
+                    try
+                    {
+                        System.Diagnostics.Process.Start("explorer.exe", $"/select,\"{path}\"");
+                    }
+                    catch { /* ignore */ }
                 }
-                catch { /* ignore */ }
+
+                ShowStatus($"Saved: {Path.GetFileName(path)}", false);
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show(
+                    $"Could not generate PDF.\n\n{ex.Message}",
+                    "PDF Error",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Error);
+                ShowStatus("PDF export failed.", true);
+            }
+            finally
+            {
+                SetBusy(false);
+            }
+        }
+
+        private static ReportTable BuildReportTable(RevenueReportResult result, string rangeLabel)
+        {
+            var table = new ReportTable
+            {
+                Title = "Sales Revenue Report",
+                Subtitle = $"{rangeLabel}   ·   Generated {DateTime.Now:MMM d, yyyy h:mm tt}",
+                FooterNote = result.IsCostComplete
+                    ? "All rows have complete cost data. Net Income is exact."
+                    : $"{result.DaysWithMissingCost} day(s) have incomplete cost data.",
+                SummaryItems = new List<(string Label, string Value)>
+                {
+                    ("Total Revenue", "₱ " + result.TotalRevenue.ToString("N2")),
+                    ("Total Cost",    "₱ " + result.TotalCost.ToString("N2")),
+                    ("Net Income",    "₱ " + result.TotalNetIncome.ToString("N2")),
+                    ("Transactions",  result.TotalTransactions.ToString("N0"))
+                },
+                Headers = new List<string>
+                {
+                    "Date", "Transactions", "Revenue (PHP)", "Cost (PHP)", "Net Income (PHP)"
+                }
+            };
+
+            foreach (var row in result.DailyRows.OrderByDescending(r => r.SaleDay))
+            {
+                string netIncome = row.HasCompleteCost
+                    ? row.NetIncome!.Value.ToString("N2")
+                    : "—";
+
+                table.Rows.Add(new List<string>
+                {
+                    row.SaleDay.ToString("MMM d, yyyy"),
+                    row.TransactionCount.ToString(),
+                    row.Revenue.ToString("N2"),
+                    row.HasCompleteCost ? row.KnownCost.ToString("N2") : "—",
+                    netIncome
+                });
             }
 
-            ShowStatus($"Saved: {Path.GetFileName(path)}", false);
+            return table;
         }
 
         private static string GetDefaultReportFolder()
@@ -702,8 +750,10 @@ namespace TodangMotor.Controls
         private void SetBusy(bool busy)
         {
             _isBusy = busy;
+            _btnGenerate.Enabled = !busy;
             _dtpFrom.Enabled = !busy;
             _dtpTo.Enabled = !busy;
+            foreach (var c in _dateChips) c.Enabled = !busy;
         }
 
         private void ShowStatus(string message, bool isError)

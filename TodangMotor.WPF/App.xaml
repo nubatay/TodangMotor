@@ -1,0 +1,55 @@
+﻿<Application x:Class="TodangMotor.WPF.App"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
+             xmlns:vm="clr-namespace:TodangMotor.WPF.ViewModels"
+             xmlns:views="clr-namespace:TodangMotor.WPF.Views"
+             xmlns:conv="clr-namespace:TodangMotor.WPF.Converters">
+    <Application.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ui:ThemesDictionary Theme="Light" />
+                <ui:ControlsDictionary />
+            </ResourceDictionary.MergedDictionaries>
+
+            <BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter" />
+            <conv:StringToVisibilityConverter x:Key="StringToVisibilityConverter" />
+            <conv:StringToVisibilityConverterReverse x:Key="StringToVisibilityConverterReverse" />
+            <conv:ActionIconConverter x:Key="ActionIconConverter" />
+
+            <!-- Navigation DataTemplates -->
+            <DataTemplate DataType="{x:Type vm:DashboardViewModel}">
+                <views:DashboardView />
+            </DataTemplate>
+
+            <!-- POS View -->
+            <DataTemplate DataType="{x:Type vm:PosViewModel}">
+                <views:PosView />
+            </DataTemplate>
+
+            <!-- Items View -->
+            <DataTemplate DataType="{x:Type vm:ItemsViewModel}">
+                <views:ItemsView />
+            </DataTemplate>
+            
+            <!-- Category View -->
+            <DataTemplate DataType="{x:Type vm:CategoryViewModel}">
+                <views:CategoryView />
+            </DataTemplate>
+            
+            <!-- Supplier View -->
+            <DataTemplate DataType="{x:Type vm:SupplierViewModel}">
+                <views:SupplierView />
+            </DataTemplate>
+            
+            <!-- User View-->
+            <DataTemplate DataType="{x:Type vm:UserViewModel}">
+                <views:UserView />
+            </DataTemplate>
+
+            <DataTemplate DataType="{x:Type vm:LoginViewModel}">
+                <views:LoginView />
+            </DataTemplate>
+        </ResourceDictionary>
+    </Application.Resources>
+</Application>

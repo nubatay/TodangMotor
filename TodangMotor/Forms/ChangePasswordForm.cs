@@ -15,12 +15,17 @@ namespace TodangMotor.Forms
     {
         private readonly UserService _userService = new();
 
-        private RoundedTextBox _txtCurrent;
-        private RoundedTextBox _txtNew;
-        private RoundedTextBox _txtConfirm;
-        private Button _btnSave;
-        private Button _btnCancel;
-        private Label _lblStatus;
+        private RoundedTextBox _txtCurrent = null!;
+        private RoundedTextBox _txtNew = null!;
+        private RoundedTextBox _txtConfirm = null!;
+        private Button _btnSave = null!;
+        private Button _btnCancel = null!;
+        private Label _lblStatus = null!;
+
+        private const int PadX = 32;
+        private const int LabelH = 22;
+        private const int FieldH = 44;
+        private const int RowGap = 16;
 
         public ChangePasswordForm()
         {
@@ -28,8 +33,8 @@ namespace TodangMotor.Forms
             ShowMaximizeButton = false;
             ShowMinimizeButton = true;
             StartPosition = FormStartPosition.CenterParent;
-            ClientSize = new Size(520, 460);
-            MinimumSize = new Size(500, 440);
+            ClientSize = new Size(580, 500);
+            MinimumSize = new Size(560, 480);
             BackColor = Theme.Background;
             KeyPreview = true;
 
@@ -52,19 +57,37 @@ namespace TodangMotor.Forms
 
         private void BuildLayout()
         {
-            const int padX = 32;
-            int fieldW = ClientSize.Width - padX * 2;
-
-            // Footer
+            // ---------- Footer ----------
             var footer = new Panel
             {
                 Dock = DockStyle.Bottom,
-                Height = 76,
+                Height = 88,
                 BackColor = Theme.Background
             };
 
-            const int btnW = 120;
-            const int btnH = 42;
+            var divider = new Panel
+            {
+                Dock = DockStyle.Top,
+                Height = 1,
+                BackColor = Theme.Divider
+            };
+            footer.Controls.Add(divider);
+
+            int btnW = 140;
+            int btnH = UiFactory.PrimaryButtonHeight;
+
+            _lblStatus = new Label
+            {
+                Text = string.Empty,
+                Font = Theme.FontSmall,
+                ForeColor = Theme.Danger,
+                AutoSize = false,
+                Location = new Point(PadX, 22),
+                Height = btnH,
+                TextAlign = ContentAlignment.MiddleLeft,
+                BackColor = Color.Transparent,
+                Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right
+            };
 
             _btnSave = UiFactory.CreateButton("Save", UiFactory.ButtonStyle.Primary, btnW, btnH);
             _btnSave.Anchor = AnchorStyles.Top | AnchorStyles.Right;
@@ -74,63 +97,68 @@ namespace TodangMotor.Forms
             _btnCancel.Anchor = AnchorStyles.Top | AnchorStyles.Right;
             _btnCancel.Click += (s, e) => { DialogResult = DialogResult.Cancel; Close(); };
 
+            footer.Controls.Add(_lblStatus);
             footer.Controls.Add(_btnSave);
             footer.Controls.Add(_btnCancel);
 
             footer.Resize += (s, e) =>
             {
-                _btnSave.Location = new Point(footer.ClientSize.Width - padX - btnW, 16);
-                _btnCancel.Location = new Point(footer.ClientSize.Width - padX - btnW - 10 - btnW, 16);
+                _btnSave.Location = new Point(footer.ClientSize.Width - PadX - btnW, 22);
+                _btnCancel.Location = new Point(footer.ClientSize.Width - PadX - btnW - 8 - btnW, 22);
+                _lblStatus.Width = Math.Max(100,
+                    footer.ClientSize.Width - PadX - btnW * 2 - 8 - PadX - 16);
             };
 
             ContentPanel.Controls.Add(footer);
 
-            // Fields
-            int y = 24;
+            // ---------- Body ----------
+            int fieldW = ClientSize.Width - PadX * 2;
+            int y = 28;
 
-            AddLabel("Current Password:", padX, y);
+            // Current Password
+            AddFieldLabel("Current Password", PadX, y, fieldW);
             _txtCurrent = UiFactory.CreateTextBox(fieldW, isPassword: true);
-            _txtCurrent.Location = new Point(padX, y + 22);
+            _txtCurrent.Location = new Point(PadX, y + LabelH + 4);
             _txtCurrent.MaxLength = 100;
             _txtCurrent.ShowPasswordToggle = true;
             _txtCurrent.Placeholder = "Enter your current password";
             ContentPanel.Controls.Add(_txtCurrent);
-            y += 76;
+            y += LabelH + 4 + FieldH + RowGap;
 
-            AddLabel("New Password:", padX, y);
+            // New Password
+            AddFieldLabel("New Password", PadX, y, fieldW);
             _txtNew = UiFactory.CreateTextBox(fieldW, isPassword: true);
-            _txtNew.Location = new Point(padX, y + 22);
+            _txtNew.Location = new Point(PadX, y + LabelH + 4);
             _txtNew.MaxLength = 100;
             _txtNew.ShowPasswordToggle = true;
-            _txtNew.Placeholder = "Min 6 characters";
+            _txtNew.Placeholder = "Minimum 6 characters";
             ContentPanel.Controls.Add(_txtNew);
-            y += 76;
 
-            AddLabel("Confirm New Password:", padX, y);
+            var hint = new Label
+            {
+                Text = "Must be at least 6 characters. Use a mix of letters and numbers.",
+                Font = Theme.FontTiny,
+                ForeColor = Theme.TextMuted,
+                AutoSize = false,
+                Location = new Point(PadX, y + LabelH + 4 + FieldH + 2),
+                Size = new Size(fieldW, 18),
+                TextAlign = ContentAlignment.MiddleLeft,
+                BackColor = Color.Transparent
+            };
+            ContentPanel.Controls.Add(hint);
+            y += LabelH + 4 + FieldH + 22 + RowGap;
+
+            // Confirm New Password
+            AddFieldLabel("Confirm New Password", PadX, y, fieldW);
             _txtConfirm = UiFactory.CreateTextBox(fieldW, isPassword: true);
-            _txtConfirm.Location = new Point(padX, y + 22);
+            _txtConfirm.Location = new Point(PadX, y + LabelH + 4);
             _txtConfirm.MaxLength = 100;
             _txtConfirm.ShowPasswordToggle = true;
             _txtConfirm.Placeholder = "Re-type the new password";
             ContentPanel.Controls.Add(_txtConfirm);
-            y += 76;
-
-            _lblStatus = new Label
-            {
-                Text = string.Empty,
-                Font = Theme.FontSmall,
-                ForeColor = Theme.Danger,
-                AutoSize = false,
-                Location = new Point(padX, y),
-                Size = new Size(fieldW, 40),
-                TextAlign = ContentAlignment.TopLeft,
-                BackColor = Color.Transparent,
-                Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right
-            };
-            ContentPanel.Controls.Add(_lblStatus);
         }
 
-        private void AddLabel(string text, int x, int y)
+        private void AddFieldLabel(string text, int x, int y, int width)
         {
             var lbl = new Label
             {
@@ -138,8 +166,8 @@ namespace TodangMotor.Forms
                 Font = Theme.FontSmall,
                 ForeColor = Theme.TextSecondary,
                 AutoSize = false,
-                Size = new Size(300, 18),
                 Location = new Point(x, y),
+                Size = new Size(width, LabelH),
                 TextAlign = ContentAlignment.MiddleLeft,
                 BackColor = Color.Transparent
             };
@@ -148,6 +176,7 @@ namespace TodangMotor.Forms
 
         private async Task SaveAsync()
         {
+            _lblStatus.Text = string.Empty;
             SetBusy(true);
             try
             {

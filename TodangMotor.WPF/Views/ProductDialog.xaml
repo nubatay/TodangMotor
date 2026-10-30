@@ -1,0 +1,222 @@
+﻿<ui:FluentWindow x:Class="TodangMotor.WPF.Views.ProductDialog"
+                 xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                 xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                 xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
+                 Title="{Binding DialogTitle}"
+                 Height="850" Width="650"
+                 WindowStartupLocation="CenterOwner"
+                 ResizeMode="NoResize"
+                 ExtendsContentIntoTitleBar="True"
+                 WindowBackdropType="Mica"
+                 Background="#F5F6FA"
+                 FocusManager.FocusedElement="{Binding ElementName=ProductNameInput}">
+
+    <ui:FluentWindow.InputBindings>
+        <!-- ENTER TO SAVE (Works unless you are in the Description box) -->
+        <KeyBinding Key="Enter" Command="{Binding SaveCommand}" />
+        <KeyBinding Key="Escape" Command="{Binding CancelCommand}" />
+    </ui:FluentWindow.InputBindings>
+
+    <ui:FluentWindow.Resources>
+        <BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter"/>
+        <SolidColorBrush x:Key="Brand" Color="#4D6BFE"/>
+        <SolidColorBrush x:Key="Ink" Color="#0F172A"/>
+        <SolidColorBrush x:Key="Muted" Color="#64748B"/>
+        <SolidColorBrush x:Key="Line" Color="#EAECF3"/>
+        <SolidColorBrush x:Key="Danger" Color="#EF4444"/>
+
+        <Style x:Key="FieldLabel" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="13"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Foreground" Value="#334155"/>
+            <Setter Property="Margin" Value="0,0,0,6"/>
+        </Style>
+
+        <Style x:Key="InputBorder" TargetType="Border">
+            <Setter Property="Background" Value="#F8FAFC"/>
+            <Setter Property="BorderBrush" Value="#E2E8F0"/>
+            <Setter Property="BorderThickness" Value="1.5"/>
+            <Setter Property="CornerRadius" Value="10"/>
+            <Setter Property="Height" Value="44"/>
+            <Style.Triggers>
+                <Trigger Property="IsKeyboardFocusWithin" Value="True">
+                    <Setter Property="BorderBrush" Value="#4D6BFE"/>
+                    <Setter Property="Background" Value="#FFFFFF"/>
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+
+        <Style x:Key="CleanTextBox" TargetType="TextBox">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="VerticalContentAlignment" Value="Center"/>
+            <Setter Property="FontSize" Value="14"/>
+            <Setter Property="Foreground" Value="{StaticResource Ink}"/>
+            <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+        </Style>
+
+        <Style x:Key="ErrorText" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="#EF4444"/>
+            <Setter Property="FontSize" Value="11"/>
+            <Setter Property="Margin" Value="2,4,0,0"/>
+            <Setter Property="TextWrapping" Value="Wrap"/>
+            <Setter Property="Visibility" Value="Visible"/>
+            <Style.Triggers>
+                <Trigger Property="Text" Value="">
+                    <Setter Property="Visibility" Value="Collapsed"/>
+                </Trigger>
+                <Trigger Property="Text" Value="{x:Null}">
+                    <Setter Property="Visibility" Value="Collapsed"/>
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+
+        <Style x:Key="FieldGroup" TargetType="StackPanel">
+            <Setter Property="Margin" Value="0,0,0,20"/>
+        </Style>
+    </ui:FluentWindow.Resources>
+
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <ScrollViewer Grid.Row="0" VerticalScrollBarVisibility="Auto">
+            <StackPanel Margin="32,32,32,0">
+
+                <!-- 1. Product Name -->
+                <StackPanel Style="{StaticResource FieldGroup}">
+                    <TextBlock Text="Product Name" Style="{StaticResource FieldLabel}"/>
+                    <Border Style="{StaticResource InputBorder}">
+                        <TextBox x:Name="ProductNameInput" TabIndex="0" Style="{StaticResource CleanTextBox}" Margin="12,0" 
+                                 Text="{Binding ProductName, UpdateSourceTrigger=PropertyChanged}"/>
+                    </Border>
+                    <TextBlock Text="{Binding ProductNameError}" Style="{StaticResource ErrorText}"/>
+                </StackPanel>
+
+                <!-- 2. Brand -->
+                <StackPanel Style="{StaticResource FieldGroup}">
+                    <TextBlock Text="Brand" Style="{StaticResource FieldLabel}"/>
+                    <Border Style="{StaticResource InputBorder}">
+                        <TextBox TabIndex="1" Style="{StaticResource CleanTextBox}" Margin="12,0" 
+                                 Text="{Binding Brand, UpdateSourceTrigger=PropertyChanged}"/>
+                    </Border>
+                    <TextBlock Text="{Binding BrandError}" Style="{StaticResource ErrorText}"/>
+                </StackPanel>
+
+                <!-- 3. Unit -->
+                <StackPanel Style="{StaticResource FieldGroup}">
+                    <TextBlock Text="Unit" Style="{StaticResource FieldLabel}"/>
+                    <Border Style="{StaticResource InputBorder}">
+                        <TextBox TabIndex="2" Style="{StaticResource CleanTextBox}" Margin="12,0" 
+                                 Text="{Binding Unit, UpdateSourceTrigger=PropertyChanged}"/>
+                    </Border>
+                    <TextBlock Text="{Binding UnitError}" Style="{StaticResource ErrorText}"/>
+                </StackPanel>
+
+                <!-- 4. Category -->
+                <StackPanel Style="{StaticResource FieldGroup}">
+                    <TextBlock Text="Category" Style="{StaticResource FieldLabel}"/>
+                    <Border Style="{StaticResource InputBorder}">
+                        <ComboBox TabIndex="3" ItemsSource="{Binding Categories}" SelectedItem="{Binding SelectedCategory}" 
+                                  DisplayMemberPath="CategoryName" Background="Transparent" BorderThickness="0" Margin="8,0" VerticalContentAlignment="Center"/>
+                    </Border>
+                    <TextBlock Text="{Binding CategoryError}" Style="{StaticResource ErrorText}"/>
+                </StackPanel>
+
+                <!-- 5. Reorder Level -->
+                <StackPanel Style="{StaticResource FieldGroup}">
+                    <TextBlock Text="Reorder Level" Style="{StaticResource FieldLabel}"/>
+                    <Border Style="{StaticResource InputBorder}">
+                        <TextBox TabIndex="4" Style="{StaticResource CleanTextBox}" Margin="12,0" 
+                                 Text="{Binding ReorderLevel, UpdateSourceTrigger=PropertyChanged}"/>
+                    </Border>
+                    <TextBlock Text="{Binding ReorderLevelError}" Style="{StaticResource ErrorText}"/>
+                </StackPanel>
+
+                <!-- 6. Cost Price -->
+                <StackPanel Style="{StaticResource FieldGroup}">
+                    <TextBlock Text="Cost Price (₱)" Style="{StaticResource FieldLabel}"/>
+                    <Border Style="{StaticResource InputBorder}">
+                        <TextBox TabIndex="5" Style="{StaticResource CleanTextBox}" Margin="12,0" 
+                                 Text="{Binding CostPrice, UpdateSourceTrigger=PropertyChanged}"/>
+                    </Border>
+                    <TextBlock Text="{Binding CostPriceError}" Style="{StaticResource ErrorText}"/>
+                </StackPanel>
+
+                <!-- 7. Selling Price -->
+                <StackPanel Style="{StaticResource FieldGroup}">
+                    <TextBlock Text="Selling Price (₱)" Style="{StaticResource FieldLabel}"/>
+                    <Border Style="{StaticResource InputBorder}">
+                        <TextBox TabIndex="6" Style="{StaticResource CleanTextBox}" Margin="12,0" 
+                                 Text="{Binding SellingPrice, UpdateSourceTrigger=PropertyChanged}"/>
+                    </Border>
+                    <TextBlock Text="{Binding SellingPriceError}" Style="{StaticResource ErrorText}"/>
+                </StackPanel>
+
+                <!-- 8. Expiration Date -->
+                <StackPanel Style="{StaticResource FieldGroup}">
+                    <TextBlock Text="Expiration Date (Optional)" Style="{StaticResource FieldLabel}"/>
+                    <Border Style="{StaticResource InputBorder}">
+                        <DatePicker TabIndex="7" SelectedDate="{Binding ExpirationDate}" Background="Transparent" BorderThickness="0" Margin="8,0" VerticalContentAlignment="Center"/>
+                    </Border>
+                </StackPanel>
+
+                <!-- 9. Primary Supplier -->
+                <StackPanel Style="{StaticResource FieldGroup}">
+                    <TextBlock Text="Primary Supplier" Style="{StaticResource FieldLabel}"/>
+                    <Border Style="{StaticResource InputBorder}">
+                        <ComboBox TabIndex="8" ItemsSource="{Binding Suppliers}" SelectedItem="{Binding SelectedSupplier}" 
+                                  DisplayMemberPath="SupplierName" Background="Transparent" BorderThickness="0" Margin="8,0" VerticalContentAlignment="Center"/>
+                    </Border>
+                    <TextBlock Text="{Binding SupplierError}" Style="{StaticResource ErrorText}"/>
+                </StackPanel>
+
+                <!-- 10. Alternate Suppliers (Checkboxes navigate naturally with Tab) -->
+                <StackPanel Style="{StaticResource FieldGroup}">
+                    <TextBlock Text="Alternate Suppliers" Style="{StaticResource FieldLabel}"/>
+                    <Border Background="#F8FAFC" BorderBrush="#E2E8F0" BorderThickness="1.5" CornerRadius="10" Height="120" Padding="8">
+                        <ScrollViewer VerticalScrollBarVisibility="Auto">
+                            <ItemsControl ItemsSource="{Binding AlternateSuppliers}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <CheckBox Content="{Binding SupplierName}" IsChecked="{Binding IsSelected}" Margin="4,2"/>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </ScrollViewer>
+                    </Border>
+                </StackPanel>
+
+                <!-- 11. Description (Intercepts Enter key) -->
+                <StackPanel Style="{StaticResource FieldGroup}">
+                    <TextBlock Text="Description (Optional)" Style="{StaticResource FieldLabel}"/>
+                    <Border Background="#F8FAFC" BorderBrush="#E2E8F0" BorderThickness="1.5" CornerRadius="10" Height="120" Padding="8">
+                        <TextBox TabIndex="9" Background="Transparent" BorderThickness="0" TextWrapping="Wrap" AcceptsReturn="True"
+                                 VerticalScrollBarVisibility="Auto" Text="{Binding Description, UpdateSourceTrigger=PropertyChanged}"
+                                 PreviewKeyDown="Description_PreviewKeyDown"/>
+                    </Border>
+                </StackPanel>
+
+                <!-- Global Error -->
+                <Border Background="#FEF2F2" BorderBrush="#FECACA" BorderThickness="1" CornerRadius="6" Padding="10,8" Margin="0,0,0,20"
+                        Visibility="{Binding ErrorMessage, Converter={StaticResource StringToVisibilityConverter}}">
+                    <TextBlock Text="{Binding ErrorMessage}" Foreground="#B91C1C" FontSize="12" TextWrapping="Wrap"/>
+                </Border>
+
+            </StackPanel>
+        </ScrollViewer>
+
+        <!-- FOOTER -->
+        <Border Grid.Row="1" Background="#FFFFFF" BorderBrush="{StaticResource Line}" BorderThickness="0,1,0,0" Padding="24">
+            <Grid>
+                <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                    <ui:Button TabIndex="11" Appearance="Secondary" Content="Cancel" Command="{Binding CancelCommand}" Width="100" Height="40" Margin="0,0,12,0"/>
+                    <ui:Button TabIndex="10" Appearance="Primary" Content="Save Product" Command="{Binding SaveCommand}" Width="140" Height="40" 
+                               Background="{StaticResource Brand}" IsEnabled="{Binding IsBusy, Converter={StaticResource BooleanToVisibilityConverter}, ConverterParameter=Invert}"/>
+                </StackPanel>
+            </Grid>
+        </Border>
+    </Grid>
+</ui:FluentWindow>

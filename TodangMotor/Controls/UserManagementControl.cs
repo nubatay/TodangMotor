@@ -11,30 +11,22 @@ using TodangMotor.Services;
 
 namespace TodangMotor.Controls
 {
-    /// <summary>
-    /// User Management list view — Owner-only. Shows all users,
-    /// supports Add / Edit / Deactivate / Reactivate.
-    /// </summary>
     public class UserManagementControl : UserControl
     {
-        // ============================================================
-        // SERVICES
-        // ============================================================
-
         private readonly UserService _userService = new();
-
-        // ============================================================
-        // STATE
-        // ============================================================
 
         private List<User> _allUsers = new();
 
         private bool _isLoaded;
-        private bool _isBusy;
 
-        // ============================================================
-        // UI CONTROLS
-        // ============================================================
+        private const string PencilIcon = "\uE70F";
+        private const string BanIcon = "\uE711";
+        private const string CheckIcon = "\uE73E";
+
+        private const int ColRoleW = 120;
+        private const int ColStatusW = 140;
+        private const int ColCreatedW = 160;
+        private const int ColActionW = 60;
 
         private RoundedTextBox _searchBox;
         private RoundedComboBox _roleFilter;
@@ -44,21 +36,13 @@ namespace TodangMotor.Controls
         private DataGridView _grid;
 
         private Button _btnAdd;
-        private Button _btnEdit;
-        private Button _btnDeactivate;
-        private Button _btnReactivate;
-
         private Label _statusLabel;
-
-        // ============================================================
-        // CONSTRUCTION
-        // ============================================================
 
         public UserManagementControl()
         {
             Dock = DockStyle.Fill;
             BackColor = Theme.Background;
-            Padding = new Padding(Theme.SpacingLg);
+            Padding = new Padding(UiFactory.PagePadding);
 
             BuildLayout();
 
@@ -72,15 +56,11 @@ namespace TodangMotor.Controls
             await ReloadAllAsync();
         }
 
-        // ============================================================
-        // LAYOUT
-        // ============================================================
-
         private void BuildLayout()
         {
-            Controls.Add(BuildGrid());        // Fill
-            Controls.Add(BuildBottomBar());   // Bottom
-            Controls.Add(BuildFilterBar());   // Top
+            Controls.Add(BuildGrid());
+            Controls.Add(BuildBottomBar());
+            Controls.Add(BuildFilterBar());
         }
 
         private Panel BuildFilterBar()
@@ -88,12 +68,12 @@ namespace TodangMotor.Controls
             var bar = new Panel
             {
                 Dock = DockStyle.Top,
-                Height = 84,
+                Height = 108,
                 BackColor = Theme.Background
             };
 
-            _searchBox = UiFactory.CreateTextBox(240);
-            _searchBox.Location = new Point(4, 12);
+            _searchBox = UiFactory.CreateTextBox(300);
+            _searchBox.Location = new Point(0, 16);
             _searchBox.Placeholder = "Search username or full name…";
             _searchBox.MaxLength = 100;
             _searchBox.TextChanged += (s, e) => ApplyFilters();
@@ -104,16 +84,16 @@ namespace TodangMotor.Controls
                 Font = Theme.FontSmall,
                 ForeColor = Theme.TextSecondary,
                 AutoSize = false,
-                Size = new Size(40, 18),
-                Location = new Point(252, 24),
+                Size = new Size(48, 24),
+                Location = new Point(_searchBox.Right + 24, 24),
                 TextAlign = ContentAlignment.MiddleLeft,
                 BackColor = Color.Transparent
             };
 
             _roleFilter = new RoundedComboBox
             {
-                Width = 130,
-                Location = new Point(296, 12)
+                Width = 160,
+                Location = new Point(lblRole.Right + 8, 16)
             };
             _roleFilter.SelectedIndexChanged += (s, e) => ApplyFilters();
 
@@ -123,16 +103,16 @@ namespace TodangMotor.Controls
                 Font = Theme.FontSmall,
                 ForeColor = Theme.TextSecondary,
                 AutoSize = false,
-                Size = new Size(56, 18),
-                Location = new Point(436, 24),
+                Size = new Size(56, 24),
+                Location = new Point(_roleFilter.Right + 24, 24),
                 TextAlign = ContentAlignment.MiddleLeft,
                 BackColor = Color.Transparent
             };
 
             _statusFilter = new RoundedComboBox
             {
-                Width = 120,
-                Location = new Point(494, 12)
+                Width = 160,
+                Location = new Point(lblStatus.Right + 8, 16)
             };
             _statusFilter.SelectedIndexChanged += (s, e) => ApplyFilters();
 
@@ -142,8 +122,8 @@ namespace TodangMotor.Controls
                 Font = Theme.FontSmall,
                 ForeColor = Theme.TextSecondary,
                 AutoSize = false,
-                Location = new Point(4, 58),
-                Height = 20,
+                Location = new Point(0, 76),
+                Height = 22,
                 Width = 700,
                 TextAlign = ContentAlignment.MiddleLeft,
                 Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right,
@@ -165,13 +145,178 @@ namespace TodangMotor.Controls
             _grid = new DataGridView
             {
                 Dock = DockStyle.Fill,
-                Margin = new Padding(0, 4, 0, 4)
+                Margin = new Padding(0, 8, 0, 0)
             };
-            UiFactory.StyleGrid(_grid);
-            _grid.AlternatingRowsDefaultCellStyle.BackColor = Color.FromArgb(248, 249, 251);
+            UiFactory.StyleGridModern(_grid);
+            _grid.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.None;
             _grid.CellDoubleClick += Grid_CellDoubleClick;
+            _grid.CellClick += Grid_CellClick;
+            _grid.CellPainting += Grid_CellPainting;
+            _grid.CellMouseEnter += Grid_CellMouseEnter;
+            _grid.CellMouseLeave += (s, e) => _grid.Cursor = Cursors.Default;
             _grid.KeyDown += Grid_KeyDown;
+
+            PrimeGridColumns();
+            _grid.Resize += (s, e) => FitDynamicColumns();
+
             return _grid;
+        }
+
+        private void PrimeGridColumns()
+        {
+            _grid.AutoGenerateColumns = false;
+            _grid.Columns.Clear();
+            _grid.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.None;
+
+            void AddTextCol(string prop, string header, int width, bool readOnly,
+                DataGridViewContentAlignment align = DataGridViewContentAlignment.MiddleLeft)
+            {
+                var col = new DataGridViewTextBoxColumn
+                {
+                    Name = prop,
+                    DataPropertyName = prop,
+                    HeaderText = header,
+                    Width = width,
+                    ReadOnly = readOnly,
+                    SortMode = DataGridViewColumnSortMode.NotSortable,
+                    Resizable = DataGridViewTriState.False
+                };
+                if (align != DataGridViewContentAlignment.MiddleLeft)
+                    col.DefaultCellStyle.Alignment = align;
+                _grid.Columns.Add(col);
+            }
+
+            AddTextCol("Username", "Username", 260, true);
+            AddTextCol("FullName", "Full Name", 360, true);
+            AddTextCol("Role", "Role", ColRoleW, true, DataGridViewContentAlignment.MiddleCenter);
+            AddTextCol("Status", "Status", ColStatusW, true, DataGridViewContentAlignment.MiddleCenter);
+            AddTextCol("CreatedAt", "Created", ColCreatedW, true, DataGridViewContentAlignment.MiddleRight);
+
+            _grid.Columns.Add(new DataGridViewTextBoxColumn
+            {
+                Name = "EditIcon",
+                HeaderText = "",
+                Width = ColActionW,
+                ReadOnly = true,
+                SortMode = DataGridViewColumnSortMode.NotSortable,
+                Resizable = DataGridViewTriState.False
+            });
+
+            _grid.Columns.Add(new DataGridViewTextBoxColumn
+            {
+                Name = "ToggleIcon",
+                HeaderText = "",
+                Width = ColActionW,
+                ReadOnly = true,
+                SortMode = DataGridViewColumnSortMode.NotSortable,
+                Resizable = DataGridViewTriState.False
+            });
+
+            _grid.Columns.Add(new DataGridViewTextBoxColumn
+            {
+                Name = "UserId",
+                DataPropertyName = "UserId",
+                Visible = false
+            });
+        }
+
+        private void FitDynamicColumns()
+        {
+            if (_grid == null) return;
+            if (!_grid.Columns.Contains("Username")) return;
+            if (!_grid.Columns.Contains("FullName")) return;
+
+            int fixedW = ColRoleW + ColStatusW + ColCreatedW + ColActionW + ColActionW;
+            int available = _grid.ClientSize.Width - fixedW - 24;
+            if (available < 300) available = 300;
+
+            int userW = (int)(available * 0.42);
+            int fullW = available - userW;
+
+            _grid.Columns["Username"].Width = userW;
+            _grid.Columns["FullName"].Width = fullW;
+        }
+
+        private void Grid_CellPainting(object? sender, DataGridViewCellPaintingEventArgs e)
+        {
+            if (e.RowIndex < 0 || e.ColumnIndex < 0) return;
+
+            string colName = _grid.Columns[e.ColumnIndex].Name;
+            if (colName != "EditIcon" && colName != "ToggleIcon") return;
+
+            e.PaintBackground(e.CellBounds, true);
+
+            string glyph;
+            Color color;
+
+            if (colName == "EditIcon")
+            {
+                glyph = PencilIcon;
+                color = Theme.Primary;
+            }
+            else
+            {
+                string status = _grid.Rows[e.RowIndex].Cells["Status"].Value?.ToString() ?? "";
+                bool isActive = status == "Active";
+
+                if (isActive)
+                {
+                    glyph = BanIcon;
+                    color = Color.FromArgb(200, 130, 40);
+                }
+                else
+                {
+                    glyph = CheckIcon;
+                    color = Theme.Success;
+                }
+            }
+
+            using var font = new Font(Theme.IconFontFamily, 14F, FontStyle.Regular);
+            TextRenderer.DrawText(
+                e.Graphics,
+                glyph,
+                font,
+                e.CellBounds,
+                color,
+                TextFormatFlags.HorizontalCenter |
+                TextFormatFlags.VerticalCenter |
+                TextFormatFlags.NoPrefix);
+
+            e.Handled = true;
+        }
+
+        private void Grid_CellMouseEnter(object? sender, DataGridViewCellEventArgs e)
+        {
+            if (e.RowIndex < 0 || e.ColumnIndex < 0) return;
+            string colName = _grid.Columns[e.ColumnIndex].Name;
+            _grid.Cursor = (colName == "EditIcon" || colName == "ToggleIcon")
+                ? Cursors.Hand
+                : Cursors.Default;
+        }
+
+        private void Grid_CellClick(object? sender, DataGridViewCellEventArgs e)
+        {
+            if (e.RowIndex < 0 || e.ColumnIndex < 0) return;
+
+            string colName = _grid.Columns[e.ColumnIndex].Name;
+            if (colName != "EditIcon" && colName != "ToggleIcon") return;
+
+            var idCell = _grid.Rows[e.RowIndex].Cells["UserId"];
+            if (idCell?.Value == null) return;
+
+            int id = Convert.ToInt32(idCell.Value);
+            var user = _allUsers.FirstOrDefault(u => u.UserId == id);
+            if (user == null) return;
+
+            if (colName == "EditIcon")
+            {
+                OpenUserFormForEdit(user);
+            }
+            else
+            {
+                if (user.IsActive) _ = DeactivateUserAsync(user);
+                else _ = ReactivateUserAsync(user);
+            }
         }
 
         private Panel BuildBottomBar()
@@ -179,25 +324,13 @@ namespace TodangMotor.Controls
             var bar = new Panel
             {
                 Dock = DockStyle.Bottom,
-                Height = 68,
+                Height = 88,
                 BackColor = Theme.Background
             };
 
-            _btnAdd = UiFactory.CreateButton("Add New", UiFactory.ButtonStyle.Primary, 110, 40);
-            _btnAdd.Location = new Point(4, 14);
+            _btnAdd = UiFactory.CreateButton("Add New", UiFactory.ButtonStyle.Primary, 140, UiFactory.PrimaryButtonHeight);
+            _btnAdd.Location = new Point(0, 20);
             _btnAdd.Click += (s, e) => OpenUserFormForAdd();
-
-            _btnEdit = UiFactory.CreateButton("Edit", UiFactory.ButtonStyle.Secondary, 90, 40);
-            _btnEdit.Location = new Point(122, 14);
-            _btnEdit.Click += (s, e) => EditSelectedUser();
-
-            _btnDeactivate = UiFactory.CreateButton("Deactivate", UiFactory.ButtonStyle.Ghost, 110, 40);
-            _btnDeactivate.Location = new Point(220, 14);
-            _btnDeactivate.Click += async (s, e) => await DeactivateSelectedUserAsync();
-
-            _btnReactivate = UiFactory.CreateButton("Reactivate", UiFactory.ButtonStyle.Ghost, 110, 40);
-            _btnReactivate.Location = new Point(338, 14);
-            _btnReactivate.Click += async (s, e) => await ReactivateSelectedUserAsync();
 
             _statusLabel = new Label
             {
@@ -205,26 +338,19 @@ namespace TodangMotor.Controls
                 Font = Theme.FontSmall,
                 ForeColor = Theme.TextSecondary,
                 AutoSize = false,
-                Location = new Point(468, 14),
-                Height = 40,
-                Width = 500,
+                Location = new Point(_btnAdd.Right + 24, 20),
+                Height = UiFactory.PrimaryButtonHeight,
+                Width = 600,
                 TextAlign = ContentAlignment.MiddleLeft,
                 Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right,
                 BackColor = Color.Transparent
             };
 
             bar.Controls.Add(_btnAdd);
-            bar.Controls.Add(_btnEdit);
-            bar.Controls.Add(_btnDeactivate);
-            bar.Controls.Add(_btnReactivate);
             bar.Controls.Add(_statusLabel);
 
             return bar;
         }
-
-        // ============================================================
-        // DATA LOAD
-        // ============================================================
 
         private async Task ReloadAllAsync()
         {
@@ -242,7 +368,6 @@ namespace TodangMotor.Controls
 
                 _allUsers = users ?? new List<User>();
 
-                // Initialize the filter dropdowns once (preserves selection afterwards).
                 if (_roleFilter.Items.Count == 0)
                 {
                     _roleFilter.Items.Add("All Roles");
@@ -267,17 +392,12 @@ namespace TodangMotor.Controls
             }
         }
 
-        // ============================================================
-        // FILTERS + GRID BINDING
-        // ============================================================
-
         private void ApplyFilters()
         {
             if (_allUsers == null) return;
 
             IEnumerable<User> filtered = _allUsers;
 
-            // Search: username OR full name
             string search = (_searchBox?.Text ?? string.Empty).Trim();
             if (search.Length > 0)
             {
@@ -288,12 +408,10 @@ namespace TodangMotor.Controls
                      u.FullName.IndexOf(search, StringComparison.OrdinalIgnoreCase) >= 0));
             }
 
-            // Role filter
             string role = _roleFilter?.SelectedItem as string;
             if (!string.IsNullOrEmpty(role) && role != "All Roles")
                 filtered = filtered.Where(u => u.Role == role);
 
-            // Status filter
             string status = _statusFilter?.SelectedItem as string;
             if (status == "Active")
                 filtered = filtered.Where(u => u.IsActive);
@@ -315,9 +433,33 @@ namespace TodangMotor.Controls
                 .ToList();
 
             _grid.DataSource = rows;
-            ApplyColumnLayout();
-            ClearSelection();
+
+            if (_grid.Columns.Contains("UserId"))
+                _grid.Columns["UserId"].Visible = false;
+
+            if (_grid.Rows.Count > 0)
+                _grid.ClearSelection();
+
+            foreach (DataGridViewRow row in _grid.Rows)
+            {
+                if (row.Cells["Role"].Value is string r)
+                {
+                    row.Cells["Role"].Style.ForeColor = r == "Owner"
+                        ? Theme.Primary
+                        : Theme.TextSecondary;
+                    row.Cells["Role"].Style.Font = Theme.FontBodyBold;
+                }
+
+                if (row.Cells["Status"].Value is string s)
+                {
+                    row.Cells["Status"].Style.ForeColor =
+                        s == "Active" ? Theme.Success : Theme.TextMuted;
+                    row.Cells["Status"].Style.Font = Theme.FontBodyBold;
+                }
+            }
+
             UpdateCountLabel(rows.Count);
+            FitDynamicColumns();
         }
 
         private void UpdateCountLabel(int shownCount)
@@ -336,74 +478,31 @@ namespace TodangMotor.Controls
                 $"Active: {active}   Inactive: {inactive}";
         }
 
-        private void ApplyColumnLayout()
-        {
-            if (_grid == null || _grid.Columns.Count == 0) return;
-
-            _grid.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill;
-
-            void SetWeight(string col, int weight, string header = null)
-            {
-                if (!_grid.Columns.Contains(col)) return;
-                _grid.Columns[col].FillWeight = weight;
-                if (header != null) _grid.Columns[col].HeaderText = header;
-            }
-
-            if (_grid.Columns.Contains("UserId"))
-                _grid.Columns["UserId"].Visible = false;
-
-            SetWeight("Username", 180, "Username");
-            SetWeight("FullName", 280, "Full Name");
-            SetWeight("Role", 100, "Role");
-            SetWeight("Status", 100, "Status");
-            SetWeight("CreatedAt", 130, "Created");
-        }
-
-        private void ClearSelection()
-        {
-            if (_grid != null && _grid.Rows.Count > 0)
-                _grid.ClearSelection();
-        }
-
-        // ============================================================
-        // SELECTION HELPER
-        // ============================================================
-
-        private User? GetSelectedUser()
-        {
-            if (_grid == null || _grid.SelectedRows.Count == 0) return null;
-            var row = _grid.SelectedRows[0];
-            if (!_grid.Columns.Contains("UserId")) return null;
-
-            var value = row.Cells["UserId"].Value;
-            if (value == null) return null;
-
-            int id = Convert.ToInt32(value);
-            return _allUsers.FirstOrDefault(u => u.UserId == id);
-        }
-
-        // ============================================================
-        // ROW EVENTS
-        // ============================================================
-
         private void Grid_CellDoubleClick(object sender, DataGridViewCellEventArgs e)
         {
             if (e.RowIndex < 0) return;
-            EditSelectedUser();
+
+            var idCell = _grid.Rows[e.RowIndex].Cells["UserId"];
+            if (idCell?.Value == null) return;
+
+            int id = Convert.ToInt32(idCell.Value);
+            var user = _allUsers.FirstOrDefault(u => u.UserId == id);
+            if (user != null) OpenUserFormForEdit(user);
         }
 
         private void Grid_KeyDown(object sender, KeyEventArgs e)
         {
-            if (e.KeyCode == Keys.Enter)
-            {
-                e.SuppressKeyPress = true;
-                EditSelectedUser();
-            }
-        }
+            if (e.KeyCode != Keys.Enter) return;
+            e.SuppressKeyPress = true;
 
-        // ============================================================
-        // ADD / EDIT
-        // ============================================================
+            if (_grid.CurrentRow == null) return;
+            var idCell = _grid.CurrentRow.Cells["UserId"];
+            if (idCell?.Value == null) return;
+
+            int id = Convert.ToInt32(idCell.Value);
+            var user = _allUsers.FirstOrDefault(u => u.UserId == id);
+            if (user != null) OpenUserFormForEdit(user);
+        }
 
         private void OpenUserFormForAdd()
         {
@@ -412,9 +511,7 @@ namespace TodangMotor.Controls
                 var parent = FindForm();
                 using var form = new UserForm();
                 if (form.ShowDialog(parent) == DialogResult.OK)
-                {
                     _ = ReloadAllAsync();
-                }
             }
             catch (Exception ex)
             {
@@ -422,23 +519,14 @@ namespace TodangMotor.Controls
             }
         }
 
-        private void EditSelectedUser()
+        private void OpenUserFormForEdit(User user)
         {
-            var u = GetSelectedUser();
-            if (u == null)
-            {
-                ShowStatus("Please select a user first.", isError: true);
-                return;
-            }
-
             try
             {
                 var parent = FindForm();
-                using var form = new UserForm(u);
+                using var form = new UserForm(user);
                 if (form.ShowDialog(parent) == DialogResult.OK)
-                {
                     _ = ReloadAllAsync();
-                }
             }
             catch (Exception ex)
             {
@@ -446,24 +534,8 @@ namespace TodangMotor.Controls
             }
         }
 
-        // ============================================================
-        // DEACTIVATE / REACTIVATE
-        // ============================================================
-
-        private async Task DeactivateSelectedUserAsync()
+        private async Task DeactivateUserAsync(User u)
         {
-            var u = GetSelectedUser();
-            if (u == null)
-            {
-                ShowStatus("Please select a user first.", isError: true);
-                return;
-            }
-            if (!u.IsActive)
-            {
-                ShowStatus("This user is already inactive.", isError: true);
-                return;
-            }
-
             var confirm = MessageBox.Show(
                 $"Are you sure you want to deactivate \"{u.Username}\"?\n\n" +
                 "They will not be able to log in until reactivated.",
@@ -492,20 +564,8 @@ namespace TodangMotor.Controls
             }
         }
 
-        private async Task ReactivateSelectedUserAsync()
+        private async Task ReactivateUserAsync(User u)
         {
-            var u = GetSelectedUser();
-            if (u == null)
-            {
-                ShowStatus("Please select a user first.", isError: true);
-                return;
-            }
-            if (u.IsActive)
-            {
-                ShowStatus("This user is already active.", isError: true);
-                return;
-            }
-
             SetBusy(true);
             try
             {
@@ -526,17 +586,10 @@ namespace TodangMotor.Controls
             }
         }
 
-        // ============================================================
-        // HELPERS
-        // ============================================================
-
         private void SetBusy(bool busy)
         {
-            _isBusy = busy;
             _btnAdd.Enabled = !busy;
-            _btnEdit.Enabled = !busy;
-            _btnDeactivate.Enabled = !busy;
-            _btnReactivate.Enabled = !busy;
+            _grid.Enabled = !busy;
         }
 
         private void ShowStatus(string message, bool isError)

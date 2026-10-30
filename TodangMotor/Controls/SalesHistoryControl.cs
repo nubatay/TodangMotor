@@ -11,23 +11,9 @@ using TodangMotor.Services;
 
 namespace TodangMotor.Controls
 {
-    /// <summary>
-    /// Sales History — filterable list of sales with From/To date pickers.
-    /// View-only. Revenue report generation lives in the Reports Hub (Owner-only).
-    /// Can be constructed with an optional initial From/To range (inclusive)
-    /// so navigating from the dashboard preserves the selected period.
-    /// </summary>
     public class SalesHistoryControl : UserControl
     {
-        // ============================================================
-        // SERVICES
-        // ============================================================
-
         private readonly SalesService _salesService = new();
-
-        // ============================================================
-        // STATE
-        // ============================================================
 
         private List<Sale> _allSales = new();
 
@@ -37,29 +23,20 @@ namespace TodangMotor.Controls
         private bool _isLoaded;
         private bool _isBusy;
 
-        // ============================================================
-        // UI CONTROLS
-        // ============================================================
-
         private RoundedTextBox _searchBox;
         private DateTimePicker _dtpFrom;
         private DateTimePicker _dtpTo;
+        private Panel _customPickerPanel;
+        private Button _activeChip;
+        private readonly List<Button> _presetChips = new();
         private Label _countLabel;
 
         private DataGridView _grid;
 
-        private Button _btnView;
         private Button _btnRefresh;
         private Label _statusLabel;
 
-        // ============================================================
-        // CONSTRUCTION
-        // ============================================================
-
-        public SalesHistoryControl()
-            : this(null, null)
-        {
-        }
+        public SalesHistoryControl() : this(null, null) { }
 
         public SalesHistoryControl(DateTime? initialFrom, DateTime? initialTo)
         {
@@ -68,7 +45,7 @@ namespace TodangMotor.Controls
 
             Dock = DockStyle.Fill;
             BackColor = Theme.Background;
-            Padding = new Padding(Theme.SpacingLg);
+            Padding = new Padding(UiFactory.PagePadding);
 
             BuildLayout();
 
@@ -98,24 +75,72 @@ namespace TodangMotor.Controls
             var bar = new Panel
             {
                 Dock = DockStyle.Top,
-                Height = 92,
+                Height = 128,
                 BackColor = Theme.Background
             };
 
-            _searchBox = UiFactory.CreateTextBox(260);
-            _searchBox.Location = new Point(4, 12);
+            // ---- Row 1: Search + count ----
+            _searchBox = UiFactory.CreateTextBox(320);
+            _searchBox.Location = new Point(0, 16);
             _searchBox.Placeholder = "Search by invoice number…";
             _searchBox.MaxLength = 100;
             _searchBox.TextChanged += (s, e) => ApplyFilters();
 
-            var lblFrom = new Label
+            _countLabel = new Label
             {
-                Text = "From:",
+                Text = "Loading…",
                 Font = Theme.FontSmall,
                 ForeColor = Theme.TextSecondary,
                 AutoSize = false,
-                Size = new Size(46, 20),
-                Location = new Point(276, 24),
+                Location = new Point(344, 26),
+                Height = 24,
+                Width = 600,
+                TextAlign = ContentAlignment.MiddleLeft,
+                Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right,
+                BackColor = Color.Transparent
+            };
+
+            bar.Controls.Add(_searchBox);
+            bar.Controls.Add(_countLabel);
+
+            // ---- Row 2: Preset chips ----
+            var presets = new (string Label, string Key)[]
+            {
+                ("Today",        "today"),
+                ("Last 7 days",  "7d"),
+                ("Last 30 days", "30d"),
+                ("This month",   "month"),
+                ("Custom",       "custom")
+            };
+
+            int x = 0;
+            foreach (var (label, key) in presets)
+            {
+                var chip = CreatePresetChip(label, key);
+                chip.Location = new Point(x, 72);
+                bar.Controls.Add(chip);
+                _presetChips.Add(chip);
+                x += chip.Width + 8;
+            }
+
+            // ---- Custom pickers (hidden until Custom chip is selected) ----
+            _customPickerPanel = new Panel
+            {
+                Location = new Point(x + 8, 72),
+                Height = 40,
+                Width = 424,
+                BackColor = Color.Transparent,
+                Visible = false
+            };
+
+            var lblFrom = new Label
+            {
+                Text = "From",
+                Font = Theme.FontSmall,
+                ForeColor = Theme.TextSecondary,
+                AutoSize = false,
+                Size = new Size(44, 40),
+                Location = new Point(0, 0),
                 TextAlign = ContentAlignment.MiddleLeft,
                 BackColor = Color.Transparent
             };
@@ -127,7 +152,7 @@ namespace TodangMotor.Controls
                 Format = DateTimePickerFormat.Custom,
                 CustomFormat = "MMM d, yyyy",
                 Font = Theme.FontBody,
-                Location = new Point(324, 14),
+                Location = new Point(48, 6),
                 Size = new Size(160, 32),
                 MaxDate = DateTime.Today,
                 Value = fromValue
@@ -136,12 +161,12 @@ namespace TodangMotor.Controls
 
             var lblTo = new Label
             {
-                Text = "To:",
+                Text = "To",
                 Font = Theme.FontSmall,
                 ForeColor = Theme.TextSecondary,
                 AutoSize = false,
-                Size = new Size(28, 20),
-                Location = new Point(496, 24),
+                Size = new Size(28, 40),
+                Location = new Point(216, 0),
                 TextAlign = ContentAlignment.MiddleLeft,
                 BackColor = Color.Transparent
             };
@@ -153,33 +178,30 @@ namespace TodangMotor.Controls
                 Format = DateTimePickerFormat.Custom,
                 CustomFormat = "MMM d, yyyy",
                 Font = Theme.FontBody,
-                Location = new Point(526, 14),
+                Location = new Point(248, 6),
                 Size = new Size(160, 32),
                 MaxDate = DateTime.Today,
                 Value = toValue
             };
             _dtpTo.ValueChanged += (s, e) => ApplyFilters();
 
-            _countLabel = new Label
-            {
-                Text = "Loading…",
-                Font = Theme.FontSmall,
-                ForeColor = Theme.TextSecondary,
-                AutoSize = false,
-                Location = new Point(4, 64),
-                Height = 20,
-                Width = 900,
-                TextAlign = ContentAlignment.MiddleLeft,
-                Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right,
-                BackColor = Color.Transparent
-            };
+            _customPickerPanel.Controls.Add(lblFrom);
+            _customPickerPanel.Controls.Add(_dtpFrom);
+            _customPickerPanel.Controls.Add(lblTo);
+            _customPickerPanel.Controls.Add(_dtpTo);
+            bar.Controls.Add(_customPickerPanel);
 
-            bar.Controls.Add(_searchBox);
-            bar.Controls.Add(lblFrom);
-            bar.Controls.Add(_dtpFrom);
-            bar.Controls.Add(lblTo);
-            bar.Controls.Add(_dtpTo);
-            bar.Controls.Add(_countLabel);
+            // Initial state: if a range was provided, start in Custom mode.
+            if (_initialFrom.HasValue || _initialTo.HasValue)
+            {
+                var customChip = _presetChips.FirstOrDefault(c => (string?)c.Tag == "custom");
+                if (customChip != null) SetActiveChip(customChip);
+                _customPickerPanel.Visible = true;
+            }
+            else
+            {
+                SetActiveChip(_presetChips[0]); // "Today"
+            }
 
             return bar;
         }
@@ -199,15 +221,102 @@ namespace TodangMotor.Controls
             return v;
         }
 
+        private Button CreatePresetChip(string label, string key)
+        {
+            var chip = new Button
+            {
+                Text = label,
+                Font = Theme.FontBodyBold,
+                FlatStyle = FlatStyle.Flat,
+                BackColor = Theme.Surface,
+                ForeColor = Theme.TextSecondary,
+                Cursor = Cursors.Hand,
+                Height = 40,
+                AutoSize = false,
+                Tag = key,
+                Padding = new Padding(0)
+            };
+            chip.FlatAppearance.BorderSize = 1;
+            chip.FlatAppearance.BorderColor = Theme.PanelBorder;
+            chip.FlatAppearance.MouseOverBackColor = Color.FromArgb(240, 244, 255);
+
+            using (var g = chip.CreateGraphics())
+            {
+                var size = g.MeasureString(label, chip.Font);
+                chip.Width = (int)size.Width + 32;
+            }
+
+            Theme.ApplyRoundedRegion(chip, Theme.Radius);
+            chip.Resize += (s, e) => Theme.ApplyRoundedRegion(chip, Theme.Radius);
+
+            chip.Click += (s, e) =>
+            {
+                SetActiveChip(chip);
+                ApplyPreset(key);
+            };
+
+            return chip;
+        }
+
+        private void SetActiveChip(Button chip)
+        {
+            _activeChip = chip;
+
+            foreach (var c in _presetChips)
+            {
+                bool active = (c == chip);
+                c.BackColor = active ? Theme.Primary : Theme.Surface;
+                c.ForeColor = active ? Color.White : Theme.TextSecondary;
+                c.FlatAppearance.BorderColor = active ? Theme.Primary : Theme.PanelBorder;
+                c.FlatAppearance.MouseOverBackColor = active
+                    ? Theme.PrimaryHover
+                    : Color.FromArgb(240, 244, 255);
+            }
+        }
+
+        private void ApplyPreset(string key)
+        {
+            DateTime today = DateTime.Today;
+
+            switch (key)
+            {
+                case "today":
+                    _dtpFrom.Value = today;
+                    _dtpTo.Value = today;
+                    _customPickerPanel.Visible = false;
+                    break;
+                case "7d":
+                    _dtpFrom.Value = today.AddDays(-6);
+                    _dtpTo.Value = today;
+                    _customPickerPanel.Visible = false;
+                    break;
+                case "30d":
+                    _dtpFrom.Value = today.AddDays(-29);
+                    _dtpTo.Value = today;
+                    _customPickerPanel.Visible = false;
+                    break;
+                case "month":
+                    _dtpFrom.Value = new DateTime(today.Year, today.Month, 1);
+                    _dtpTo.Value = today;
+                    _customPickerPanel.Visible = false;
+                    break;
+                case "custom":
+                    _customPickerPanel.Visible = true;
+                    _dtpFrom.Focus();
+                    return; // wait for user input
+            }
+
+            ApplyFilters();
+        }
+
         private DataGridView BuildGrid()
         {
             _grid = new DataGridView
             {
                 Dock = DockStyle.Fill,
-                Margin = new Padding(0, 4, 0, 4)
+                Margin = new Padding(0, 8, 0, 0)
             };
-            UiFactory.StyleGrid(_grid);
-            _grid.AlternatingRowsDefaultCellStyle.BackColor = Color.FromArgb(248, 249, 251);
+            UiFactory.StyleGridModern(_grid);
             _grid.CellDoubleClick += (s, e) =>
             {
                 if (e.RowIndex < 0) return;
@@ -229,13 +338,9 @@ namespace TodangMotor.Controls
             var bar = new Panel
             {
                 Dock = DockStyle.Bottom,
-                Height = 68,
+                Height = 80,
                 BackColor = Theme.Background
             };
-
-            _btnView = UiFactory.CreateButton("View Detail", UiFactory.ButtonStyle.Secondary, 120, 40);
-            _btnView.Location = new Point(4, 14);
-            _btnView.Click += (s, e) => OpenDetailForSelected();
 
             _statusLabel = new Label
             {
@@ -243,27 +348,25 @@ namespace TodangMotor.Controls
                 Font = Theme.FontSmall,
                 ForeColor = Theme.TextSecondary,
                 AutoSize = false,
-                Location = new Point(140, 14),
+                Location = new Point(4, 24),
                 Height = 40,
-                Width = 400,
+                Width = 600,
                 TextAlign = ContentAlignment.MiddleLeft,
                 Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right,
                 BackColor = Color.Transparent
             };
 
-            _btnRefresh = UiFactory.CreateButton("Refresh", UiFactory.ButtonStyle.Ghost, 100, 40);
+            _btnRefresh = UiFactory.CreateButton("Refresh", UiFactory.ButtonStyle.Primary, 140, UiFactory.PrimaryButtonHeight);
             _btnRefresh.Anchor = AnchorStyles.Top | AnchorStyles.Right;
             _btnRefresh.Click += async (s, e) => await ReloadAllAsync();
 
-            bar.Controls.Add(_btnView);
             bar.Controls.Add(_statusLabel);
             bar.Controls.Add(_btnRefresh);
 
             bar.Resize += (s, e) =>
             {
-                _btnRefresh.Left = bar.ClientSize.Width - _btnRefresh.Width - 4;
-                _statusLabel.Width = Math.Max(100,
-                    _btnRefresh.Left - _statusLabel.Left - 12);
+                _btnRefresh.Location = new Point(bar.ClientSize.Width - _btnRefresh.Width, 24);
+                _statusLabel.Width = Math.Max(100, _btnRefresh.Left - _statusLabel.Left - 16);
             };
 
             return bar;
@@ -296,33 +399,19 @@ namespace TodangMotor.Controls
             }
         }
 
-        // ============================================================
-        // RANGE HELPER
-        // ============================================================
-
-        private (DateTime From, DateTime ToExclusive, string Label) GetSelectedRange()
+        private (DateTime From, DateTime ToExclusive) GetSelectedRange()
         {
             DateTime from = _dtpFrom.Value.Date;
             DateTime to = _dtpTo.Value.Date;
-
             if (to < from) to = from;
-
-            string label = from == to
-                ? from.ToString("MMMM d, yyyy")
-                : $"{from:MMM d, yyyy} to {to:MMM d, yyyy}";
-
-            return (from, to.AddDays(1), label);
+            return (from, to.AddDays(1));
         }
-
-        // ============================================================
-        // FILTERS + GRID BINDING
-        // ============================================================
 
         private void ApplyFilters()
         {
             if (_allSales == null) return;
 
-            var (from, to, _) = GetSelectedRange();
+            var (from, to) = GetSelectedRange();
 
             IEnumerable<Sale> filtered = _allSales
                 .Where(s => s.SaleDate >= from && s.SaleDate < to);
@@ -361,21 +450,17 @@ namespace TodangMotor.Controls
                 if (header != null) _grid.Columns[col].HeaderText = header;
             }
 
-            SetWeight("Invoice", 160, "Invoice No.");
-            SetWeight("Date", 180, "Date");
+            SetWeight("Invoice", 170, "Invoice No.");
+            SetWeight("Date", 190, "Date");
             SetWeight("Customer", 180, "Customer");
             SetWeight("Payment", 100, "Payment");
-            SetWeight("Subtotal", 100, "Subtotal (PHP)");
+            SetWeight("Subtotal", 110, "Subtotal (PHP)");
 
             if (_grid.Rows.Count > 0)
                 _grid.ClearSelection();
 
             _countLabel.Text = $"Showing {rows.Count} sale(s)";
         }
-
-        // ============================================================
-        // SELECTION
-        // ============================================================
 
         private Sale? GetSelectedSale()
         {
@@ -412,14 +497,9 @@ namespace TodangMotor.Controls
             }
         }
 
-        // ============================================================
-        // HELPERS
-        // ============================================================
-
         private void SetBusy(bool busy)
         {
             _isBusy = busy;
-            _btnView.Enabled = !busy;
             _btnRefresh.Enabled = !busy;
         }
 

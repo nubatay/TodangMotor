@@ -7,14 +7,10 @@ using TodangMotor.Common;
 using TodangMotor.Data;
 using TodangMotor.Models;
 using TodangMotor.Services;
+using static TodangMotor.Services.DashboardService;
 
 namespace TodangMotor.Controls
 {
-    /// <summary>
-    /// Dashboard home. From/To date pickers drive all range-dependent
-    /// widgets. Five KPI cards, three charts, and a tall Stock Alerts
-    /// panel on the right side of the bottom block.
-    /// </summary>
     public class DashboardHomeControl : UserControl
     {
         private readonly DashboardService _dashboardService = new();
@@ -28,6 +24,9 @@ namespace TodangMotor.Controls
         // ---- Filter ----
         private DateTimePicker _dtpFrom;
         private DateTimePicker _dtpTo;
+        private Panel _customPickerPanel;
+        private Button _activeChip;
+        private readonly List<Button> _presetChips = new();
 
         // ---- Cards ----
         private RoundedPanel _cardSales;
@@ -52,10 +51,6 @@ namespace TodangMotor.Controls
         private FlowLayoutPanel _recentSalesList;
         private FlowLayoutPanel _stockAlertsList;
 
-        // ============================================================
-        // CONSTRUCTION
-        // ============================================================
-
         public DashboardHomeControl()
         {
             SetStyle(ControlStyles.AllPaintingInWmPaint |
@@ -68,7 +63,6 @@ namespace TodangMotor.Controls
             Padding = new Padding(Theme.SpacingLg);
 
             BuildLayout();
-
 
             _refreshTimer = new System.Windows.Forms.Timer { Interval = 30_000 };
             _refreshTimer.Tick += async (s, e) => await SilentRefreshAsync();
@@ -143,10 +137,7 @@ namespace TodangMotor.Controls
             {
                 snap = await _dashboardService.GetSnapshotAsync(from, toExclusive);
             }
-            catch
-            {
-                return;
-            }
+            catch { return; }
 
             if (IsDisposed) return;
 
@@ -155,11 +146,9 @@ namespace TodangMotor.Controls
                 ? "vs prior day"
                 : $"vs prior {(int)(toExclusive - from).TotalDays}d";
 
-            // Card 1 — Sales
             _salesValue.Text = "₱" + snap.SalesTotal.ToString("N2");
             ApplyTrend(_salesSub, snap.SalesTrendPct, vsLabel);
 
-            // Card 2 — Net Profit (Owner only)
             if (_cardNetProfit != null && isOwner)
             {
                 _netProfitValue.Text = "₱" + snap.NetProfit.ToString("N2");
@@ -170,18 +159,15 @@ namespace TodangMotor.Controls
                 _netProfitSub.ForeColor = Theme.TextMuted;
             }
 
-            // Card 3 — Transactions
             _transactionsValue.Text = snap.TransactionCount.ToString("N0");
             ApplyTrend(_transactionsSub, snap.TransactionsTrendPct, vsLabel);
 
-            // Card 4 — Items Sold
             _itemsSoldValue.Text = snap.ItemsSold.ToString("N0") + " units";
             _itemsSoldSub.Text = snap.TransactionCount > 0
                 ? $"avg {snap.ItemsSold / Math.Max(1, snap.TransactionCount):0.#} per sale"
                 : "no items sold";
             _itemsSoldSub.ForeColor = Theme.TextMuted;
 
-            // Card 5 — Stock Alerts
             int totalAlerts = snap.LowStockCount + snap.OutOfStockCount;
             _stockAlertsValue.Text = totalAlerts.ToString("N0");
             _stockAlertsValue.ForeColor = snap.OutOfStockCount > 0
@@ -199,7 +185,6 @@ namespace TodangMotor.Controls
                 _stockAlertsSub.ForeColor = Theme.TextMuted;
             }
 
-            // Charts
             _salesChartTitle.Text = snap.ChartTitle;
             _salesChart.SetData(snap.ChartBuckets);
             _salesChart.SetEmptyMessage(
@@ -230,7 +215,6 @@ namespace TodangMotor.Controls
             _categoryDonut.SetData(categorySlices);
             _categoryDonut.SetCenterLabel("Revenue");
 
-            // Lists
             SuspendLayout();
             PopulateRecentSales(snap.RecentSales);
             PopulateStockAlerts(snap.LowStockAlerts);
@@ -290,10 +274,10 @@ namespace TodangMotor.Controls
                 Padding = Padding.Empty,
                 AutoScroll = true
             };
-            root.RowStyles.Add(new RowStyle(SizeType.Absolute, 48));   // filter
-            root.RowStyles.Add(new RowStyle(SizeType.Absolute, 140));  // cards
-            root.RowStyles.Add(new RowStyle(SizeType.Absolute, 220));  // sales + top products
-            root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));   // bottom block
+            root.RowStyles.Add(new RowStyle(SizeType.Absolute, 56));   // filter chips
+            root.RowStyles.Add(new RowStyle(SizeType.Absolute, 160));  // cards
+            root.RowStyles.Add(new RowStyle(SizeType.Absolute, 240));  // charts
+            root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));   // bottom
 
             root.Controls.Add(BuildFilterRow(), 0, 0);
             root.Controls.Add(BuildCardsRow(), 0, 1);
@@ -303,6 +287,8 @@ namespace TodangMotor.Controls
             Controls.Add(root);
         }
 
+        // ---- Filter row: preset chips + hidden custom pickers ----
+
         private Panel BuildFilterRow()
         {
             var row = new Panel
@@ -311,14 +297,43 @@ namespace TodangMotor.Controls
                 BackColor = Theme.Background
             };
 
+            // Preset chips
+            var presets = new (string Label, string Key)[]
+            {
+                ("Today",        "today"),
+                ("Last 7 days",  "7d"),
+                ("Last 30 days", "30d"),
+                ("This month",   "month"),
+                ("Custom",       "custom")
+            };
+
+            int x = 0;
+            foreach (var (label, key) in presets)
+            {
+                var chip = CreatePresetChip(label, key);
+                chip.Location = new Point(x, 8);
+                row.Controls.Add(chip);
+                _presetChips.Add(chip);
+                x += chip.Width + 8;
+            }
+
+            // Custom date range panel (hidden by default)
+            _customPickerPanel = new Panel
+            {
+                Location = new Point(x + 8, 8),
+                Height = 40,
+                BackColor = Color.Transparent,
+                Visible = false
+            };
+
             var lblFrom = new Label
             {
-                Text = "From:",
+                Text = "From",
                 Font = Theme.FontSmall,
                 ForeColor = Theme.TextSecondary,
                 AutoSize = false,
-                Size = new Size(46, 20),
-                Location = new Point(0, 14),
+                Size = new Size(44, 40),
+                Location = new Point(0, 0),
                 TextAlign = ContentAlignment.MiddleLeft,
                 BackColor = Color.Transparent
             };
@@ -337,12 +352,12 @@ namespace TodangMotor.Controls
 
             var lblTo = new Label
             {
-                Text = "To:",
+                Text = "To",
                 Font = Theme.FontSmall,
                 ForeColor = Theme.TextSecondary,
                 AutoSize = false,
-                Size = new Size(28, 20),
-                Location = new Point(222, 14),
+                Size = new Size(32, 40),
+                Location = new Point(220, 0),
                 TextAlign = ContentAlignment.MiddleLeft,
                 BackColor = Color.Transparent
             };
@@ -352,20 +367,120 @@ namespace TodangMotor.Controls
                 Format = DateTimePickerFormat.Custom,
                 CustomFormat = "MMM d, yyyy",
                 Font = Theme.FontBody,
-                Location = new Point(252, 6),
+                Location = new Point(256, 6),
                 Size = new Size(160, 32),
                 MaxDate = DateTime.Today,
                 Value = DateTime.Today
             };
             _dtpTo.ValueChanged += async (s, e) => await SilentRefreshAsync();
 
-            row.Controls.Add(lblFrom);
-            row.Controls.Add(_dtpFrom);
-            row.Controls.Add(lblTo);
-            row.Controls.Add(_dtpTo);
+            _customPickerPanel.Controls.Add(lblFrom);
+            _customPickerPanel.Controls.Add(_dtpFrom);
+            _customPickerPanel.Controls.Add(lblTo);
+            _customPickerPanel.Controls.Add(_dtpTo);
+            _customPickerPanel.Width = 416;
+
+            row.Controls.Add(_customPickerPanel);
+
+            // Default to "Today"
+            SetActiveChip(_presetChips[0]);
 
             return row;
         }
+
+        private Button CreatePresetChip(string label, string key)
+        {
+            var chip = new Button
+            {
+                Text = label,
+                Font = Theme.FontBodyBold,
+                FlatStyle = FlatStyle.Flat,
+                BackColor = Theme.Surface,
+                ForeColor = Theme.TextSecondary,
+                Cursor = Cursors.Hand,
+                Height = 40,
+                AutoSize = false,
+                Tag = key,
+                Padding = new Padding(0)
+            };
+            chip.FlatAppearance.BorderSize = 1;
+            chip.FlatAppearance.BorderColor = Theme.PanelBorder;
+            chip.FlatAppearance.MouseOverBackColor = Color.FromArgb(240, 244, 255);
+
+            using (var g = chip.CreateGraphics())
+            {
+                var size = g.MeasureString(label, chip.Font);
+                chip.Width = (int)size.Width + 32;
+            }
+
+            Theme.ApplyRoundedRegion(chip, Theme.Radius);
+            chip.Resize += (s, e) => Theme.ApplyRoundedRegion(chip, Theme.Radius);
+
+            chip.Click += async (s, e) =>
+            {
+                SetActiveChip(chip);
+                await ApplyPresetAsync(key);
+            };
+
+            return chip;
+        }
+
+        private void SetActiveChip(Button chip)
+        {
+            _activeChip = chip;
+
+            foreach (var c in _presetChips)
+            {
+                bool active = (c == chip);
+                c.BackColor = active ? Theme.Primary : Theme.Surface;
+                c.ForeColor = active ? Color.White : Theme.TextSecondary;
+                c.FlatAppearance.BorderColor = active ? Theme.Primary : Theme.PanelBorder;
+                c.FlatAppearance.MouseOverBackColor = active
+                    ? Theme.PrimaryHover
+                    : Color.FromArgb(240, 244, 255);
+            }
+        }
+
+        private async System.Threading.Tasks.Task ApplyPresetAsync(string key)
+        {
+            DateTime today = DateTime.Today;
+
+            switch (key)
+            {
+                case "today":
+                    _dtpFrom.Value = today;
+                    _dtpTo.Value = today;
+                    _customPickerPanel.Visible = false;
+                    break;
+
+                case "7d":
+                    _dtpFrom.Value = today.AddDays(-6);
+                    _dtpTo.Value = today;
+                    _customPickerPanel.Visible = false;
+                    break;
+
+                case "30d":
+                    _dtpFrom.Value = today.AddDays(-29);
+                    _dtpTo.Value = today;
+                    _customPickerPanel.Visible = false;
+                    break;
+
+                case "month":
+                    _dtpFrom.Value = new DateTime(today.Year, today.Month, 1);
+                    _dtpTo.Value = today;
+                    _customPickerPanel.Visible = false;
+                    break;
+
+                case "custom":
+                    _customPickerPanel.Visible = true;
+                    _dtpFrom.Focus();
+                    return; // don't refresh yet — wait for user to change dates
+            }
+
+            await SilentRefreshAsync();
+        }
+
+        // ---- Cards row ----
 
         private TableLayoutPanel BuildCardsRow()
         {
@@ -387,36 +502,38 @@ namespace TodangMotor.Controls
 
             int col = 0;
 
-            _cardSales = BuildStatCard("\uE719", "Sales", out _salesValue, out _salesSub);
-            _cardSales.Margin = new Padding(Theme.SpacingSm);
+            _cardSales = BuildStatCard("\uE719", "Sales", Theme.Primary, out _salesValue, out _salesSub);
+            _cardSales.Margin = new Padding(8);
             row.Controls.Add(_cardSales, col++, 0);
             MakeCardClickable(_cardSales, NavigateToSales);
 
             if (isOwner)
             {
-                _cardNetProfit = BuildStatCard("\uE9D9", "Net Profit", out _netProfitValue, out _netProfitSub);
-                _cardNetProfit.Margin = new Padding(Theme.SpacingSm);
+                _cardNetProfit = BuildStatCard("\uE9D9", "Net Profit", Theme.Primary, out _netProfitValue, out _netProfitSub);
+                _cardNetProfit.Margin = new Padding(8);
                 row.Controls.Add(_cardNetProfit, col++, 0);
                 MakeCardClickable(_cardNetProfit, NavigateToSales);
             }
 
-            _cardTransactions = BuildStatCard("\uE8EF", "Transactions", out _transactionsValue, out _transactionsSub);
-            _cardTransactions.Margin = new Padding(Theme.SpacingSm);
+            _cardTransactions = BuildStatCard("\uE8EF", "Transactions", Theme.Primary, out _transactionsValue, out _transactionsSub);
+            _cardTransactions.Margin = new Padding(8);
             row.Controls.Add(_cardTransactions, col++, 0);
             MakeCardClickable(_cardTransactions, NavigateToSales);
 
-            _cardItemsSold = BuildStatCard("\uE7B8", "Items Sold", out _itemsSoldValue, out _itemsSoldSub);
-            _cardItemsSold.Margin = new Padding(Theme.SpacingSm);
+            _cardItemsSold = BuildStatCard("\uE7B8", "Items Sold", Theme.Primary, out _itemsSoldValue, out _itemsSoldSub);
+            _cardItemsSold.Margin = new Padding(8);
             row.Controls.Add(_cardItemsSold, col++, 0);
             MakeCardClickable(_cardItemsSold, NavigateToSales);
 
-            _cardStockAlerts = BuildStockAlertsCard();
-            _cardStockAlerts.Margin = new Padding(Theme.SpacingSm);
+            _cardStockAlerts = BuildStatCard("\uE7BA", "Stock Alerts", Theme.Danger, out _stockAlertsValue, out _stockAlertsSub);
+            _cardStockAlerts.Margin = new Padding(8);
             row.Controls.Add(_cardStockAlerts, col++, 0);
             MakeCardClickable(_cardStockAlerts, () => NavigateRequested?.Invoke("inventory"));
 
             return row;
         }
+
+        // ---- Charts row ----
 
         private TableLayoutPanel BuildChartRow()
         {
@@ -426,80 +543,20 @@ namespace TodangMotor.Controls
                 ColumnCount = 2,
                 RowCount = 1,
                 BackColor = Theme.Background,
-                Margin = new Padding(0, Theme.SpacingSm, 0, Theme.SpacingSm),
+                Margin = new Padding(0, 8, 0, 8),
                 Padding = Padding.Empty
             };
-            row.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50f));
-            row.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50f));
+            row.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 60f));
+            row.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 40f));
             row.RowStyles.Add(new RowStyle(SizeType.Percent, 100f));
 
-            // Sales chart
-            var chartCard = new RoundedPanel
-            {
-                Dock = DockStyle.Fill,
-                Radius = Theme.RadiusCard,
-                BorderColor = Theme.PanelBorder,
-                BorderSize = 1,
-                ShadowEnabled = true,
-                BackColor = Theme.Surface,
-                Padding = new Padding(Theme.SpacingMd),
-                Margin = new Padding(Theme.SpacingSm)
-            };
+            var chartCard = BuildChartCard("Sales Trend", out _salesChartTitle, out _salesChart);
+            chartCard.Margin = new Padding(8, 0, 8, 0);
+            _salesChart.BarClicked += (bucketLabel) => NavigateToSales();
 
-            _salesChartTitle = new Label
-            {
-                Text = "Sales",
-                Font = Theme.FontH3,
-                ForeColor = Theme.TextPrimary,
-                AutoSize = false,
-                Dock = DockStyle.Top,
-                Height = 26,
-                TextAlign = ContentAlignment.MiddleLeft,
-                BackColor = Color.Transparent
-            };
-
-            _salesChart = new SalesBarChart { Dock = DockStyle.Fill };
-            _salesChart.BarClicked += (bucketLabel) =>
-            {
-                NavigateToSales();
-            };
-
-            chartCard.Controls.Add(_salesChart);
-            chartCard.Controls.Add(_salesChartTitle);
-
-            // Top Products bar chart
-            var topCard = new RoundedPanel
-            {
-                Dock = DockStyle.Fill,
-                Radius = Theme.RadiusCard,
-                BorderColor = Theme.PanelBorder,
-                BorderSize = 1,
-                ShadowEnabled = true,
-                BackColor = Theme.Surface,
-                Padding = new Padding(Theme.SpacingMd),
-                Margin = new Padding(Theme.SpacingSm)
-            };
-
-            var topTitle = new Label
-            {
-                Text = "Top Products by Revenue",
-                Font = Theme.FontH3,
-                ForeColor = Theme.TextPrimary,
-                AutoSize = false,
-                Dock = DockStyle.Top,
-                Height = 26,
-                TextAlign = ContentAlignment.MiddleLeft,
-                BackColor = Color.Transparent
-            };
-
-            _topProductsChart = new HorizontalBarChart { Dock = DockStyle.Fill };
-            _topProductsChart.BarClicked += (bar) =>
-            {
-                NavigateRequested?.Invoke("items");
-            };
-
-            topCard.Controls.Add(_topProductsChart);
-            topCard.Controls.Add(topTitle);
+            var topCard = BuildChartCard("Top Products", out _, out _topProductsChart);
+            topCard.Margin = new Padding(8, 0, 8, 0);
+            _topProductsChart.BarClicked += (bar) => NavigateRequested?.Invoke("items");
 
             row.Controls.Add(chartCard, 0, 0);
             row.Controls.Add(topCard, 1, 0);
@@ -507,31 +564,27 @@ namespace TodangMotor.Controls
             return row;
         }
 
-        /// <summary>
-        /// Bottom block:
-        ///   Left column (50%) — stacked:
-        ///       Sales by Category (top half)
-        ///       Recent Sales (bottom half)
-        ///   Right column (50%) — Stock Alerts (full height)
-        /// </summary>
-        private TableLayoutPanel BuildBottomBlock()
+        private RoundedPanel BuildChartCard(string title, out Label titleLabel, out SalesBarChart chart)
         {
-            var block = new TableLayoutPanel
-            {
-                Dock = DockStyle.Fill,
-                ColumnCount = 2,
-                RowCount = 2,
-                BackColor = Theme.Background,
-                Margin = Padding.Empty,
-                Padding = Padding.Empty
-            };
-            block.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50f));
-            block.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50f));
-            block.RowStyles.Add(new RowStyle(SizeType.Percent, 50f));
-            block.RowStyles.Add(new RowStyle(SizeType.Percent, 50f));
+            var card = BuildChartCardBase(title, out titleLabel);
+            chart = new SalesBarChart { Dock = DockStyle.Fill };
+            card.Controls.Add(chart);
+            card.Controls.Add(titleLabel);
+            return card;
+        }
 
-            // ---------- LEFT column, top half — Sales by Category ----------
-            var catCard = new RoundedPanel
+        private RoundedPanel BuildChartCard(string title, out Label titleLabel, out HorizontalBarChart chart)
+        {
+            var card = BuildChartCardBase(title, out titleLabel);
+            chart = new HorizontalBarChart { Dock = DockStyle.Fill };
+            card.Controls.Add(chart);
+            card.Controls.Add(titleLabel);
+            return card;
+        }
+
+        private RoundedPanel BuildChartCardBase(string title, out Label titleLabel)
+        {
+            var card = new RoundedPanel
             {
                 Dock = DockStyle.Fill,
                 Radius = Theme.RadiusCard,
@@ -539,44 +592,62 @@ namespace TodangMotor.Controls
                 BorderSize = 1,
                 ShadowEnabled = true,
                 BackColor = Theme.Surface,
-                Padding = new Padding(Theme.SpacingMd),
-                Margin = new Padding(Theme.SpacingSm)
+                Padding = new Padding(24)
             };
 
-            var catTitle = new Label
+            titleLabel = new Label
             {
-                Text = "Sales by Category",
-                Font = Theme.FontH3,
+                Text = title,
+                Font = new Font(Theme.UiFontFamily, 13F, FontStyle.Bold),
                 ForeColor = Theme.TextPrimary,
                 AutoSize = false,
                 Dock = DockStyle.Top,
-                Height = 26,
+                Height = 32,
                 TextAlign = ContentAlignment.MiddleLeft,
                 BackColor = Color.Transparent
             };
 
+            return card;
+        }
+
+        // ---- Bottom block: 3 equal columns ----
+
+        private TableLayoutPanel BuildBottomBlock()
+        {
+            var block = new TableLayoutPanel
+            {
+                Dock = DockStyle.Fill,
+                ColumnCount = 3,
+                RowCount = 1,
+                BackColor = Theme.Background,
+                Margin = Padding.Empty,
+                Padding = Padding.Empty
+            };
+            block.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 33.33f));
+            block.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 33.33f));
+            block.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 33.33f));
+            block.RowStyles.Add(new RowStyle(SizeType.Percent, 100f));
+
+            // Column 1 — Sales by Category
+            var catCard = BuildChartCardBase("Sales by Category", out var catTitle);
             _categoryDonut = new DonutChart { Dock = DockStyle.Fill };
             _categoryDonut.SetEmptyMessage("No sales in this period.");
-            _categoryDonut.SliceClicked += (slice) =>
-            {
-                NavigateRequested?.Invoke("items");
-            };
-
+            _categoryDonut.SliceClicked += (slice) => NavigateRequested?.Invoke("items");
             catCard.Controls.Add(_categoryDonut);
             catCard.Controls.Add(catTitle);
+            catCard.Margin = new Padding(8, 0, 8, 0);
 
-            // ---------- LEFT column, bottom half — Recent Sales ----------
+            // Column 2 — Recent Sales
             var recentCard = BuildListCard("Recent Sales", "\uE9D9", out _recentSalesList);
-            recentCard.Margin = new Padding(Theme.SpacingSm);
+            recentCard.Margin = new Padding(8, 0, 8, 0);
 
-            // ---------- RIGHT column, both halves — Stock Alerts ----------
+            // Column 3 — Stock Alerts
             var stockCard = BuildListCard("Stock Alerts", "\uE7BA", out _stockAlertsList);
-            stockCard.Margin = new Padding(Theme.SpacingSm);
+            stockCard.Margin = new Padding(8, 0, 8, 0);
 
             block.Controls.Add(catCard, 0, 0);
-            block.Controls.Add(recentCard, 0, 1);
-            block.Controls.Add(stockCard, 1, 0);
-            block.SetRowSpan(stockCard, 2);
+            block.Controls.Add(recentCard, 1, 0);
+            block.Controls.Add(stockCard, 2, 0);
 
             return block;
         }
@@ -585,7 +656,7 @@ namespace TodangMotor.Controls
         // CARD BUILDERS
         // ============================================================
 
-        private RoundedPanel BuildStatCard(string iconGlyph, string labelText,
+        private RoundedPanel BuildStatCard(string iconGlyph, string labelText, Color iconColor,
             out Label valueLabel, out Label subLabel)
         {
             var card = new RoundedPanel
@@ -596,17 +667,17 @@ namespace TodangMotor.Controls
                 BorderSize = 1,
                 ShadowEnabled = true,
                 BackColor = Theme.Surface,
-                Padding = new Padding(16, 12, 16, 12)
+                Padding = new Padding(24, 20, 24, 20)
             };
 
             var icon = new Label
             {
                 Text = iconGlyph,
-                Font = new Font(Theme.IconFontFamily, 14F, FontStyle.Regular),
-                ForeColor = Theme.Primary,
+                Font = new Font(Theme.IconFontFamily, 16F, FontStyle.Regular),
+                ForeColor = iconColor,
                 AutoSize = false,
-                Size = new Size(28, 24),
-                Location = new Point(14, 12),
+                Size = new Size(32, 28),
+                Location = new Point(24, 20),
                 TextAlign = ContentAlignment.MiddleCenter,
                 BackColor = Color.Transparent
             };
@@ -614,11 +685,11 @@ namespace TodangMotor.Controls
             var caption = new Label
             {
                 Text = labelText,
-                Font = Theme.FontSmall,
+                Font = new Font(Theme.UiFontFamily, 10F, FontStyle.Bold),
                 ForeColor = Theme.TextSecondary,
                 AutoSize = false,
-                Size = new Size(160, 24),
-                Location = new Point(46, 12),
+                Size = new Size(160, 28),
+                Location = new Point(60, 20),
                 TextAlign = ContentAlignment.MiddleLeft,
                 BackColor = Color.Transparent,
                 AutoEllipsis = true
@@ -627,11 +698,11 @@ namespace TodangMotor.Controls
             var value = new Label
             {
                 Text = "—",
-                Font = new Font(Theme.UiFontFamily, 18F, FontStyle.Bold),
+                Font = new Font(Theme.UiFontFamily, 22F, FontStyle.Bold),
                 ForeColor = Theme.TextPrimary,
                 AutoSize = false,
-                Location = new Point(14, 44),
-                Size = new Size(220, 34),
+                Location = new Point(24, 56),
+                Size = new Size(220, 48),
                 TextAlign = ContentAlignment.MiddleLeft,
                 BackColor = Color.Transparent,
                 AutoEllipsis = true
@@ -641,11 +712,11 @@ namespace TodangMotor.Controls
             var sub = new Label
             {
                 Text = "",
-                Font = Theme.FontTiny,
+                Font = new Font(Theme.UiFontFamily, 10F, FontStyle.Regular),
                 ForeColor = Theme.TextMuted,
                 AutoSize = false,
-                Location = new Point(14, 80),
-                Size = new Size(220, 18),
+                Location = new Point(24, 108),
+                Size = new Size(220, 22),
                 TextAlign = ContentAlignment.MiddleLeft,
                 BackColor = Color.Transparent,
                 AutoEllipsis = true
@@ -659,88 +730,10 @@ namespace TodangMotor.Controls
 
             card.Resize += (s, e) =>
             {
-                int w = Math.Max(80, card.ClientSize.Width - 28);
-                caption.Width = Math.Max(60, w - 30);
+                int w = Math.Max(80, card.ClientSize.Width - 48);
+                caption.Width = Math.Max(60, w - 40);
                 value.Width = w;
                 sub.Width = w;
-            };
-
-            return card;
-        }
-
-        private RoundedPanel BuildStockAlertsCard()
-        {
-            var card = new RoundedPanel
-            {
-                Dock = DockStyle.Fill,
-                Radius = Theme.RadiusCard,
-                BorderColor = Theme.PanelBorder,
-                BorderSize = 1,
-                ShadowEnabled = true,
-                BackColor = Theme.Surface,
-                Padding = new Padding(16, 12, 16, 12)
-            };
-
-            var icon = new Label
-            {
-                Text = "\uE7BA",
-                Font = new Font(Theme.IconFontFamily, 14F, FontStyle.Regular),
-                ForeColor = Theme.Danger,
-                AutoSize = false,
-                Size = new Size(28, 24),
-                Location = new Point(14, 12),
-                TextAlign = ContentAlignment.MiddleCenter,
-                BackColor = Color.Transparent
-            };
-
-            var caption = new Label
-            {
-                Text = "Stock Alerts",
-                Font = Theme.FontSmall,
-                ForeColor = Theme.TextSecondary,
-                AutoSize = false,
-                Size = new Size(160, 24),
-                Location = new Point(46, 12),
-                TextAlign = ContentAlignment.MiddleLeft,
-                BackColor = Color.Transparent
-            };
-
-            _stockAlertsValue = new Label
-            {
-                Text = "0",
-                Font = new Font(Theme.UiFontFamily, 18F, FontStyle.Bold),
-                ForeColor = Theme.TextPrimary,
-                AutoSize = false,
-                Location = new Point(14, 44),
-                Size = new Size(220, 34),
-                TextAlign = ContentAlignment.MiddleLeft,
-                BackColor = Color.Transparent
-            };
-
-            _stockAlertsSub = new Label
-            {
-                Text = "",
-                Font = Theme.FontTiny,
-                ForeColor = Theme.TextMuted,
-                AutoSize = false,
-                Location = new Point(14, 80),
-                Size = new Size(220, 18),
-                TextAlign = ContentAlignment.MiddleLeft,
-                BackColor = Color.Transparent,
-                AutoEllipsis = true
-            };
-
-            card.Controls.Add(icon);
-            card.Controls.Add(caption);
-            card.Controls.Add(_stockAlertsValue);
-            card.Controls.Add(_stockAlertsSub);
-
-            card.Resize += (s, e) =>
-            {
-                int w = Math.Max(80, card.ClientSize.Width - 28);
-                caption.Width = Math.Max(60, w - 30);
-                _stockAlertsValue.Width = w;
-                _stockAlertsSub.Width = w;
             };
 
             return card;
@@ -756,24 +749,24 @@ namespace TodangMotor.Controls
                 BorderSize = 1,
                 ShadowEnabled = true,
                 BackColor = Theme.Surface,
-                Padding = new Padding(Theme.SpacingMd)
+                Padding = new Padding(24)
             };
 
             var headerPanel = new Panel
             {
                 Dock = DockStyle.Top,
-                Height = 32,
+                Height = 40,
                 BackColor = Color.Transparent
             };
 
             var icon = new Label
             {
                 Text = iconGlyph,
-                Font = new Font(Theme.IconFontFamily, 12F),
+                Font = new Font(Theme.IconFontFamily, 14F),
                 ForeColor = Theme.Primary,
                 AutoSize = false,
-                Size = new Size(24, 24),
-                Location = new Point(0, 4),
+                Size = new Size(28, 28),
+                Location = new Point(0, 6),
                 TextAlign = ContentAlignment.MiddleCenter,
                 BackColor = Color.Transparent
             };
@@ -781,11 +774,11 @@ namespace TodangMotor.Controls
             var titleLabel = new Label
             {
                 Text = title,
-                Font = Theme.FontH3,
+                Font = new Font(Theme.UiFontFamily, 13F, FontStyle.Bold),
                 ForeColor = Theme.TextPrimary,
                 AutoSize = false,
-                Location = new Point(30, 0),
-                Height = 32,
+                Location = new Point(36, 0),
+                Height = 40,
                 TextAlign = ContentAlignment.MiddleLeft,
                 BackColor = Color.Transparent,
                 Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right
@@ -805,7 +798,7 @@ namespace TodangMotor.Controls
                 WrapContents = false,
                 AutoScroll = true,
                 BackColor = Color.Transparent,
-                Padding = new Padding(0, 4, 0, 0)
+                Padding = new Padding(0, 8, 0, 0)
             };
             listPanel = list;
 
@@ -835,7 +828,7 @@ namespace TodangMotor.Controls
         // LIST POPULATION
         // ============================================================
 
-        private void PopulateRecentSales(List<Sale> sales)
+        private void PopulateRecentSales(List<RecentSaleDisplay> sales)
         {
             _recentSalesList.Controls.Clear();
 
@@ -852,66 +845,69 @@ namespace TodangMotor.Controls
             StretchRows(_recentSalesList);
         }
 
-        private Control BuildSaleRow(Sale sale)
+        private Control BuildSaleRow(RecentSaleDisplay display)
         {
-            bool isVoid = sale.Status == "Void";
+            var sale = display.Sale;
 
             var row = new Panel
             {
                 Width = 400,
-                Height = 52,
-                Margin = new Padding(0, 0, 0, 4),
+                Height = 56,
+                Margin = new Padding(0, 0, 0, 8),
                 BackColor = Color.Transparent
             };
 
-            var invoiceLabel = new Label
+            // Primary label: ITEMS
+            var itemsLabel = new Label
             {
-                Text = sale.InvoiceNo ?? string.Empty,
-                Font = Theme.FontBodyBold,
-                ForeColor = isVoid ? Theme.Danger : Theme.TextPrimary,
+                Text = display.ItemsSummary,
+                Font = new Font(Theme.UiFontFamily, 10F, FontStyle.Bold),
+                ForeColor = Theme.TextPrimary,
                 AutoSize = false,
                 Location = new Point(0, 2),
-                Size = new Size(220, 20),
+                Size = new Size(220, 22),
                 TextAlign = ContentAlignment.MiddleLeft,
                 BackColor = Color.Transparent,
-                Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right
+                Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right,
+                AutoEllipsis = true
             };
 
+            // Amount on the right
             var amountLabel = new Label
             {
                 Text = "₱" + sale.Subtotal.ToString("N2"),
-                Font = Theme.FontBodyBold,
-                ForeColor = isVoid ? Theme.Danger : Theme.TextPrimary,
+                Font = new Font(Theme.UiFontFamily, 11F, FontStyle.Bold),
+                ForeColor = Theme.TextPrimary,
                 AutoSize = false,
-                Size = new Size(140, 20),
+                Size = new Size(140, 22),
                 Location = new Point(240, 2),
                 TextAlign = ContentAlignment.MiddleRight,
                 BackColor = Color.Transparent,
                 Anchor = AnchorStyles.Top | AnchorStyles.Right
             };
 
-            string statusText = isVoid ? $"Void · {sale.PaymentMethod}" : (sale.PaymentMethod ?? "");
-
+            // Secondary line: Invoice, Date, Payment
             var metaLabel = new Label
             {
-                Text = $"{sale.SaleDate:MMM d, h:mm tt}   ·   {statusText}",
-                Font = Theme.FontTiny,
-                ForeColor = isVoid ? Theme.Danger : Theme.TextMuted,
+                Text = $"{sale.InvoiceNo}   ·   {sale.SaleDate:MMM d, h:mm tt}   ·   {sale.PaymentMethod}",
+                Font = new Font(Theme.UiFontFamily, 9F, FontStyle.Regular),
+                ForeColor = Theme.TextMuted,
                 AutoSize = false,
-                Location = new Point(0, 24),
-                Size = new Size(380, 16),
+                Location = new Point(0, 28),
+                Size = new Size(380, 18),
                 TextAlign = ContentAlignment.MiddleLeft,
                 BackColor = Color.Transparent,
-                Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right
+                Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right,
+                AutoEllipsis = true
             };
 
-            row.Controls.Add(invoiceLabel);
+            row.Controls.Add(itemsLabel);
             row.Controls.Add(amountLabel);
             row.Controls.Add(metaLabel);
 
             row.Resize += (s, e) =>
             {
-                invoiceLabel.Width = Math.Max(60, row.Width - 150);
+                itemsLabel.Width = Math.Max(60, row.Width - 150);
                 amountLabel.Left = Math.Max(60, row.Width - 145);
                 metaLabel.Width = row.Width;
             };
@@ -966,12 +962,12 @@ namespace TodangMotor.Controls
             return new Label
             {
                 Text = text,
-                Font = new Font(Theme.UiFontFamily, 8F, FontStyle.Bold),
+                Font = new Font(Theme.UiFontFamily, 9F, FontStyle.Bold),
                 ForeColor = color,
                 AutoSize = false,
                 Width = 300,
-                Height = 20,
-                Margin = new Padding(0, 6, 0, 4),
+                Height = 24,
+                Margin = new Padding(0, 8, 0, 8),
                 Padding = new Padding(2, 0, 0, 0),
                 TextAlign = ContentAlignment.MiddleLeft,
                 BackColor = Color.Transparent
@@ -983,19 +979,19 @@ namespace TodangMotor.Controls
             var row = new Panel
             {
                 Width = 300,
-                Height = 44,
-                Margin = new Padding(0, 0, 0, 2),
+                Height = 48,
+                Margin = new Padding(0, 0, 0, 4),
                 BackColor = Color.Transparent
             };
 
             var nameLabel = new Label
             {
                 Text = $"{p.ProductName} — {p.Brand}",
-                Font = Theme.FontBody,
+                Font = new Font(Theme.UiFontFamily, 10F, FontStyle.Regular),
                 ForeColor = Theme.TextPrimary,
                 AutoSize = false,
                 Location = new Point(0, 2),
-                Size = new Size(200, 20),
+                Size = new Size(200, 22),
                 TextAlign = ContentAlignment.MiddleLeft,
                 BackColor = Color.Transparent,
                 Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right,
@@ -1005,10 +1001,10 @@ namespace TodangMotor.Controls
             var qtyLabel = new Label
             {
                 Text = $"{p.QuantityOnHand} / {p.ReorderLevel}",
-                Font = Theme.FontBodyBold,
+                Font = new Font(Theme.UiFontFamily, 10F, FontStyle.Bold),
                 ForeColor = isOutOfStock ? Theme.Danger : Color.FromArgb(200, 130, 40),
                 AutoSize = false,
-                Size = new Size(70, 20),
+                Size = new Size(70, 22),
                 Location = new Point(230, 2),
                 TextAlign = ContentAlignment.MiddleRight,
                 BackColor = Color.Transparent,
@@ -1036,7 +1032,7 @@ namespace TodangMotor.Controls
             var row = new Panel
             {
                 Width = initialWidth,
-                Height = 52,
+                Height = 56,
                 Margin = new Padding(0),
                 BackColor = Color.Transparent
             };
@@ -1047,7 +1043,7 @@ namespace TodangMotor.Controls
                 Font = new Font(Theme.UiFontFamily, 12F),
                 ForeColor = dotColor,
                 AutoSize = false,
-                Size = new Size(20, 52),
+                Size = new Size(20, 56),
                 Location = new Point(0, 0),
                 TextAlign = ContentAlignment.MiddleCenter,
                 BackColor = Color.Transparent
@@ -1056,11 +1052,11 @@ namespace TodangMotor.Controls
             var msg = new Label
             {
                 Text = text,
-                Font = Theme.FontSmall,
+                Font = new Font(Theme.UiFontFamily, 10F, FontStyle.Regular),
                 ForeColor = Theme.TextSecondary,
                 AutoSize = false,
                 Location = new Point(24, 0),
-                Height = 52,
+                Height = 56,
                 TextAlign = ContentAlignment.MiddleLeft,
                 BackColor = Color.Transparent,
                 Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right

@@ -25,6 +25,8 @@ namespace TodangMotor.Controls
         private bool _isBusy;
         private bool _isUpdatingPayment;
 
+        private const string CartIcon = "\uE7BF"; // Segoe MDL2 Assets — ShoppingCart
+
         private class CartLine
         {
             public int ProductId { get; set; }
@@ -37,37 +39,51 @@ namespace TodangMotor.Controls
             public decimal LineTotal => UnitPrice * Quantity;
         }
 
+        private class ProductGridRow
+        {
+            public int ProductId { get; set; }
+            public string Product { get; set; } = string.Empty;
+            public string Brand { get; set; } = string.Empty;
+            public string Unit { get; set; } = string.Empty;
+            public string Price { get; set; } = string.Empty;
+            public int OnHand { get; set; }
+            public int Qty { get; set; } = 1;
+        }
+
         private RoundedTextBox _searchBox;
         private RoundedComboBox _categoryFilter;
-        private RoundedTextBox _qtyBox;
-        private Button _btnAddToCart;
         private DataGridView _productGrid;
         private Label _productCountLabel;
 
         private DataGridView _cartGrid;
-        private Label _subtotalBigLabel;
-        private Button _btnRemoveLine;
+        private Label _lblSubtotalCaption;
+        private Label _lblSubtotalValue;
+        private Label _lblChangeCaption;
+        private Label _lblChangeValue;
         private Button _btnClearCart;
 
+        private Label _lblCustomer;
         private RoundedTextBox _customerNameBox;
+        private Label _lblPay;
+        private Label _lblTendered;
         private RoundedComboBox _paymentMethodCombo;
         private RoundedTextBox _tenderedBox;
+        private Label _lblGcashRef;         
+        private RoundedTextBox _gcashRefBox;
 
-        private Label _changeLabel;
         private Button _btnCompleteSale;
         private Label _statusLabel;
 
-        private Button _btnT100, _btnT200, _btnT500, _btnT1000;
+        
 
         private Panel _bottomPanel;
         private Panel _emptyCartOverlay;
-        private int _actionButtonsY;
 
         public PosControl()
         {
             Dock = DockStyle.Fill;
             BackColor = Theme.Background;
-            Padding = new Padding(Theme.SpacingLg);
+            Padding = new Padding(UiFactory.PagePadding);
 
             BuildLayout();
 
@@ -92,8 +108,8 @@ namespace TodangMotor.Controls
                 Margin = Padding.Empty,
                 Padding = Padding.Empty
             };
-            split.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 58f));
-            split.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 42f));
+            split.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 62f));
+            split.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 38f));
             split.RowStyles.Add(new RowStyle(SizeType.Percent, 100f));
 
             split.Controls.Add(BuildProductsPane(), 0, 0);
@@ -102,31 +118,23 @@ namespace TodangMotor.Controls
             Controls.Add(split);
         }
 
-        // ---------------- LEFT PANE (carded) ----------------
+        // ---------------- LEFT PANE ----------------
 
         private RoundedPanel BuildProductsPane()
         {
-            var card = new RoundedPanel
-            {
-                Dock = DockStyle.Fill,
-                Radius = Theme.RadiusCard,
-                BorderColor = Theme.PanelBorder,
-                BorderSize = 1,
-                ShadowEnabled = true,
-                BackColor = Theme.Surface,
-                Padding = new Padding(Theme.SpacingMd),
-                Margin = new Padding(0, 0, 6, 0)
-            };
+            var card = UiFactory.CreateCard();
+            card.Dock = DockStyle.Fill;
+            card.Margin = new Padding(0, 0, UiFactory.TileGap, 0);
 
             var filterBar = new Panel
             {
                 Dock = DockStyle.Top,
-                Height = 84,
+                Height = 104,
                 BackColor = Theme.Surface
             };
 
-            _searchBox = UiFactory.CreateTextBox(240);
-            _searchBox.Location = new Point(0, 12);
+            _searchBox = UiFactory.CreateTextBox(320);
+            _searchBox.Location = new Point(0, 16);
             _searchBox.Placeholder = "Search product or brand…";
             _searchBox.MaxLength = 100;
             _searchBox.TextChanged += (s, e) => ApplyProductFilter();
@@ -137,8 +145,8 @@ namespace TodangMotor.Controls
                 Font = Theme.FontSmall,
                 ForeColor = Theme.TextSecondary,
                 AutoSize = false,
-                Size = new Size(80, 20),
-                Location = new Point(252, 24),
+                Size = new Size(80, 24),
+                Location = new Point(_searchBox.Right + 24, 24),
                 TextAlign = ContentAlignment.MiddleLeft,
                 BackColor = Color.Transparent
             };
@@ -146,7 +154,7 @@ namespace TodangMotor.Controls
             _categoryFilter = new RoundedComboBox
             {
                 Width = 220,
-                Location = new Point(336, 12)
+                Location = new Point(lblCat.Right + 8, 16)
             };
             _categoryFilter.SelectedIndexChanged += (s, e) => ApplyProductFilter();
 
@@ -156,8 +164,8 @@ namespace TodangMotor.Controls
                 Font = Theme.FontSmall,
                 ForeColor = Theme.TextSecondary,
                 AutoSize = false,
-                Location = new Point(0, 58),
-                Height = 20,
+                Location = new Point(0, 68),
+                Height = 22,
                 Width = 500,
                 TextAlign = ContentAlignment.MiddleLeft,
                 BackColor = Color.Transparent
@@ -168,73 +176,157 @@ namespace TodangMotor.Controls
             filterBar.Controls.Add(_categoryFilter);
             filterBar.Controls.Add(_productCountLabel);
 
-            var actionBar = new Panel
-            {
-                Dock = DockStyle.Bottom,
-                Height = 68,
-                BackColor = Theme.Surface
-            };
-
-            var lblQty = new Label
-            {
-                Text = "Quantity:",
-                Font = Theme.FontSmall,
-                ForeColor = Theme.TextSecondary,
-                AutoSize = false,
-                Size = new Size(80, 40),
-                Location = new Point(0, 14),
-                TextAlign = ContentAlignment.MiddleLeft,
-                BackColor = Color.Transparent
-            };
-
-            _qtyBox = UiFactory.CreateTextBox(90);
-            _qtyBox.Location = new Point(86, 14);
-            _qtyBox.MaxLength = 6;
-            _qtyBox.Text = "1";
-
-            _btnAddToCart = UiFactory.CreateButton(
-                "Add to Cart", UiFactory.ButtonStyle.Primary, 150, 40);
-            _btnAddToCart.Location = new Point(188, 14);
-            _btnAddToCart.Click += (s, e) => AddSelectedToCart();
-
-            actionBar.Controls.Add(lblQty);
-            actionBar.Controls.Add(_qtyBox);
-            actionBar.Controls.Add(_btnAddToCart);
-
             _productGrid = new DataGridView
             {
                 Dock = DockStyle.Fill,
-                Margin = new Padding(0, 4, 0, 4)
+                Margin = new Padding(0, 8, 0, 0),
+                AllowUserToAddRows = false,
+                AllowUserToDeleteRows = false,
+                EditMode = DataGridViewEditMode.EditOnEnter
             };
-            UiFactory.StyleGrid(_productGrid);
-            _productGrid.AlternatingRowsDefaultCellStyle.BackColor = Color.FromArgb(248, 249, 251);
+            UiFactory.StyleGridModern(_productGrid);
+            _productGrid.ReadOnly = false;
+            // NOTE: no AlternatingRowsDefaultCellStyle — it overrides the icon column colors
             _productGrid.CellFormatting += ProductGrid_CellFormatting;
-            _productGrid.CellDoubleClick += (s, e) =>
-            {
-                if (e.RowIndex < 0) return;
-                AddSelectedToCart();
-            };
-            _productGrid.KeyDown += (s, e) =>
-            {
-                if (e.KeyCode == Keys.Enter)
-                {
-                    e.SuppressKeyPress = true;
-                    AddSelectedToCart();
-                }
-            };
+            _productGrid.CellClick += ProductGrid_CellClick;
+            _productGrid.CellMouseEnter += ProductGrid_CellMouseEnter;
+            _productGrid.CellMouseLeave += (s, e) => _productGrid.Cursor = Cursors.Default;
+            _productGrid.CellEndEdit += ProductGrid_CellEndEdit;
+            _productGrid.KeyDown += ProductGrid_KeyDown;
+
+            PrimeProductColumns();
 
             card.Controls.Add(_productGrid);
-            card.Controls.Add(actionBar);
             card.Controls.Add(filterBar);
 
             return card;
+        }
+
+        private void PrimeProductColumns()
+        {
+            _productGrid.AutoGenerateColumns = false;
+            _productGrid.Columns.Clear();
+
+            void AddTextCol(string prop, string header, int weight, bool readOnly,
+                DataGridViewContentAlignment align = DataGridViewContentAlignment.MiddleLeft)
+            {
+                var col = new DataGridViewTextBoxColumn
+                {
+                    Name = prop,
+                    DataPropertyName = prop,
+                    HeaderText = header,
+                    FillWeight = weight,
+                    ReadOnly = readOnly
+                };
+                if (align != DataGridViewContentAlignment.MiddleLeft)
+                    col.DefaultCellStyle.Alignment = align;
+                _productGrid.Columns.Add(col);
+            }
+
+            AddTextCol("Product", "Product", 200, true);
+            AddTextCol("Brand", "Brand", 110, true);
+            AddTextCol("Unit", "Unit", 55, true, DataGridViewContentAlignment.MiddleCenter);
+            AddTextCol("Price", "Price (PHP)", 110, true, DataGridViewContentAlignment.MiddleRight);
+            AddTextCol("OnHand", "On Hand", 100, true, DataGridViewContentAlignment.MiddleRight);
+            AddTextCol("Qty", "Qty", 55, false, DataGridViewContentAlignment.MiddleCenter);
+
+            // Add-to-cart icon column (soft button look)
+            var addCol = new DataGridViewTextBoxColumn
+            {
+                Name = "AddBtn",
+                HeaderText = "",
+                FillWeight = 60,
+                ReadOnly = true,
+                DefaultCellStyle = new DataGridViewCellStyle
+                {
+                    Alignment = DataGridViewContentAlignment.MiddleCenter,
+                    Font = new Font(Theme.IconFontFamily, 15F, FontStyle.Regular),
+                    ForeColor = Theme.Primary,
+                    SelectionForeColor = Color.White,
+                    BackColor = Color.FromArgb(232, 238, 255),
+                    SelectionBackColor = Theme.Primary,
+                    NullValue = CartIcon,
+                    Padding = new Padding(0)
+                }
+            };
+            _productGrid.Columns.Add(addCol);
+
+            _productGrid.Columns.Add(new DataGridViewTextBoxColumn
+            {
+                Name = "ProductId",
+                DataPropertyName = "ProductId",
+                Visible = false
+            });
+        }
+
+        private void ProductGrid_CellClick(object? sender, DataGridViewCellEventArgs e)
+        {
+            if (e.RowIndex < 0 || e.ColumnIndex < 0) return;
+            if (_productGrid.Columns[e.ColumnIndex].Name != "AddBtn") return;
+
+            var dataRow = _productGrid.Rows[e.RowIndex].DataBoundItem as ProductGridRow;
+            if (dataRow == null) return;
+
+            AddProductToCart(dataRow.ProductId, dataRow.Qty);
+        }
+
+        private void ProductGrid_CellMouseEnter(object? sender, DataGridViewCellEventArgs e)
+        {
+            if (e.RowIndex < 0 || e.ColumnIndex < 0) return;
+            _productGrid.Cursor = _productGrid.Columns[e.ColumnIndex].Name == "AddBtn"
+                ? Cursors.Hand
+                : Cursors.Default;
+        }
+
+        private void ProductGrid_CellEndEdit(object? sender, DataGridViewCellEventArgs e)
+        {
+            if (e.RowIndex < 0 || e.ColumnIndex < 0) return;
+            if (_productGrid.Columns[e.ColumnIndex].Name != "Qty") return;
+
+            var cell = _productGrid.Rows[e.RowIndex].Cells["Qty"];
+            string raw = Convert.ToString(cell.Value);
+            var dataRow = _productGrid.Rows[e.RowIndex].DataBoundItem as ProductGridRow;
+
+            if (dataRow == null) return;
+
+            if (!int.TryParse(raw, out int qty) || qty <= 0)
+            {
+                cell.Value = 1;
+                dataRow.Qty = 1;
+                return;
+            }
+
+            dataRow.Qty = qty;
+        }
+
+        private void ProductGrid_KeyDown(object? sender, KeyEventArgs e)
+        {
+            if (e.KeyCode != Keys.Enter) return;
+            e.SuppressKeyPress = true;
+
+            if (_productGrid.CurrentRow == null) return;
+            var dataRow = _productGrid.CurrentRow.DataBoundItem as ProductGridRow;
+            if (dataRow == null) return;
+
+            AddProductToCart(dataRow.ProductId, dataRow.Qty);
         }
 
         private void ProductGrid_CellFormatting(object? sender, DataGridViewCellFormattingEventArgs e)
         {
             if (e.RowIndex < 0 || e.ColumnIndex < 0) return;
             if (e.RowIndex >= _productGrid.Rows.Count) return;
-            if (!_productGrid.Columns.Contains("OnHand")) return;
+
+            string colName = _productGrid.Columns[e.ColumnIndex].Name;
+
+            if (colName == "Qty")
+            {
+                e.CellStyle.Font = Theme.FontBodyBold;
+                e.CellStyle.ForeColor = Theme.Primary;
+                e.CellStyle.SelectionForeColor = Theme.Primary;
+                return;
+            }
+
+            if (colName != "OnHand") return;
 
             var onHandVal = _productGrid.Rows[e.RowIndex].Cells["OnHand"].Value;
             if (onHandVal == null) return;
@@ -243,67 +335,77 @@ namespace TodangMotor.Controls
             {
                 if (qty == 0)
                 {
-                    e.CellStyle.ForeColor = Color.FromArgb(180, 40, 40);
-                    e.CellStyle.SelectionForeColor = Color.FromArgb(180, 40, 40);
+                    e.CellStyle.ForeColor = Theme.Danger;
+                    e.CellStyle.SelectionForeColor = Theme.Danger;
                     e.CellStyle.BackColor = Color.FromArgb(255, 240, 240);
                     e.CellStyle.SelectionBackColor = Color.FromArgb(255, 225, 225);
+                    e.CellStyle.Font = Theme.FontBodyBold;
                 }
                 else if (qty <= 5)
                 {
                     e.CellStyle.ForeColor = Color.FromArgb(200, 130, 40);
                     e.CellStyle.SelectionForeColor = Color.FromArgb(200, 130, 40);
+                    e.CellStyle.Font = Theme.FontBodyBold;
                 }
             }
         }
 
-        // ---------------- RIGHT PANE (carded) ----------------
+        // ---------------- RIGHT PANE ----------------
 
         private RoundedPanel BuildCartPane()
         {
-            var card = new RoundedPanel
-            {
-                Dock = DockStyle.Fill,
-                Radius = Theme.RadiusCard,
-                BorderColor = Theme.PanelBorder,
-                BorderSize = 1,
-                ShadowEnabled = true,
-                BackColor = Theme.Surface,
-                Padding = new Padding(Theme.SpacingMd),
-                Margin = new Padding(6, 0, 0, 0)
-            };
+            var card = UiFactory.CreateCard();
+            card.Dock = DockStyle.Fill;
+            card.Margin = new Padding(UiFactory.TileGap, 0, 0, 0);
 
             _bottomPanel = new Panel
             {
                 Dock = DockStyle.Bottom,
-                Height = 330,
+                Height = 452,
                 BackColor = Theme.Surface
             };
 
-            // ---- Row 1: Subtotal + Change (side by side, full width) ----
-            _subtotalBigLabel = new Label
+            // ---- Subtotal / Change (two-line layout) ----
+            _lblSubtotalCaption = new Label
             {
-                Text = "Subtotal: ₱ 0.00",
-                Font = new Font(Theme.UiFontFamily, 15F, FontStyle.Bold),
+                Text = "Subtotal",
+                Font = Theme.FontSmall,
+                ForeColor = Theme.TextSecondary,
+                AutoSize = false,
+                TextAlign = ContentAlignment.MiddleLeft,
+                BackColor = Color.Transparent
+            };
+            _lblSubtotalValue = new Label
+            {
+                Text = "₱ 0.00",
+                Font = new Font(Theme.UiFontFamily, 20F, FontStyle.Bold),
                 ForeColor = Theme.TextPrimary,
                 AutoSize = false,
                 TextAlign = ContentAlignment.MiddleLeft,
                 BackColor = Color.Transparent
             };
-
-            _changeLabel = new Label
+            _lblChangeCaption = new Label
             {
-                Text = "Change: ₱ 0.00",
-                Font = new Font(Theme.UiFontFamily, 15F, FontStyle.Bold),
+                Text = "Change",
+                Font = Theme.FontSmall,
+                ForeColor = Theme.TextSecondary,
+                AutoSize = false,
+                TextAlign = ContentAlignment.MiddleRight,
+                BackColor = Color.Transparent
+            };
+            _lblChangeValue = new Label
+            {
+                Text = "₱ 0.00",
+                Font = new Font(Theme.UiFontFamily, 20F, FontStyle.Bold),
                 ForeColor = Theme.TextMuted,
                 AutoSize = false,
                 TextAlign = ContentAlignment.MiddleRight,
                 BackColor = Color.Transparent
             };
 
-            // ---- Row 2: Customer name (full width) ----
-            var lblCust = new Label
+            _lblCustomer = new Label
             {
-                Text = "Customer Name (optional):",
+                Text = "Customer Name (optional)",
                 Font = Theme.FontSmall,
                 ForeColor = Theme.TextSecondary,
                 AutoSize = false,
@@ -315,10 +417,9 @@ namespace TodangMotor.Controls
             _customerNameBox.MaxLength = 100;
             _customerNameBox.Placeholder = "Leave blank for walk-in";
 
-            // ---- Row 3: Payment + Tendered (split) ----
-            var lblPay = new Label
+            _lblPay = new Label
             {
-                Text = "Payment Method:",
+                Text = "Payment Method",
                 Font = Theme.FontSmall,
                 ForeColor = Theme.TextSecondary,
                 AutoSize = false,
@@ -326,9 +427,9 @@ namespace TodangMotor.Controls
                 BackColor = Color.Transparent
             };
 
-            var lblTendered = new Label
+            _lblTendered = new Label
             {
-                Text = "Amount Tendered:",
+                Text = "Amount Tendered",
                 Font = Theme.FontSmall,
                 ForeColor = Theme.TextSecondary,
                 AutoSize = false,
@@ -346,13 +447,23 @@ namespace TodangMotor.Controls
             _tenderedBox.MaxLength = 12;
             _tenderedBox.TextChanged += (s, e) => OnTenderedChanged();
 
-            // ---- Row 4: Quick tender buttons (spread evenly) ----
-            _btnT100 = MakeQuickTender(100);
-            _btnT200 = MakeQuickTender(200);
-            _btnT500 = MakeQuickTender(500);
-            _btnT1000 = MakeQuickTender(1000);
+            _lblGcashRef = new Label
+            {
+                Text = "GCash Ref No:",
+                Font = Theme.FontSmall,
+                ForeColor = Theme.TextSecondary,
+                AutoSize = false,
+                TextAlign = ContentAlignment.MiddleLeft,
+                BackColor = Color.Transparent,
+                Visible = false
+            };
 
-            // ---- Row 5: Status ----
+            _gcashRefBox = UiFactory.CreateTextBox(180);
+            _gcashRefBox.MaxLength = 50;
+            _gcashRefBox.Placeholder = "e.g. 1002345678901";
+            _gcashRefBox.Visible = false;
+            _gcashRefBox.TextChanged += (s, e) => RefreshCompleteButtonState(); 
+
             _statusLabel = new Label
             {
                 Text = string.Empty,
@@ -363,55 +474,45 @@ namespace TodangMotor.Controls
                 BackColor = Color.Transparent
             };
 
-            // ---- Row 6: Action buttons ----
-            const int btnW = 118;
-            const int btnH = 40;
-
-            _btnRemoveLine = UiFactory.CreateButton("Remove", UiFactory.ButtonStyle.Secondary, btnW, btnH);
-            _btnRemoveLine.Click += (s, e) => RemoveSelectedCartLine();
-
-            _btnClearCart = UiFactory.CreateButton("Clear Cart", UiFactory.ButtonStyle.Secondary, btnW, btnH);
+            _btnClearCart = UiFactory.CreateButton("Clear Cart", UiFactory.ButtonStyle.Secondary, 140, UiFactory.PrimaryButtonHeight);
             _btnClearCart.Click += (s, e) => ClearCart();
 
-            _btnCompleteSale = UiFactory.CreateButton("Complete", UiFactory.ButtonStyle.Primary, btnW, btnH);
+            _btnCompleteSale = UiFactory.CreateButton("Complete Sale", UiFactory.ButtonStyle.Primary, 180, UiFactory.PrimaryButtonHeight);
             _btnCompleteSale.Click += async (s, e) => await CompleteSaleAsync();
             _btnCompleteSale.Enabled = false;
 
-            _bottomPanel.Controls.Add(_subtotalBigLabel);
-            _bottomPanel.Controls.Add(_changeLabel);
-            _bottomPanel.Controls.Add(lblCust);
+            _bottomPanel.Controls.Add(_lblSubtotalCaption);
+            _bottomPanel.Controls.Add(_lblSubtotalValue);
+            _bottomPanel.Controls.Add(_lblChangeCaption);
+            _bottomPanel.Controls.Add(_lblChangeValue);
+            _bottomPanel.Controls.Add(_lblCustomer);
             _bottomPanel.Controls.Add(_customerNameBox);
-            _bottomPanel.Controls.Add(lblPay);
-            _bottomPanel.Controls.Add(lblTendered);
+            _bottomPanel.Controls.Add(_lblPay);
+            _bottomPanel.Controls.Add(_lblTendered);
             _bottomPanel.Controls.Add(_paymentMethodCombo);
             _bottomPanel.Controls.Add(_tenderedBox);
-            _bottomPanel.Controls.Add(_btnT100);
-            _bottomPanel.Controls.Add(_btnT200);
-            _bottomPanel.Controls.Add(_btnT500);
-            _bottomPanel.Controls.Add(_btnT1000);
+            
             _bottomPanel.Controls.Add(_statusLabel);
-            _bottomPanel.Controls.Add(_btnRemoveLine);
             _bottomPanel.Controls.Add(_btnClearCart);
-            _bottomPanel.Controls.Add(_btnCompleteSale);
+            _bottomPanel.Controls.Add(_btnCompleteSale); 
+            _bottomPanel.Controls.Add(_lblGcashRef);
+            _bottomPanel.Controls.Add(_gcashRefBox);
 
             _bottomPanel.Resize += (s, e) => LayoutBottomPanel();
 
             _cartGrid = new DataGridView
             {
                 Dock = DockStyle.Fill,
-                Margin = new Padding(0, 4, 0, 4),
+                Margin = new Padding(0, 8, 0, 0),
                 EditMode = DataGridViewEditMode.EditOnEnter
             };
-            UiFactory.StyleGrid(_cartGrid);
+            UiFactory.StyleGridModern(_cartGrid);
             _cartGrid.ReadOnly = false;
-            _cartGrid.AlternatingRowsDefaultCellStyle.BackColor = Color.FromArgb(248, 249, 251);
-
-            // Stronger row separators so the cart table is clearly a table,
-            // and scrollbars appear when the cart grows beyond the visible area.
-            _cartGrid.GridColor = Theme.PanelBorder;              // #D0D5DD, darker than Divider
+            _cartGrid.GridColor = Theme.PanelBorder;
             _cartGrid.CellBorderStyle = DataGridViewCellBorderStyle.Single;
             _cartGrid.ScrollBars = ScrollBars.Both;
             _cartGrid.ColumnHeadersDefaultCellStyle.BackColor = Color.FromArgb(225, 230, 240);
+            _cartGrid.CellPainting += CartGrid_CellPainting;
             _cartGrid.CurrentCellDirtyStateChanged += (s, e) =>
             {
                 if (_cartGrid.IsCurrentCellDirty)
@@ -421,7 +522,6 @@ namespace TodangMotor.Controls
             _cartGrid.CellEndEdit += CartGrid_CellEndEdit;
             PrimeCartColumns();
 
-            // Divider between grid and totals — visible separation line.
             var gridDivider = new Panel
             {
                 Dock = DockStyle.Bottom,
@@ -429,12 +529,10 @@ namespace TodangMotor.Controls
                 BackColor = Theme.PanelBorder
             };
 
-            card.Controls.Add(_cartGrid);      // Fill — processed last
-            card.Controls.Add(gridDivider);    // Bottom, sits just above _bottomPanel
-            card.Controls.Add(_bottomPanel);   // Bottom — added last, docks first (outermost)
+            card.Controls.Add(_cartGrid);
+            card.Controls.Add(gridDivider);
+            card.Controls.Add(_bottomPanel);
 
-            // Empty-cart overlay. No Dock — its Bounds are synced to the grid's Bounds
-            // in PositionEmptyCartOverlay() so it doesn't disturb the docking chain.
             _emptyCartOverlay = new Panel
             {
                 BackColor = Theme.Surface
@@ -443,7 +541,7 @@ namespace TodangMotor.Controls
             var emptyCartLabel = new Label
             {
                 Text = "Your cart is empty.\r\n\r\nPick a product from the list on the left,\r\n" +
-                       "type a quantity, then click \"Add to Cart\".",
+                       "type a quantity, then click the cart icon.",
                 Font = Theme.FontBody,
                 ForeColor = Theme.TextMuted,
                 TextAlign = ContentAlignment.MiddleCenter,
@@ -455,7 +553,6 @@ namespace TodangMotor.Controls
 
             card.Controls.Add(_emptyCartOverlay);
 
-            // Keep the overlay aligned with the grid across all layout changes.
             _cartGrid.Resize += (s, e) => PositionEmptyCartOverlay();
             card.Resize += (s, e) => PositionEmptyCartOverlay();
             card.HandleCreated += (s, e) => PositionEmptyCartOverlay();
@@ -463,21 +560,25 @@ namespace TodangMotor.Controls
             return card;
         }
 
-        private void LayoutActionButtons()
+        private void CartGrid_CellPainting(object? sender, DataGridViewCellPaintingEventArgs e)
         {
-            if (_bottomPanel == null || _btnRemoveLine == null || _btnCompleteSale == null) return;
+            if (e.RowIndex < 0 || e.ColumnIndex < 0) return;
+            if (_cartGrid.Columns[e.ColumnIndex].Name != "Remove") return;
 
-            const int pad = 8;
-            const int gap = 8;
+            e.PaintBackground(e.CellBounds, true);
 
-            int w = _bottomPanel.ClientSize.Width;
-            int y = _actionButtonsY;
+            using var font = new Font(Theme.IconFontFamily, 14F, FontStyle.Regular);
+            TextRenderer.DrawText(
+                e.Graphics,
+                "\uE711",
+                font,
+                e.CellBounds,
+                Theme.Danger,
+                TextFormatFlags.HorizontalCenter |
+                TextFormatFlags.VerticalCenter |
+                TextFormatFlags.NoPrefix);
 
-            int btnW = _btnRemoveLine.Width;
-
-            _btnRemoveLine.Location = new Point(pad, y);
-            _btnClearCart.Location = new Point(pad + btnW + gap, y);
-            _btnCompleteSale.Location = new Point(w - pad - _btnCompleteSale.Width, y);
+            e.Handled = true;
         }
 
         private void LayoutBottomPanel()
@@ -487,88 +588,96 @@ namespace TodangMotor.Controls
             int w = _bottomPanel.ClientSize.Width;
             if (w <= 0) return;
 
-            const int pad = 8;
+            const int pad = UiFactory.CardPadding;   // 24
+            const int gap = 16;
             int availW = w - pad * 2;
-            int halfW = (availW - pad) / 2;
+            int halfW = (availW - gap) / 2;
 
-            int y = 8;
+            int y = 20;
 
-            // Row 1 — Subtotal (left) · Change (right)
-            _subtotalBigLabel.Location = new Point(pad, y);
-            _subtotalBigLabel.Size = new Size(halfW, 32);
+            // Row 1 — Subtotal caption + value (left) · Change caption + value (right)
+            // 24px height so descenders (g, p, y) in "Subtotal" and "Change" render fully.
+            _lblSubtotalCaption.Location = new Point(pad, y);
+            _lblSubtotalCaption.Size = new Size(halfW, 24);
 
-            _changeLabel.Location = new Point(pad + halfW + pad, y);
-            _changeLabel.Size = new Size(halfW, 32);
-            y += 38;
+            _lblChangeCaption.Location = new Point(pad + halfW + gap, y);
+            _lblChangeCaption.Size = new Size(halfW, 24);
+            y += 24;
 
-            // Row 2 — Customer name label + field
-            var lblCust = FindControlByText("Customer Name (optional):");
-            if (lblCust != null)
-            {
-                lblCust.Location = new Point(pad, y);
-                lblCust.Size = new Size(availW, 16);
-            }
-            y += 20;
+            // 20F bold needs 44px — 32 was clipping the descenders.
+            _lblSubtotalValue.Location = new Point(pad, y);
+            _lblSubtotalValue.Size = new Size(halfW, 44);
+
+            _lblChangeValue.Location = new Point(pad + halfW + gap, y);
+            _lblChangeValue.Size = new Size(halfW, 44);
+            y += 44 + gap;
+
+            // Row 2 — Customer label + field
+            _lblCustomer.Location = new Point(pad, y);
+            _lblCustomer.Size = new Size(availW, 22);
+            y += 22;
 
             _customerNameBox.Location = new Point(pad, y);
             _customerNameBox.Width = availW;
-            y += 48;
+            y += 44 + gap;
 
-            // Row 3 — Payment + Tendered labels
-            var lblPay = FindControlByText("Payment Method:");
-            var lblTendered = FindControlByText("Amount Tendered:");
-            if (lblPay != null)
-            {
-                lblPay.Location = new Point(pad, y);
-                lblPay.Size = new Size(halfW, 16);
-            }
-            if (lblTendered != null)
-            {
-                lblTendered.Location = new Point(pad + halfW + pad, y);
-                lblTendered.Size = new Size(halfW, 16);
-            }
-            y += 20;
+            // Row 3 — Payment + Tendered/GCash labels
+            bool isGcash = _paymentMethodCombo.SelectedItem as string == "GCash";
 
-            // Row 4 — Combo + Tendered box
+            _lblPay.Location = new Point(pad, y);
+            _lblPay.Size = new Size(halfW, 22);
+
+            if (isGcash)
+            {
+                _lblTendered.Visible = false;
+
+                _lblGcashRef.Visible = true;
+                _lblGcashRef.Location = new Point(pad + halfW + gap, y);
+                _lblGcashRef.Size = new Size(halfW, 22);
+            }
+            else
+            {
+                _lblTendered.Visible = true;
+                _lblTendered.Location = new Point(pad + halfW + gap, y);
+                _lblTendered.Size = new Size(halfW, 22);
+
+                _lblGcashRef.Visible = false;
+            }
+            y += 22;
+
+            // Row 4 — Combo + Tendered/GCash box
             _paymentMethodCombo.Location = new Point(pad, y);
             _paymentMethodCombo.Width = halfW;
 
-            _tenderedBox.Location = new Point(pad + halfW + pad, y);
-            _tenderedBox.Width = halfW;
-            y += 48;
+            if (isGcash)
+            {
+                _tenderedBox.Visible = false;
 
-            // Row 5 — Quick tender buttons spread across full width
-            int qW = (availW - pad * 3) / 4;
-            _btnT100.Location = new Point(pad, y);
-            _btnT100.Width = qW;
-            _btnT200.Location = new Point(pad + qW + pad, y);
-            _btnT200.Width = qW;
-            _btnT500.Location = new Point(pad + (qW + pad) * 2, y);
-            _btnT500.Width = qW;
-            _btnT1000.Location = new Point(pad + (qW + pad) * 3, y);
-            _btnT1000.Width = qW;
-            y += 44;
+                _gcashRefBox.Visible = true;
+                _gcashRefBox.Location = new Point(pad + halfW + gap, y);
+                _gcashRefBox.Width = halfW;
+            }
+            else
+            {
+                _tenderedBox.Visible = true;
+                _tenderedBox.Location = new Point(pad + halfW + gap, y);
+                _tenderedBox.Width = halfW;
+
+                _gcashRefBox.Visible = false;
+            }
+            y += 44 + gap;
+
+            // Row 5 — Quick tender buttons (only visible for Cash)
+            
 
             // Row 6 — Status
             _statusLabel.Location = new Point(pad, y);
-            _statusLabel.Size = new Size(availW, 22);
-            y += 28;
+            _statusLabel.Size = new Size(availW, 24);
+            y += 24 + 20;   // extra breathing room before the button row
 
             // Row 7 — Action buttons
-            _actionButtonsY = y;
-            LayoutActionButtons();
-        }
-
-        // Helper: find a label by its Text (for labels we don't store as fields).
-        private Label? FindControlByText(string text)
-        {
-            if (_bottomPanel == null) return null;
-            foreach (Control c in _bottomPanel.Controls)
-            {
-                if (c is Label lbl && lbl.Text == text)
-                    return lbl;
-            }
-            return null;
+            _btnClearCart.Location = new Point(pad, y);
+            _btnCompleteSale.Location = new Point(w - pad - _btnCompleteSale.Width, y);
         }
 
         private void PositionEmptyCartOverlay()
@@ -580,44 +689,38 @@ namespace TodangMotor.Controls
             _emptyCartOverlay.BringToFront();
         }
 
-        private Button MakeQuickTender(decimal amount)
-        {
-            var b = UiFactory.CreateButton(
-                "₱" + amount.ToString("N0"),
-                UiFactory.ButtonStyle.Secondary,
-                86, 36);
-            b.Click += (s, e) =>
-            {
-                if (_paymentMethodCombo.SelectedItem as string == "Cash")
-                {
-                    _tenderedBox.Text = amount.ToString("0.00");
-                    OnTenderedChanged();
-                }
-            };
-            return b;
-        }
+        
 
         private void PrimeCartColumns()
         {
             _cartGrid.AutoGenerateColumns = false;
             _cartGrid.Columns.Clear();
 
-            void AddCol(string prop, string header, int weight, bool readOnly)
+            void AddCol(string prop, string header, int weight, bool readOnly,
+                DataGridViewContentAlignment align = DataGridViewContentAlignment.MiddleLeft)
             {
-                _cartGrid.Columns.Add(new DataGridViewTextBoxColumn
+                var col = new DataGridViewTextBoxColumn
                 {
                     Name = prop,
                     DataPropertyName = prop,
                     HeaderText = header,
                     FillWeight = weight,
                     ReadOnly = readOnly
-                });
+                };
+                if (align != DataGridViewContentAlignment.MiddleLeft)
+                    col.DefaultCellStyle.Alignment = align;
+                _cartGrid.Columns.Add(col);
             }
 
-            AddCol("Product", "Item", 200, true);
-            AddCol("Quantity", "Qty", 60, false);
-            AddCol("UnitPrice", "Price", 80, true);
-            AddCol("LineTotal", "Total", 100, true);
+            AddCol("Product", "Item", 220, true);
+            AddCol("Quantity", "Qty", 55, false, DataGridViewContentAlignment.MiddleCenter);
+            AddCol("UnitPrice", "Price", 85, true, DataGridViewContentAlignment.MiddleRight);
+            AddCol("LineTotal", "Total", 95, true, DataGridViewContentAlignment.MiddleRight);
+            AddCol("Remove", "", 55, true, DataGridViewContentAlignment.MiddleCenter);
+
+            // Style the Remove column — red ×, no padding, larger font
+            var removeCol = _cartGrid.Columns["Remove"];
+            removeCol.DefaultCellStyle.Padding = new Padding(0);
 
             _cartGrid.Columns.Add(new DataGridViewTextBoxColumn
             {
@@ -625,6 +728,33 @@ namespace TodangMotor.Controls
                 DataPropertyName = "ProductId",
                 Visible = false
             });
+
+            _cartGrid.CellClick += (s, e) =>
+            {
+                if (e.RowIndex < 0 || e.ColumnIndex < 0) return;
+                if (_cartGrid.Columns[e.ColumnIndex].Name != "Remove") return;
+
+                var idCell = _cartGrid.Rows[e.RowIndex].Cells["ProductId"];
+                if (idCell?.Value == null) return;
+
+                int id = Convert.ToInt32(idCell.Value);
+                var line = _cart.FirstOrDefault(c => c.ProductId == id);
+                if (line != null)
+                {
+                    _cart.Remove(line);
+                    RefreshCartGrid();
+                    ShowInfo("Line removed.");
+                }
+            };
+
+            _cartGrid.CellMouseEnter += (s, e) =>
+            {
+                if (e.RowIndex < 0 || e.ColumnIndex < 0) return;
+                _cartGrid.Cursor = _cartGrid.Columns[e.ColumnIndex].Name == "Remove"
+                    ? Cursors.Hand
+                    : Cursors.Default;
+            };
+            _cartGrid.CellMouseLeave += (s, e) => _cartGrid.Cursor = Cursors.Default;
         }
 
         // ============================================================
@@ -699,14 +829,15 @@ namespace TodangMotor.Controls
             var rows = filtered
                 .OrderBy(p => p.ProductName)
                 .ThenBy(p => p.Brand)
-                .Select(p => new
+                .Select(p => new ProductGridRow
                 {
-                    p.ProductId,
+                    ProductId = p.ProductId,
                     Product = p.ProductName,
                     Brand = p.Brand,
                     Unit = p.Unit,
                     Price = p.SellingPrice.ToString("N2"),
-                    OnHand = p.QuantityOnHand
+                    OnHand = p.QuantityOnHand,
+                    Qty = 1
                 })
                 .ToList();
 
@@ -714,19 +845,6 @@ namespace TodangMotor.Controls
 
             if (_productGrid.Columns.Contains("ProductId"))
                 _productGrid.Columns["ProductId"].Visible = false;
-
-            void SetWeight(string col, int weight, string header = null)
-            {
-                if (!_productGrid.Columns.Contains(col)) return;
-                _productGrid.Columns[col].FillWeight = weight;
-                if (header != null) _productGrid.Columns[col].HeaderText = header;
-            }
-
-            SetWeight("Product", 240, "Product");
-            SetWeight("Brand", 140, "Brand");
-            SetWeight("Unit", 60, "Unit");
-            SetWeight("Price", 100, "Price (PHP)");
-            SetWeight("OnHand", 80, "On Hand");
 
             if (_productGrid.Rows.Count > 0)
                 _productGrid.ClearSelection();
@@ -739,32 +857,18 @@ namespace TodangMotor.Controls
         // CART OPERATIONS
         // ============================================================
 
-        private CashierProductView? GetSelectedProduct()
+        private void AddProductToCart(int productId, int qty)
         {
-            if (_productGrid == null || _productGrid.SelectedRows.Count == 0) return null;
-            var row = _productGrid.SelectedRows[0];
-            if (!_productGrid.Columns.Contains("ProductId")) return null;
-
-            var val = row.Cells["ProductId"].Value;
-            if (val == null) return null;
-
-            int id = Convert.ToInt32(val);
-            return _allProducts.FirstOrDefault(p => p.ProductId == id);
-        }
-
-        private void AddSelectedToCart()
-        {
-            var p = GetSelectedProduct();
+            var p = _allProducts.FirstOrDefault(x => x.ProductId == productId);
             if (p == null)
             {
-                ShowError("Please select a product first.");
+                ShowError("Product no longer available.");
                 return;
             }
 
-            if (!int.TryParse((_qtyBox.Text ?? "1").Trim(), out int qty) || qty <= 0)
+            if (qty <= 0)
             {
                 ShowErrorBox("Quantity must be a whole number greater than zero.");
-                _qtyBox.FocusInput();
                 return;
             }
 
@@ -800,29 +904,7 @@ namespace TodangMotor.Controls
             }
 
             RefreshCartGrid();
-            _qtyBox.Text = "1";
             ShowInfo($"Added {qty} × {p.ProductName} to cart.");
-        }
-
-        private void RemoveSelectedCartLine()
-        {
-            if (_cartGrid.SelectedRows.Count == 0)
-            {
-                ShowError("Select a line in the cart to remove.");
-                return;
-            }
-
-            var cell = _cartGrid.SelectedRows[0].Cells["ProductId"];
-            if (cell == null || cell.Value == null) return;
-
-            int id = Convert.ToInt32(cell.Value);
-            var line = _cart.FirstOrDefault(c => c.ProductId == id);
-            if (line != null)
-            {
-                _cart.Remove(line);
-                RefreshCartGrid();
-                ShowInfo("Line removed.");
-            }
         }
 
         private void ClearCart()
@@ -863,7 +945,6 @@ namespace TodangMotor.Controls
             if (_cartGrid.Rows.Count > 0)
                 _cartGrid.ClearSelection();
 
-            // Show the "cart is empty" placeholder when there's nothing in the cart.
             if (_emptyCartOverlay != null && !_emptyCartOverlay.IsDisposed)
             {
                 _emptyCartOverlay.Visible = _cart.Count == 0;
@@ -877,7 +958,7 @@ namespace TodangMotor.Controls
         private void UpdateCartTotals()
         {
             decimal subtotal = _cart.Sum(c => c.LineTotal);
-            _subtotalBigLabel.Text = $"Subtotal: ₱ {subtotal:N2}";
+            _lblSubtotalValue.Text = "₱ " + subtotal.ToString("N2");
             RecalculateChange(subtotal);
         }
 
@@ -887,32 +968,32 @@ namespace TodangMotor.Controls
 
             if (method == "GCash")
             {
-                _changeLabel.ForeColor = Theme.TextPrimary;
-                _changeLabel.Text = "Change: ₱ 0.00";
+                _lblChangeValue.ForeColor = Theme.TextPrimary;
+                _lblChangeValue.Text = "₱ 0.00";
             }
             else if (string.IsNullOrWhiteSpace(_tenderedBox?.Text))
             {
-                _changeLabel.ForeColor = Theme.TextMuted;
-                _changeLabel.Text = "Change: ₱ 0.00";
+                _lblChangeValue.ForeColor = Theme.TextMuted;
+                _lblChangeValue.Text = "₱ 0.00";
             }
             else if (!decimal.TryParse(_tenderedBox.Text.Trim(),
                     System.Globalization.NumberStyles.Number,
                     System.Globalization.CultureInfo.InvariantCulture, out decimal tendered))
             {
-                _changeLabel.ForeColor = Theme.Danger;
-                _changeLabel.Text = "Enter a valid amount";
+                _lblChangeValue.ForeColor = Theme.Danger;
+                _lblChangeValue.Text = "Invalid amount";
             }
             else if (tendered < subtotal)
             {
                 decimal shortfall = subtotal - tendered;
-                _changeLabel.ForeColor = Theme.Danger;
-                _changeLabel.Text = $"Insufficient — ₱ {shortfall:N2} short";
+                _lblChangeValue.ForeColor = Theme.Danger;
+                _lblChangeValue.Text = $"₱ {shortfall:N2} short";
             }
             else
             {
                 decimal change = tendered - subtotal;
-                _changeLabel.ForeColor = Theme.Success;
-                _changeLabel.Text = $"Change: ₱ {change:N2}";
+                _lblChangeValue.ForeColor = Theme.Success;
+                _lblChangeValue.Text = "₱ " + change.ToString("N2");
             }
 
             RefreshCompleteButtonState();
@@ -922,6 +1003,7 @@ namespace TodangMotor.Controls
         {
             if (_btnCompleteSale == null) return;
 
+            // 1. Must have items in the cart
             if (_isBusy || _cart == null || _cart.Count == 0)
             {
                 _btnCompleteSale.Enabled = false;
@@ -930,12 +1012,22 @@ namespace TodangMotor.Controls
 
             string method = _paymentMethodCombo?.SelectedItem as string ?? "Cash";
 
+            // 2. GCash Logic
             if (method == "GCash")
             {
+                string gcashRef = (_gcashRefBox?.Text ?? string.Empty).Trim();
+
+                if (string.IsNullOrWhiteSpace(gcashRef))
+                {
+                    _btnCompleteSale.Enabled = false;
+                    return;
+                }
+
                 _btnCompleteSale.Enabled = true;
                 return;
             }
 
+            // 3. Cash Logic
             if (string.IsNullOrWhiteSpace(_tenderedBox?.Text))
             {
                 _btnCompleteSale.Enabled = false;
@@ -1014,32 +1106,43 @@ namespace TodangMotor.Controls
             {
                 string method = _paymentMethodCombo.SelectedItem as string ?? "Cash";
                 decimal subtotal = _cart.Sum(c => c.LineTotal);
+                bool isGcash = method == "GCash";
 
-                if (method == "GCash")
+                if (isGcash)
                 {
-                    _tenderedBox.Text = subtotal.ToString("0.00");
+                    _tenderedBox.Text = string.Empty; // No longer auto-fills
                     _tenderedBox.Enabled = false;
-                    _btnT100.Enabled = _btnT200.Enabled = _btnT500.Enabled = _btnT1000.Enabled = false;
+                    _gcashRefBox.Text = string.Empty;
                 }
                 else
                 {
                     _tenderedBox.Text = string.Empty;
                     _tenderedBox.Enabled = true;
-                    _btnT100.Enabled = _btnT200.Enabled = _btnT500.Enabled = _btnT1000.Enabled = true;
+                    _gcashRefBox.Text = string.Empty;
                 }
 
+                _lblGcashRef.Visible = isGcash;
+                _gcashRefBox.Visible = isGcash;
+                _tenderedBox.Visible = !isGcash;
+
                 RecalculateChange(subtotal);
+                LayoutBottomPanel();
             }
             finally
             {
                 _isUpdatingPayment = false;
+                LayoutBottomPanel();
+                RefreshCompleteButtonState();
             }
         }
 
         private void OnTenderedChanged()
         {
             if (_isUpdatingPayment) return;
+
+            // Recalculate change and explicitly refresh the button state
             RecalculateChange(_cart.Sum(c => c.LineTotal));
+            RefreshCompleteButtonState();
         }
 
         private async Task CompleteSaleAsync()
@@ -1095,7 +1198,7 @@ namespace TodangMotor.Controls
             try
             {
                 var (success, error, saleId, invoiceNo) = await _salesService.CompleteSaleAsync(
-                    requestLines, method, tendered, _customerNameBox.Text);
+                    requestLines, method, tendered, _customerNameBox.Text, _gcashRefBox.Text);
 
                 if (!success)
                 {
@@ -1103,19 +1206,17 @@ namespace TodangMotor.Controls
                     return;
                 }
 
-                // Clear cart & input state
                 _cart.Clear();
                 _tenderedBox.Text = string.Empty;
                 _customerNameBox.Text = string.Empty;
+                _gcashRefBox.Text = string.Empty;
                 _paymentMethodCombo.SelectedIndex = 0;
                 RefreshCartGrid();
                 ShowInfo($"Invoice {invoiceNo} saved.");
 
-                // Show digital receipt
                 using var receipt = new ReceiptForm(saleId);
                 receipt.ShowDialog(this);
 
-                // Reload products (stock changed) and focus search
                 await LoadLookupsAsync();
                 _searchBox.FocusInput();
             }
@@ -1128,16 +1229,14 @@ namespace TodangMotor.Controls
         private void SetBusy(bool busy)
         {
             _isBusy = busy;
-            _btnAddToCart.Enabled = !busy;
             _btnClearCart.Enabled = !busy;
-            _btnRemoveLine.Enabled = !busy;
             _searchBox.Enabled = !busy;
             _categoryFilter.Enabled = !busy;
-            _qtyBox.Enabled = !busy;
             _customerNameBox.Enabled = !busy;
             _paymentMethodCombo.Enabled = !busy;
+            _productGrid.Enabled = !busy;
+            _cartGrid.Enabled = !busy;
 
-            // Complete Sale state depends on cart + tender + busy
             RefreshCompleteButtonState();
         }
 

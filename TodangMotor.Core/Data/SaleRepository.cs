@@ -43,15 +43,16 @@ namespace TodangMotor.Data
                         string invoiceNo = await GenerateInvoiceNoAsync(connection, transaction);
 
                         const string headerSql = @"
-                    INSERT INTO Sales
-                        (InvoiceNo, UserId, SaleDate, CustomerName, PaymentMethod,
-                         Subtotal, AmountTendered, ChangeAmount, Status)
-                    VALUES
-                        (@InvoiceNo, @UserId, @SaleDate, @CustomerName, @PaymentMethod,
-                         @Subtotal, @AmountTendered, @ChangeAmount, 'Completed');
+                        INSERT INTO Sales
+                            (InvoiceNo, UserId, SaleDate, CustomerName, PaymentMethod, ReferenceNo,
+                                Subtotal, AmountTendered, ChangeAmount, Status)
+                        VALUES
+                            (@InvoiceNo, @UserId, @SaleDate, @CustomerName, @PaymentMethod, @ReferenceNo,
+                                @Subtotal, @AmountTendered, @ChangeAmount, 'Completed');
 
-                    SELECT CAST(SCOPE_IDENTITY() AS int);";
+                        SELECT CAST(SCOPE_IDENTITY() AS int);";
 
+                        // Find the Dapper parameters object and add ReferenceNo:
                         int saleId = await connection.QuerySingleAsync<int>(headerSql, new
                         {
                             InvoiceNo = invoiceNo,
@@ -59,10 +60,12 @@ namespace TodangMotor.Data
                             SaleDate = header.SaleDate,
                             CustomerName = header.CustomerName,
                             PaymentMethod = header.PaymentMethod,
+                            ReferenceNo = header.ReferenceNo, // <-- Add this
                             Subtotal = header.Subtotal,
                             AmountTendered = header.AmountTendered,
                             ChangeAmount = header.ChangeAmount
                         }, transaction);
+
 
                         foreach (var item in items)
                         {
@@ -163,8 +166,8 @@ namespace TodangMotor.Data
 
             const string sql = @"
                 SELECT SaleId, InvoiceNo, UserId, SaleDate, CustomerName,
-                       PaymentMethod, Subtotal, AmountTendered, ChangeAmount,
-                       Status, VoidedByUserId, VoidedAt, VoidReason
+                        PaymentMethod, ReferenceNo, Subtotal, AmountTendered, ChangeAmount,
+                        Status, VoidedByUserId, VoidedAt, VoidReason
                 FROM Sales
                 ORDER BY SaleId DESC;";
 
@@ -178,8 +181,8 @@ namespace TodangMotor.Data
 
             const string sql = @"
                 SELECT SaleId, InvoiceNo, UserId, SaleDate, CustomerName,
-                       PaymentMethod, Subtotal, AmountTendered, ChangeAmount,
-                       Status, VoidedByUserId, VoidedAt, VoidReason
+                        PaymentMethod, ReferenceNo, Subtotal, AmountTendered, ChangeAmount,
+                        Status, VoidedByUserId, VoidedAt, VoidReason
                 FROM Sales
                 WHERE SaleDate >= @From AND SaleDate < @To
                 ORDER BY SaleId DESC;";
@@ -198,8 +201,8 @@ namespace TodangMotor.Data
 
             const string sql = @"
                 SELECT SaleId, InvoiceNo, UserId, SaleDate, CustomerName,
-                       PaymentMethod, Subtotal, AmountTendered, ChangeAmount,
-                       Status, VoidedByUserId, VoidedAt, VoidReason
+                        PaymentMethod, ReferenceNo, Subtotal, AmountTendered, ChangeAmount,
+                        Status, VoidedByUserId, VoidedAt, VoidReason
                 FROM Sales
                 WHERE SaleId = @SaleId;";
 

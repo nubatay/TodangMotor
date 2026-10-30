@@ -13,77 +13,65 @@ using TodangMotor.Services;
 namespace TodangMotor.Controls
 {
     /// <summary>
-    /// Inventory module — three tabs:
-    ///   1. Stock Levels    — read-only stock grid + Adjust Stock action
-    ///   2. Low Stocks      — two sub-tabs: Out of Stock / Low Stock (read-only)
-    ///   3. Movement History — chronological movements with filters
+    /// Inventory module — two tabs:
+    ///   1. Stock Levels    — grid with status chips + per-row Adjust action
+    ///   2. Movement History — chronological movements with date chips
     /// Catalog management (Add/Edit/Deactivate) lives in the Items module.
     /// </summary>
     public class InventoryControl : UserControl
     {
-        // ============================================================
-        // SERVICES
-        // ============================================================
-
         private readonly ProductService _productService = new();
         private readonly CategoryService _categoryService;
         private readonly StockMovementService _stockMovementService = new();
-
-        // ============================================================
-        // STATE
-        // ============================================================
 
         private List<Product> _allProducts = new();
         private List<Category> _allCategories = new();
         private Dictionary<int, Category> _categoriesById = new();
 
         private bool _isLoaded;
-        private bool _isBusy;
         private bool _movementHistoryLoaded;
 
-        // ============================================================
-        // TAB CONTAINER
-        // ============================================================
+        private const string AdjustIcon = "\uE70F"; // Segoe MDL2 Assets — Edit (pencil)
 
+        // Cached icon font for the manual CellPainting draw — created once, not per-cell.
+        private readonly Font _adjustIconFont = new Font(Theme.IconFontFamily, 14F, FontStyle.Regular);
+
+        // Fixed widths — used both when creating columns and when calculating
+        // the Product column's width. Keeping them in one place prevents the
+        // mismatch that caused the pen column to shift on refresh.
+        private const int ColBrandW = 130;
+        private const int ColCategoryW = 140;
+        private const int ColUnitW = 72;
+        private const int ColOnHandW = 120;
+        private const int ColReorderW = 115;
+        private const int ColStatusW = 165;
+        private const int ColAdjustW = 60;
+
+        // ---- Tab container ----
         private TabControl _tabs;
         private TabPage _stockLevelsTab;
-        private TabPage _lowStocksTab;
         private TabPage _movementHistoryTab;
 
-        // ============================================================
-        // TAB 1 — STOCK LEVELS
-        // ============================================================
-
+        // ---- Tab 1 — Stock Levels ----
         private RoundedTextBox _slSearchBox;
         private RoundedComboBox _slCategoryFilter;
-        private RoundedComboBox _slStatusFilter;
         private Label _slCountLabel;
+        private Button _slActiveStatusChip;
+        private readonly List<Button> _slStatusChips = new();
         private DataGridView _slGrid;
-        private Button _slBtnAdjustStock;
-        private Label _slStatusLabel;
 
-        // ============================================================
-        // TAB 2 — LOW STOCKS (two sub-tabs)
-        // ============================================================
-
-        private TabControl _lowTabs;
-        private TabPage _outOfStockPage;
-        private TabPage _lowStockPage;
-        private DataGridView _outOfStockGrid;
-        private DataGridView _lowStockGrid;
-        private Label _lowSummaryLabel;
-
-        // ============================================================
-        // TAB 3 — MOVEMENT HISTORY
-        // ============================================================
-
+        // ---- Tab 2 — Movement History ----
         private RoundedTextBox _mhSearchBox;
         private RoundedComboBox _mhTypeFilter;
         private DateTimePicker _mhFromDate;
         private DateTimePicker _mhToDate;
+        private Panel _mhCustomPickerPanel;
+        private Button _mhActiveDateChip;
+        private readonly List<Button> _mhDateChips = new();
         private Label _mhCountLabel;
         private DataGridView _mhGrid;
         private Label _mhStatusLabel;
+        private Panel _mhFilterBar;
 
         // ============================================================
         // CONSTRUCTION
@@ -95,7 +83,7 @@ namespace TodangMotor.Controls
 
             Dock = DockStyle.Fill;
             BackColor = Theme.Background;
-            Padding = new Padding(Theme.SpacingLg);
+            Padding = new Padding(UiFactory.PagePadding);
 
             BuildLayout();
 
@@ -118,23 +106,28 @@ namespace TodangMotor.Controls
             _tabs = new TabControl
             {
                 Dock = DockStyle.Fill,
-                Font = Theme.FontBody,
-                ItemSize = new Size(180, 38),
+                Font = new Font(Theme.UiFontFamily, 11F, FontStyle.Regular),
+                ItemSize = new Size(200, 42),
                 SizeMode = TabSizeMode.Fixed,
                 Appearance = TabAppearance.Normal,
-                Padding = new Point(20, 6)
+                Padding = new Point(20, 8)
             };
 
-            _stockLevelsTab = new TabPage("Stock Levels") { BackColor = Theme.Background, Padding = Padding.Empty };
-            _lowStocksTab = new TabPage("Low Stocks") { BackColor = Theme.Background, Padding = Padding.Empty };
-            _movementHistoryTab = new TabPage("Movement History") { BackColor = Theme.Background, Padding = Padding.Empty };
+            _stockLevelsTab = new TabPage("Stock Levels")
+            {
+                BackColor = Theme.Background,
+                Padding = Padding.Empty
+            };
+            _movementHistoryTab = new TabPage("Movement History")
+            {
+                BackColor = Theme.Background,
+                Padding = Padding.Empty
+            };
 
             BuildStockLevelsTab();
-            BuildLowStocksTab();
             BuildMovementHistoryTab();
 
             _tabs.TabPages.Add(_stockLevelsTab);
-            _tabs.TabPages.Add(_lowStocksTab);
             _tabs.TabPages.Add(_movementHistoryTab);
 
             _tabs.SelectedIndexChanged += async (s, e) =>
@@ -155,17 +148,17 @@ namespace TodangMotor.Controls
 
         private void BuildStockLevelsTab()
         {
-            // Filter bar (Top)
             var bar = new Panel
             {
                 Dock = DockStyle.Top,
-                Height = 84,
+                Height = 128,
                 BackColor = Theme.Background
             };
 
-            _slSearchBox = UiFactory.CreateTextBox(240);
-            _slSearchBox.Location = new Point(4, 12);
-            _slSearchBox.Placeholder = "Search product or brand…";
+            // ---- Row 1: Search + Category + Count ----
+            _slSearchBox = UiFactory.CreateTextBox(300);
+            _slSearchBox.Location = new Point(0, 16);
+            _slSearchBox.Placeholder = "Search product, brand, or SKU…";
             _slSearchBox.MaxLength = 150;
             _slSearchBox.TextChanged += (s, e) => ApplyStockLevelsFilter();
 
@@ -175,42 +168,18 @@ namespace TodangMotor.Controls
                 Font = Theme.FontSmall,
                 ForeColor = Theme.TextSecondary,
                 AutoSize = false,
-                Size = new Size(80, 20),
-                Location = new Point(252, 24),
+                Size = new Size(80, 24),
+                Location = new Point(_slSearchBox.Right + 24, 24),
                 TextAlign = ContentAlignment.MiddleLeft,
                 BackColor = Color.Transparent
             };
 
             _slCategoryFilter = new RoundedComboBox
             {
-                Width = 180,
-                Location = new Point(336, 12)
+                Width = 200,
+                Location = new Point(lblCategory.Right + 8, 16)
             };
             _slCategoryFilter.SelectedIndexChanged += (s, e) => ApplyStockLevelsFilter();
-
-            var lblStatus = new Label
-            {
-                Text = "Status:",
-                Font = Theme.FontSmall,
-                ForeColor = Theme.TextSecondary,
-                AutoSize = false,
-                Size = new Size(56, 20),
-                Location = new Point(526, 24),
-                TextAlign = ContentAlignment.MiddleLeft,
-                BackColor = Color.Transparent
-            };
-
-            _slStatusFilter = new RoundedComboBox
-            {
-                Width = 140,
-                Location = new Point(584, 12)
-            };
-            _slStatusFilter.Items.Add("All");
-            _slStatusFilter.Items.Add("OK");
-            _slStatusFilter.Items.Add("Low");
-            _slStatusFilter.Items.Add("Out of stock");
-            _slStatusFilter.SelectedIndex = 0;
-            _slStatusFilter.SelectedIndexChanged += (s, e) => ApplyStockLevelsFilter();
 
             _slCountLabel = new Label
             {
@@ -218,138 +187,278 @@ namespace TodangMotor.Controls
                 Font = Theme.FontSmall,
                 ForeColor = Theme.TextSecondary,
                 AutoSize = false,
-                Location = new Point(4, 58),
-                Height = 20,
-                Width = 700,
+                Location = new Point(_slCategoryFilter.Right + 24, 26),
+                Height = 24,
+                Width = 400,
                 TextAlign = ContentAlignment.MiddleLeft,
+                Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right,
                 BackColor = Color.Transparent
             };
 
             bar.Controls.Add(_slSearchBox);
             bar.Controls.Add(lblCategory);
             bar.Controls.Add(_slCategoryFilter);
-            bar.Controls.Add(lblStatus);
-            bar.Controls.Add(_slStatusFilter);
             bar.Controls.Add(_slCountLabel);
 
-            // Grid (Fill)
+            // ---- Row 2: Status chips ----
+            var statuses = new (string Label, string Key)[]
+            {
+                ("All",           "all"),
+                ("OK",            "ok"),
+                ("Low",           "low"),
+                ("Out of Stock",  "out")
+            };
+
+            int x = 0;
+            foreach (var (label, key) in statuses)
+            {
+                var chip = CreateStatusChip(label, key);
+                chip.Location = new Point(x, 76);
+                bar.Controls.Add(chip);
+                _slStatusChips.Add(chip);
+                x += chip.Width + 8;
+            }
+            SetActiveStatusChip(_slStatusChips[0]); // Default = All
+
+            // ---- Grid ----
             _slGrid = new DataGridView
             {
                 Dock = DockStyle.Fill,
-                Margin = new Padding(0, 4, 0, 4)
+                Margin = new Padding(0, 8, 0, 0)
             };
-            UiFactory.StyleGrid(_slGrid);
-            _slGrid.AlternatingRowsDefaultCellStyle.BackColor = Color.FromArgb(248, 249, 251);
-
-            // Bottom bar
-            var bottom = new Panel
+            UiFactory.StyleGridModern(_slGrid);
+            _slGrid.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.None;
+            _slGrid.CellClick += SlGrid_CellClick;
+            _slGrid.CellMouseEnter += SlGrid_CellMouseEnter;
+            _slGrid.CellMouseLeave += (s, e) => _slGrid.Cursor = Cursors.Default;
+            _slGrid.CellPainting += SlGrid_CellPainting;
+            _slGrid.CellDoubleClick += async (s, e) =>
             {
-                Dock = DockStyle.Bottom,
-                Height = 68,
-                BackColor = Theme.Background
+                if (e.RowIndex < 0) return;
+                await OpenAdjustForRowAsync(e.RowIndex);
             };
 
-            _slBtnAdjustStock = UiFactory.CreateButton("Adjust Stock", UiFactory.ButtonStyle.Primary, 140, 40);
-            _slBtnAdjustStock.Location = new Point(4, 14);
-            _slBtnAdjustStock.Click += async (s, e) => await AdjustStockAsync();
+            PrimeStockLevelsColumns();
 
-            _slStatusLabel = new Label
-            {
-                Text = string.Empty,
-                Font = Theme.FontSmall,
-                ForeColor = Theme.TextSecondary,
-                AutoSize = false,
-                Location = new Point(160, 14),
-                Height = 40,
-                Width = 500,
-                TextAlign = ContentAlignment.MiddleLeft,
-                Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right,
-                BackColor = Color.Transparent
-            };
-
-            bottom.Controls.Add(_slBtnAdjustStock);
-            bottom.Controls.Add(_slStatusLabel);
-
-            // Docking order
             _stockLevelsTab.Controls.Add(_slGrid);
-            _stockLevelsTab.Controls.Add(bottom);
             _stockLevelsTab.Controls.Add(bar);
         }
 
-        // ============================================================
-        // TAB 2 — LOW STOCKS
-        // ============================================================
-
-        private void BuildLowStocksTab()
+        private void SlGrid_CellPainting(object? sender, DataGridViewCellPaintingEventArgs e)
         {
-            _lowTabs = new TabControl
+            if (e.RowIndex < 0 || e.ColumnIndex < 0) return;
+            if (_slGrid.Columns[e.ColumnIndex].Name != "Adjust") return;
+
+            e.PaintBackground(e.CellBounds, true);
+
+            // Always paint with the real color — no white-on-selection transparency.
+            using var font = new Font(Theme.IconFontFamily, 14F, FontStyle.Regular);
+
+            TextRenderer.DrawText(
+                e.Graphics,
+                AdjustIcon,
+                _adjustIconFont,
+                e.CellBounds,
+                Theme.Primary,
+                TextFormatFlags.HorizontalCenter |
+                TextFormatFlags.VerticalCenter |
+                TextFormatFlags.NoPrefix);
+
+            e.Handled = true;
+        }
+
+        private Button CreateStatusChip(string label, string key)
+        {
+            var chip = new Button
             {
-                Dock = DockStyle.Fill,
-                Font = Theme.FontSmall,
-                ItemSize = new Size(200, 34),
-                SizeMode = TabSizeMode.Fixed,
-                Appearance = TabAppearance.Normal,
-                Padding = new Point(14, 4)
-            };
-
-            _outOfStockPage = new TabPage("Out of Stock (0)") { BackColor = Theme.Background, Padding = Padding.Empty };
-            _lowStockPage = new TabPage("Low Stock (0)") { BackColor = Theme.Background, Padding = Padding.Empty };
-
-            _outOfStockGrid = BuildLowStockGrid();
-            _lowStockGrid = BuildLowStockGrid();
-
-            _outOfStockPage.Controls.Add(_outOfStockGrid);
-            _lowStockPage.Controls.Add(_lowStockGrid);
-
-            _lowTabs.TabPages.Add(_outOfStockPage);
-            _lowTabs.TabPages.Add(_lowStockPage);
-
-            // Summary label at bottom
-            _lowSummaryLabel = new Label
-            {
-                Text = "Loading…",
-                Font = Theme.FontSmall,
+                Text = label,
+                Font = Theme.FontBodyBold,
+                FlatStyle = FlatStyle.Flat,
+                BackColor = Theme.Surface,
                 ForeColor = Theme.TextSecondary,
+                Cursor = Cursors.Hand,
+                Height = 40,
                 AutoSize = false,
-                Dock = DockStyle.Bottom,
-                Height = 32,
-                Padding = new Padding(4, 0, 4, 0),
-                TextAlign = ContentAlignment.MiddleLeft,
-                BackColor = Theme.Background
+                Tag = key,
+                Padding = new Padding(0)
+            };
+            chip.FlatAppearance.BorderSize = 1;
+            chip.FlatAppearance.BorderColor = Theme.PanelBorder;
+            chip.FlatAppearance.MouseOverBackColor = Color.FromArgb(240, 244, 255);
+
+            using (var g = chip.CreateGraphics())
+            {
+                var size = g.MeasureString(label, chip.Font);
+                chip.Width = (int)size.Width + 32;
+            }
+
+            Theme.ApplyRoundedRegion(chip, Theme.Radius);
+            chip.Resize += (s, e) => Theme.ApplyRoundedRegion(chip, Theme.Radius);
+
+            chip.Click += (s, e) =>
+            {
+                SetActiveStatusChip(chip);
+                ApplyStockLevelsFilter();
             };
 
-            _lowStocksTab.Controls.Add(_lowTabs);
-            _lowStocksTab.Controls.Add(_lowSummaryLabel);
+            return chip;
         }
 
-        private DataGridView BuildLowStockGrid()
+        private void SetActiveStatusChip(Button chip)
         {
-            var grid = new DataGridView
+            _slActiveStatusChip = chip;
+
+            foreach (var c in _slStatusChips)
             {
-                Dock = DockStyle.Fill,
-                Margin = new Padding(0, 4, 0, 4)
+                bool active = (c == chip);
+                c.BackColor = active ? Theme.Primary : Theme.Surface;
+                c.ForeColor = active ? Color.White : Theme.TextSecondary;
+                c.FlatAppearance.BorderColor = active ? Theme.Primary : Theme.PanelBorder;
+                c.FlatAppearance.MouseOverBackColor = active
+                    ? Theme.PrimaryHover
+                    : Color.FromArgb(240, 244, 255);
+            }
+        }
+
+        private void PrimeStockLevelsColumns()
+        {
+            _slGrid.AutoGenerateColumns = false;
+            _slGrid.Columns.Clear();
+            _slGrid.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.None;
+
+            void AddTextCol(string prop, string header, int width, bool readOnly,
+                DataGridViewContentAlignment align = DataGridViewContentAlignment.MiddleLeft)
+            {
+                var col = new DataGridViewTextBoxColumn
+                {
+                    Name = prop,
+                    DataPropertyName = prop,
+                    HeaderText = header,
+                    Width = width,
+                    ReadOnly = readOnly,
+                    SortMode = DataGridViewColumnSortMode.NotSortable,
+                    Resizable = DataGridViewTriState.False
+                };
+                if (align != DataGridViewContentAlignment.MiddleLeft)
+                    col.DefaultCellStyle.Alignment = align;
+                _slGrid.Columns.Add(col);
+            }
+
+            // Product width is applied dynamically in FitStockLevelsProductColumn().
+            AddTextCol("Product", "Product", 400, true);
+            AddTextCol("Brand", "Brand", ColBrandW, true);
+            AddTextCol("Category", "Category", ColCategoryW, true);
+            AddTextCol("Unit", "Unit", ColUnitW, true, DataGridViewContentAlignment.MiddleCenter);
+            AddTextCol("OnHand", "On Hand", ColOnHandW, true, DataGridViewContentAlignment.MiddleRight);
+            AddTextCol("Reorder", "Reorder", ColReorderW, true, DataGridViewContentAlignment.MiddleRight);
+            AddTextCol("Status", "Status", ColStatusW, true, DataGridViewContentAlignment.MiddleCenter);
+
+            // Adjust action column — pencil icon. Fixed width, no sort glyph,
+            // no user resize — keeps the column perfectly stable across refreshes.
+            // Adjust action column — pencil icon, painted via CellPainting.
+            var adjustCol = new DataGridViewTextBoxColumn
+            {
+                Name = "Adjust",
+                HeaderText = "",
+                Width = ColAdjustW,
+                ReadOnly = true,
+                SortMode = DataGridViewColumnSortMode.NotSortable,
+                Resizable = DataGridViewTriState.False
             };
-            UiFactory.StyleGrid(grid);
-            grid.AlternatingRowsDefaultCellStyle.BackColor = Color.FromArgb(248, 249, 251);
-            return grid;
+            _slGrid.Columns.Add(adjustCol);
+
+            _slGrid.Columns.Add(new DataGridViewTextBoxColumn
+            {
+                Name = "ProductId",
+                DataPropertyName = "ProductId",
+                Visible = false
+            });
+
+            _slGrid.Resize += (s, e) => FitStockLevelsProductColumn();
+        }
+
+        private void FitStockLevelsProductColumn()
+        {
+            if (_slGrid == null || !_slGrid.Columns.Contains("Product")) return;
+
+            int others =
+                ColBrandW + ColCategoryW + ColUnitW +
+                ColOnHandW + ColReorderW + ColStatusW + ColAdjustW;
+
+            // 24px allowance for the vertical scrollbar and grid chrome.
+            int available = _slGrid.ClientSize.Width - others - 24;
+            if (available < 220) available = 220;
+
+            _slGrid.Columns["Product"].Width = available;
+        }
+
+        private void SlGrid_CellMouseEnter(object? sender, DataGridViewCellEventArgs e)
+        {
+            if (e.RowIndex < 0 || e.ColumnIndex < 0) return;
+            _slGrid.Cursor = _slGrid.Columns[e.ColumnIndex].Name == "Adjust"
+                ? Cursors.Hand
+                : Cursors.Default;
+        }
+
+        private async void SlGrid_CellClick(object? sender, DataGridViewCellEventArgs e)
+        {
+            if (e.RowIndex < 0 || e.ColumnIndex < 0) return;
+            if (_slGrid.Columns[e.ColumnIndex].Name != "Adjust") return;
+
+            await OpenAdjustForRowAsync(e.RowIndex);
+
+            // Clear selection so the row doesn't stay highlighted after adjust.
+            _slGrid.ClearSelection();
+        }
+
+        private async Task OpenAdjustForRowAsync(int rowIndex)
+        {
+            if (rowIndex < 0 || rowIndex >= _slGrid.Rows.Count) return;
+
+            var idCell = _slGrid.Rows[rowIndex].Cells["ProductId"];
+            if (idCell?.Value == null) return;
+
+            int id = Convert.ToInt32(idCell.Value);
+            var product = _allProducts.FirstOrDefault(p => p.ProductId == id);
+            if (product == null)
+            {
+                ShowStockLevelsStatus("Product not found. Please refresh.", true);
+                return;
+            }
+
+            try
+            {
+                using var form = new AdjustStockForm(product);
+                var result = form.ShowDialog(FindForm());
+
+                if (result == DialogResult.OK)
+                {
+                    ShowStockLevelsStatus("Stock adjusted successfully.", false);
+                    await ReloadAllAsync();
+                }
+            }
+            catch (Exception ex)
+            {
+                ShowStockLevelsStatus($"Could not open Adjust Stock: {ex.Message}", true);
+            }
         }
 
         // ============================================================
-        // TAB 3 — MOVEMENT HISTORY
+        // TAB 2 — MOVEMENT HISTORY
         // ============================================================
 
         private void BuildMovementHistoryTab()
         {
-            // Filter bar
-            var bar = new Panel
+            _mhFilterBar = new Panel
             {
                 Dock = DockStyle.Top,
-                Height = 84,
+                Height = 128,
                 BackColor = Theme.Background
             };
 
-            _mhSearchBox = UiFactory.CreateTextBox(220);
-            _mhSearchBox.Location = new Point(4, 12);
+            // ---- Row 1: Search + Type + Count ----
+            _mhSearchBox = UiFactory.CreateTextBox(280);
+            _mhSearchBox.Location = new Point(0, 16);
             _mhSearchBox.Placeholder = "Search product or brand…";
             _mhSearchBox.MaxLength = 150;
             _mhSearchBox.TextChanged += async (s, e) => await LoadMovementHistoryAsync();
@@ -360,33 +469,81 @@ namespace TodangMotor.Controls
                 Font = Theme.FontSmall,
                 ForeColor = Theme.TextSecondary,
                 AutoSize = false,
-                Size = new Size(40, 20),
-                Location = new Point(232, 24),
+                Size = new Size(48, 24),
+                Location = new Point(_mhSearchBox.Right + 24, 24),
                 TextAlign = ContentAlignment.MiddleLeft,
                 BackColor = Color.Transparent
             };
 
             _mhTypeFilter = new RoundedComboBox
             {
-                Width = 140,
-                Location = new Point(276, 12)
+                Width = 160,
+                Location = new Point(lblType.Right + 8, 16)
             };
             _mhTypeFilter.Items.Add("All");
             _mhTypeFilter.Items.Add("Sale");
             _mhTypeFilter.Items.Add("Stock-In");
             _mhTypeFilter.Items.Add("Adjustment");
-            _mhTypeFilter.Items.Add("Void");
             _mhTypeFilter.SelectedIndex = 0;
             _mhTypeFilter.SelectedIndexChanged += async (s, e) => await LoadMovementHistoryAsync();
 
-            var lblFrom = new Label
+            _mhCountLabel = new Label
             {
-                Text = "From:",
+                Text = "Loading…",
                 Font = Theme.FontSmall,
                 ForeColor = Theme.TextSecondary,
                 AutoSize = false,
-                Size = new Size(40, 20),
-                Location = new Point(432, 24),
+                Location = new Point(_mhTypeFilter.Right + 24, 26),
+                Height = 24,
+                Width = 500,
+                TextAlign = ContentAlignment.MiddleLeft,
+                Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right,
+                BackColor = Color.Transparent
+            };
+
+            _mhFilterBar.Controls.Add(_mhSearchBox);
+            _mhFilterBar.Controls.Add(lblType);
+            _mhFilterBar.Controls.Add(_mhTypeFilter);
+            _mhFilterBar.Controls.Add(_mhCountLabel);
+
+            // ---- Row 2: Date chips ----
+            var presets = new (string Label, string Key)[]
+            {
+                ("Today",        "today"),
+                ("Last 7 days",  "7d"),
+                ("Last 30 days", "30d"),
+                ("This month",   "month"),
+                ("Custom",       "custom")
+            };
+
+            int x = 0;
+            foreach (var (label, key) in presets)
+            {
+                var chip = CreateDateChip(label, key);
+                chip.Location = new Point(x, 76);
+                _mhFilterBar.Controls.Add(chip);
+                _mhDateChips.Add(chip);
+                x += chip.Width + 8;
+            }
+
+            // ---- Custom pickers (hidden by default) ----
+            _mhCustomPickerPanel = new Panel
+            {
+                Location = new Point(x + 8, 76),
+                Height = 40,
+                Width = 424,
+                BackColor = Color.Transparent,
+                Visible = false
+            };
+
+            var lblFrom = new Label
+            {
+                Text = "From",
+                Font = Theme.FontSmall,
+                ForeColor = Theme.TextSecondary,
+                AutoSize = false,
+                Size = new Size(44, 40),
+                Location = new Point(0, 0),
                 TextAlign = ContentAlignment.MiddleLeft,
                 BackColor = Color.Transparent
             };
@@ -396,21 +553,21 @@ namespace TodangMotor.Controls
                 Format = DateTimePickerFormat.Custom,
                 CustomFormat = "MMM d, yyyy",
                 Font = Theme.FontBody,
-                Location = new Point(474, 12),
-                Size = new Size(140, 32),
+                Location = new Point(48, 6),
+                Size = new Size(160, 32),
                 MaxDate = DateTime.Today,
-                Value = DateTime.Today
+                Value = DateTime.Today.AddDays(-29)
             };
             _mhFromDate.ValueChanged += async (s, e) => await LoadMovementHistoryAsync();
 
             var lblTo = new Label
             {
-                Text = "To:",
+                Text = "To",
                 Font = Theme.FontSmall,
                 ForeColor = Theme.TextSecondary,
                 AutoSize = false,
-                Size = new Size(28, 20),
-                Location = new Point(622, 24),
+                Size = new Size(28, 40),
+                Location = new Point(216, 0),
                 TextAlign = ContentAlignment.MiddleLeft,
                 BackColor = Color.Transparent
             };
@@ -420,57 +577,46 @@ namespace TodangMotor.Controls
                 Format = DateTimePickerFormat.Custom,
                 CustomFormat = "MMM d, yyyy",
                 Font = Theme.FontBody,
-                Location = new Point(652, 12),
-                Size = new Size(140, 32),
+                Location = new Point(248, 6),
+                Size = new Size(160, 32),
                 MaxDate = DateTime.Today,
                 Value = DateTime.Today
             };
             _mhToDate.ValueChanged += async (s, e) => await LoadMovementHistoryAsync();
 
-            _mhCountLabel = new Label
-            {
-                Text = "Loading…",
-                Font = Theme.FontSmall,
-                ForeColor = Theme.TextSecondary,
-                AutoSize = false,
-                Location = new Point(4, 58),
-                Height = 20,
-                Width = 900,
-                TextAlign = ContentAlignment.MiddleLeft,
-                Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right,
-                BackColor = Color.Transparent
-            };
+            _mhCustomPickerPanel.Controls.Add(lblFrom);
+            _mhCustomPickerPanel.Controls.Add(_mhFromDate);
+            _mhCustomPickerPanel.Controls.Add(lblTo);
+            _mhCustomPickerPanel.Controls.Add(_mhToDate);
+            _mhFilterBar.Controls.Add(_mhCustomPickerPanel);
 
-            bar.Controls.Add(_mhSearchBox);
-            bar.Controls.Add(lblType);
-            bar.Controls.Add(_mhTypeFilter);
-            bar.Controls.Add(lblFrom);
-            bar.Controls.Add(_mhFromDate);
-            bar.Controls.Add(lblTo);
-            bar.Controls.Add(_mhToDate);
-            bar.Controls.Add(_mhCountLabel);
+            // Default = Last 30 days
+            var defaultChip = _mhDateChips.FirstOrDefault(c => (string?)c.Tag == "30d");
+            if (defaultChip != null) SetActiveDateChip(defaultChip);
+            _mhFromDate.Value = DateTime.Today.AddDays(-29);
+            _mhToDate.Value = DateTime.Today;
 
-            // Grid
+            // ---- Grid ----
             _mhGrid = new DataGridView
             {
                 Dock = DockStyle.Fill,
-                Margin = new Padding(0, 4, 0, 4)
+                Margin = new Padding(0, 8, 0, 0)
             };
-            UiFactory.StyleGrid(_mhGrid);
-            _mhGrid.AlternatingRowsDefaultCellStyle.BackColor = Color.FromArgb(248, 249, 251);
+            UiFactory.StyleGridModern(_mhGrid);
             _mhGrid.CellFormatting += MhGrid_CellFormatting;
             PrimeMovementGridColumns();
 
-            // Bottom bar
+            // ---- Bottom bar ----
             var bottom = new Panel
             {
                 Dock = DockStyle.Bottom,
-                Height = 68,
+                Height = 88,
                 BackColor = Theme.Background
             };
 
-            var btnRefresh = UiFactory.CreateButton("Refresh", UiFactory.ButtonStyle.Secondary, 110, 40);
-            btnRefresh.Location = new Point(4, 14);
+            var btnRefresh = UiFactory.CreateButton("Refresh", UiFactory.ButtonStyle.Primary,
+                140, UiFactory.PrimaryButtonHeight);
+            btnRefresh.Location = new Point(0, 20);
             btnRefresh.Click += async (s, e) => await LoadMovementHistoryAsync();
 
             _mhStatusLabel = new Label
@@ -479,8 +625,8 @@ namespace TodangMotor.Controls
                 Font = Theme.FontSmall,
                 ForeColor = Theme.TextSecondary,
                 AutoSize = false,
-                Location = new Point(130, 14),
-                Height = 40,
+                Location = new Point(btnRefresh.Right + 24, 20),
+                Height = UiFactory.PrimaryButtonHeight,
                 Width = 500,
                 TextAlign = ContentAlignment.MiddleLeft,
                 Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right,
@@ -492,7 +638,95 @@ namespace TodangMotor.Controls
 
             _movementHistoryTab.Controls.Add(_mhGrid);
             _movementHistoryTab.Controls.Add(bottom);
-            _movementHistoryTab.Controls.Add(bar);
+            _movementHistoryTab.Controls.Add(_mhFilterBar);
+        }
+
+        private Button CreateDateChip(string label, string key)
+        {
+            var chip = new Button
+            {
+                Text = label,
+                Font = Theme.FontBodyBold,
+                FlatStyle = FlatStyle.Flat,
+                BackColor = Theme.Surface,
+                ForeColor = Theme.TextSecondary,
+                Cursor = Cursors.Hand,
+                Height = 40,
+                AutoSize = false,
+                Tag = key,
+                Padding = new Padding(0)
+            };
+            chip.FlatAppearance.BorderSize = 1;
+            chip.FlatAppearance.BorderColor = Theme.PanelBorder;
+            chip.FlatAppearance.MouseOverBackColor = Color.FromArgb(240, 244, 255);
+
+            using (var g = chip.CreateGraphics())
+            {
+                var size = g.MeasureString(label, chip.Font);
+                chip.Width = (int)size.Width + 32;
+            }
+
+            Theme.ApplyRoundedRegion(chip, Theme.Radius);
+            chip.Resize += (s, e) => Theme.ApplyRoundedRegion(chip, Theme.Radius);
+
+            chip.Click += async (s, e) =>
+            {
+                SetActiveDateChip(chip);
+                await ApplyDatePresetAsync(key);
+            };
+
+            return chip;
+        }
+
+        private void SetActiveDateChip(Button chip)
+        {
+            _mhActiveDateChip = chip;
+
+            foreach (var c in _mhDateChips)
+            {
+                bool active = (c == chip);
+                c.BackColor = active ? Theme.Primary : Theme.Surface;
+                c.ForeColor = active ? Color.White : Theme.TextSecondary;
+                c.FlatAppearance.BorderColor = active ? Theme.Primary : Theme.PanelBorder;
+                c.FlatAppearance.MouseOverBackColor = active
+                    ? Theme.PrimaryHover
+                    : Color.FromArgb(240, 244, 255);
+            }
+        }
+
+        private async Task ApplyDatePresetAsync(string key)
+        {
+            DateTime today = DateTime.Today;
+
+            switch (key)
+            {
+                case "today":
+                    _mhFromDate.Value = today;
+                    _mhToDate.Value = today;
+                    _mhCustomPickerPanel.Visible = false;
+                    break;
+                case "7d":
+                    _mhFromDate.Value = today.AddDays(-6);
+                    _mhToDate.Value = today;
+                    _mhCustomPickerPanel.Visible = false;
+                    break;
+                case "30d":
+                    _mhFromDate.Value = today.AddDays(-29);
+                    _mhToDate.Value = today;
+                    _mhCustomPickerPanel.Visible = false;
+                    break;
+                case "month":
+                    _mhFromDate.Value = new DateTime(today.Year, today.Month, 1);
+                    _mhToDate.Value = today;
+                    _mhCustomPickerPanel.Visible = false;
+                    break;
+                case "custom":
+                    _mhCustomPickerPanel.Visible = true;
+                    _mhFromDate.Focus();
+                    return; // wait for the user to change dates
+            }
+
+            await LoadMovementHistoryAsync();
         }
 
         private void PrimeMovementGridColumns()
@@ -500,7 +734,8 @@ namespace TodangMotor.Controls
             _mhGrid.AutoGenerateColumns = false;
             _mhGrid.Columns.Clear();
 
-            void AddCol(string prop, string header, int weight, bool rightAlign = false)
+            void AddTextCol(string prop, string header, int weight, bool readOnly,
+                DataGridViewContentAlignment align = DataGridViewContentAlignment.MiddleLeft)
             {
                 var col = new DataGridViewTextBoxColumn
                 {
@@ -508,20 +743,21 @@ namespace TodangMotor.Controls
                     DataPropertyName = prop,
                     HeaderText = header,
                     FillWeight = weight,
-                    ReadOnly = true
+                    ReadOnly = readOnly,
+                    SortMode = DataGridViewColumnSortMode.NotSortable
                 };
-                if (rightAlign)
-                    col.DefaultCellStyle.Alignment = DataGridViewContentAlignment.MiddleRight;
+                if (align != DataGridViewContentAlignment.MiddleLeft)
+                    col.DefaultCellStyle.Alignment = align;
                 _mhGrid.Columns.Add(col);
             }
 
-            AddCol("DateDisplay", "Date & Time", 170);
-            AddCol("Item", "Item", 240);
-            AddCol("TypeLabel", "Type", 90);
-            AddCol("StockIn", "Stock In", 80, true);
-            AddCol("StockOut", "Stock Out", 80, true);
-            AddCol("StartQty", "Start Qty", 70, true);
-            AddCol("EndQty", "End Qty", 70, true);
+            AddTextCol("DateDisplay", "Date & Time", 180, true);
+            AddTextCol("Item", "Item", 260, true);
+            AddTextCol("TypeLabel", "Type", 90, true, DataGridViewContentAlignment.MiddleCenter);
+            AddTextCol("StockIn", "Stock In", 80, true, DataGridViewContentAlignment.MiddleRight);
+            AddTextCol("StockOut", "Stock Out", 85, true, DataGridViewContentAlignment.MiddleRight);
+            AddTextCol("StartQty", "Start Qty", 80, true, DataGridViewContentAlignment.MiddleRight);
+            AddTextCol("EndQty", "End Qty", 80, true, DataGridViewContentAlignment.MiddleRight);
         }
 
         private void MhGrid_CellFormatting(object? sender, DataGridViewCellFormattingEventArgs e)
@@ -550,10 +786,12 @@ namespace TodangMotor.Controls
             else if (colName == "StockIn" && !string.IsNullOrEmpty(row.Cells["StockIn"].Value?.ToString()))
             {
                 e.CellStyle.ForeColor = Theme.Success;
+                e.CellStyle.Font = Theme.FontBodyBold;
             }
             else if (colName == "StockOut" && !string.IsNullOrEmpty(row.Cells["StockOut"].Value?.ToString()))
             {
                 e.CellStyle.ForeColor = Theme.Danger;
+                e.CellStyle.Font = Theme.FontBodyBold;
             }
         }
 
@@ -569,7 +807,6 @@ namespace TodangMotor.Controls
                 await LoadCategoriesAsync();
                 await LoadProductsAsync();
                 ApplyStockLevelsFilter();
-                RefreshLowStocksTab();
             }
             finally
             {
@@ -610,7 +847,7 @@ namespace TodangMotor.Controls
         }
 
         // ============================================================
-        // TAB 1 — STOCK LEVELS LOGIC
+        // STOCK LEVELS LOGIC
         // ============================================================
 
         private void ApplyStockLevelsFilter()
@@ -640,7 +877,7 @@ namespace TodangMotor.Controls
                     filtered = filtered.Where(p => p.CategoryId == catObj.CategoryId);
             }
 
-            string statusFilter = _slStatusFilter?.SelectedItem as string ?? "All";
+            string statusFilterKey = (_slActiveStatusChip?.Tag as string) ?? "all";
 
             var rows = filtered
                 .OrderBy(p => p.ProductName)
@@ -664,8 +901,15 @@ namespace TodangMotor.Controls
                     };
                 })
                 .Where(r =>
-                    statusFilter == "All" ||
-                    string.Equals(r.Status, statusFilter, StringComparison.OrdinalIgnoreCase))
+                {
+                    switch (statusFilterKey)
+                    {
+                        case "ok": return r.Status == "OK";
+                        case "low": return r.Status == "Low";
+                        case "out": return r.Status == "Out of stock";
+                        default: return true;
+                    }
+                })
                 .ToList();
 
             _slGrid.DataSource = rows;
@@ -673,153 +917,41 @@ namespace TodangMotor.Controls
             if (_slGrid.Columns.Contains("ProductId"))
                 _slGrid.Columns["ProductId"].Visible = false;
 
-            void SetWeight(string col, int weight, string header = null)
-            {
-                if (!_slGrid.Columns.Contains(col)) return;
-                _slGrid.Columns[col].FillWeight = weight;
-                if (header != null) _slGrid.Columns[col].HeaderText = header;
-            }
-
-            SetWeight("Product", 240, "Product");
-            SetWeight("Brand", 140, "Brand");
-            SetWeight("Category", 120, "Category");
-            SetWeight("Unit", 60, "Unit");
-            SetWeight("OnHand", 80, "On Hand");
-            SetWeight("Reorder", 80, "Reorder At");
-            SetWeight("Status", 110, "Stock Status");
-
             if (_slGrid.Rows.Count > 0)
                 _slGrid.ClearSelection();
 
-            // Color-code Stock Status.
             foreach (DataGridViewRow row in _slGrid.Rows)
             {
                 if (row.Cells["Status"].Value is string s)
                 {
                     if (s == "Out of stock")
+                    {
                         row.Cells["Status"].Style.ForeColor = Theme.Danger;
+                        row.Cells["Status"].Style.Font = Theme.FontBodyBold;
+                    }
                     else if (s == "Low")
+                    {
                         row.Cells["Status"].Style.ForeColor = Color.FromArgb(200, 130, 40);
+                        row.Cells["Status"].Style.Font = Theme.FontBodyBold;
+                    }
                     else
+                    {
                         row.Cells["Status"].Style.ForeColor = Theme.Success;
+                        row.Cells["Status"].Style.Font = Theme.FontBody;
+                    }
                 }
             }
 
-            _slCountLabel.Text =
-                $"Showing {rows.Count} of {_allProducts.Count(p => p.IsActive)} active item(s)";
-        }
+            int totalActive = _allProducts.Count(p => p.IsActive);
+            _slCountLabel.Text = $"Showing {rows.Count} of {totalActive} active item(s)";
 
-        private Product? GetSelectedStockLevelProduct()
-        {
-            if (_slGrid == null || _slGrid.SelectedRows.Count == 0) return null;
-            var row = _slGrid.SelectedRows[0];
-            if (!_slGrid.Columns.Contains("ProductId")) return null;
-
-            var val = row.Cells["ProductId"].Value;
-            if (val == null) return null;
-
-            int id = Convert.ToInt32(val);
-            return _allProducts.FirstOrDefault(p => p.ProductId == id);
-        }
-
-        private async Task AdjustStockAsync()
-        {
-            var p = GetSelectedStockLevelProduct();
-            if (p == null)
-            {
-                ShowStockLevelsStatus("Please select an item first.", true);
-                return;
-            }
-
-            using var form = new AdjustStockForm(p);
-            var result = form.ShowDialog(FindForm());
-
-            if (result == DialogResult.OK)
-            {
-                ShowStockLevelsStatus("Stock adjusted successfully.", false);
-                await ReloadAllAsync();
-            }
+            // Recalculate Product column after any row count change
+            // (scrollbar may appear/disappear).
+            FitStockLevelsProductColumn();
         }
 
         // ============================================================
-        // TAB 2 — LOW STOCKS LOGIC
-        // ============================================================
-
-        private void RefreshLowStocksTab()
-        {
-            if (_allProducts == null) return;
-
-            var active = _allProducts.Where(p => p.IsActive).ToList();
-
-            var outOfStock = active
-                .Where(p => p.QuantityOnHand == 0)
-                .OrderBy(p => p.ProductName)
-                .ThenBy(p => p.Brand)
-                .Select(p => new
-                {
-                    p.ProductId,
-                    Product = p.ProductName ?? string.Empty,
-                    Brand = p.Brand ?? string.Empty,
-                    Unit = p.Unit ?? string.Empty,
-                    OnHand = p.QuantityOnHand,
-                    Reorder = p.ReorderLevel
-                })
-                .ToList();
-
-            var lowStock = active
-                .Where(p => p.QuantityOnHand > 0 && p.QuantityOnHand <= p.ReorderLevel)
-                .OrderBy(p => p.QuantityOnHand - p.ReorderLevel)
-                .ThenBy(p => p.ProductName)
-                .Select(p => new
-                {
-                    p.ProductId,
-                    Product = p.ProductName ?? string.Empty,
-                    Brand = p.Brand ?? string.Empty,
-                    Unit = p.Unit ?? string.Empty,
-                    OnHand = p.QuantityOnHand,
-                    Reorder = p.ReorderLevel
-                })
-                .ToList();
-
-            _outOfStockGrid.DataSource = outOfStock;
-            _lowStockGrid.DataSource = lowStock;
-
-            void ConfigureGrid(DataGridView grid)
-            {
-                if (grid.Columns.Contains("ProductId"))
-                    grid.Columns["ProductId"].Visible = false;
-
-                void SetWeight(string col, int weight, string header = null)
-                {
-                    if (!grid.Columns.Contains(col)) return;
-                    grid.Columns[col].FillWeight = weight;
-                    if (header != null) grid.Columns[col].HeaderText = header;
-                }
-
-                SetWeight("Product", 240, "Product");
-                SetWeight("Brand", 140, "Brand");
-                SetWeight("Unit", 60, "Unit");
-                SetWeight("OnHand", 80, "On Hand");
-                SetWeight("Reorder", 80, "Reorder At");
-
-                if (grid.Rows.Count > 0)
-                    grid.ClearSelection();
-            }
-
-            ConfigureGrid(_outOfStockGrid);
-            ConfigureGrid(_lowStockGrid);
-
-            // Update sub-tab labels with counts.
-            _outOfStockPage.Text = $"Out of Stock ({outOfStock.Count})";
-            _lowStockPage.Text = $"Low Stock ({lowStock.Count})";
-
-            _lowSummaryLabel.Text =
-                $"{outOfStock.Count} item(s) completely out of stock   ·   " +
-                $"{lowStock.Count} item(s) running low";
-        }
-
-        // ============================================================
-        // TAB 3 — MOVEMENT HISTORY LOGIC
+        // MOVEMENT HISTORY LOGIC
         // ============================================================
 
         private async Task LoadMovementHistoryAsync()
@@ -838,13 +970,11 @@ namespace TodangMotor.Controls
             }
 
             DateTime fromInclusive = from;
-            DateTime toExclusive = to.AddDays(1);  // include the whole "To" day
+            DateTime toExclusive = to.AddDays(1);
 
             string? search = string.IsNullOrWhiteSpace(_mhSearchBox.Text) ? null : _mhSearchBox.Text.Trim();
             string? type = _mhTypeFilter.SelectedItem as string;
             if (type == "All") type = null;
-
-            // Map UI labels to DB types.
             if (type == "Stock-In") type = "StockIn";
 
             try
@@ -897,8 +1027,7 @@ namespace TodangMotor.Controls
 
                 _mhCountLabel.ForeColor = Theme.TextSecondary;
                 _mhCountLabel.Text =
-                    $"Showing {rows.Count} movement(s) from " +
-                    $"{from:MMM d, yyyy} to {to:MMM d, yyyy}";
+                    $"Showing {rows.Count} movement(s) from {from:MMM d, yyyy} to {to:MMM d, yyyy}";
             }
             catch (Exception ex)
             {
@@ -914,15 +1043,16 @@ namespace TodangMotor.Controls
 
         private void SetBusy(bool busy)
         {
-            _isBusy = busy;
-            _slBtnAdjustStock.Enabled = !busy;
+            _slSearchBox.Enabled = !busy;
+            _slCategoryFilter.Enabled = !busy;
+            _slGrid.Enabled = !busy;
         }
 
         private void ShowStockLevelsStatus(string message, bool isError)
         {
-            if (_slStatusLabel == null) return;
-            _slStatusLabel.ForeColor = isError ? Theme.Danger : Theme.Success;
-            _slStatusLabel.Text = message ?? string.Empty;
+            if (_slCountLabel == null) return;
+            _slCountLabel.ForeColor = isError ? Theme.Danger : Theme.Success;
+            _slCountLabel.Text = message ?? string.Empty;
         }
     }
 }

@@ -11,6 +11,12 @@ using TodangMotor.Services;
 
 namespace TodangMotor.Controls
 {
+    /// <summary>
+    /// Cashier-side inventory — read-only view of active products.
+    /// Shows current stock levels so the cashier can inform customers
+    /// without leaving the POS. No Adjust action (Owner-only in
+    /// InventoryControl).
+    /// </summary>
     public class CashierInventoryControl : UserControl
     {
         private readonly SalesService _salesService = new();
@@ -21,6 +27,14 @@ namespace TodangMotor.Controls
 
         private bool _isLoaded;
 
+        // Fixed column widths (excluding Product, which is dynamic).
+        private const int ColBrandW = 130;
+        private const int ColUnitW = 72;
+        private const int ColPriceW = 120;
+        private const int ColOnHandW = 120;
+        private const int ColReorderW = 115;
+        private const int ColStatusW = 165;
+
         private RoundedTextBox _searchBox;
         private RoundedComboBox _categoryFilter;
         private Label _countLabel;
@@ -30,7 +44,7 @@ namespace TodangMotor.Controls
         {
             Dock = DockStyle.Fill;
             BackColor = Theme.Background;
-            Padding = new Padding(Theme.SpacingLg);
+            Padding = new Padding(UiFactory.PagePadding);
 
             BuildLayout();
 
@@ -59,34 +73,33 @@ namespace TodangMotor.Controls
             var bar = new Panel
             {
                 Dock = DockStyle.Top,
-                Height = 84,
+                Height = 108,
                 BackColor = Theme.Background
             };
 
-            _searchBox = UiFactory.CreateTextBox(260);
-            _searchBox.Location = new Point(4, 12);
+            // ---- Row 1: Search + Category + Count ----
+            _searchBox = UiFactory.CreateTextBox(320);
+            _searchBox.Location = new Point(0, 16);
             _searchBox.Placeholder = "Search product or brand…";
-            _searchBox.MaxLength = 100;
+            _searchBox.MaxLength = 150;
             _searchBox.TextChanged += (s, e) => ApplyFilters();
 
-            // Wider label so "Category:" isn't clipped.
             var lblCategory = new Label
             {
                 Text = "Category:",
                 Font = Theme.FontSmall,
                 ForeColor = Theme.TextSecondary,
                 AutoSize = false,
-                Size = new Size(80, 20),
-                Location = new Point(276, 24),
+                Size = new Size(80, 24),
+                Location = new Point(_searchBox.Right + 24, 24),
                 TextAlign = ContentAlignment.MiddleLeft,
                 BackColor = Color.Transparent
             };
 
-            // Wider dropdown so "All Categories" isn't clipped.
             _categoryFilter = new RoundedComboBox
             {
                 Width = 220,
-                Location = new Point(360, 12)
+                Location = new Point(lblCategory.Right + 8, 16)
             };
             _categoryFilter.SelectedIndexChanged += (s, e) => ApplyFilters();
 
@@ -96,9 +109,9 @@ namespace TodangMotor.Controls
                 Font = Theme.FontSmall,
                 ForeColor = Theme.TextSecondary,
                 AutoSize = false,
-                Location = new Point(4, 58),
-                Height = 20,
-                Width = 700,
+                Location = new Point(_categoryFilter.Right + 24, 26),
+                Height = 24,
+                Width = 500,
                 TextAlign = ContentAlignment.MiddleLeft,
                 Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right,
                 BackColor = Color.Transparent
@@ -117,11 +130,79 @@ namespace TodangMotor.Controls
             _grid = new DataGridView
             {
                 Dock = DockStyle.Fill,
-                Margin = new Padding(0, 4, 0, 4)
+                Margin = new Padding(0, 8, 0, 0)
             };
-            UiFactory.StyleGrid(_grid);
-            _grid.AlternatingRowsDefaultCellStyle.BackColor = Color.FromArgb(248, 249, 251);
+            UiFactory.StyleGridModern(_grid);
+            _grid.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.None;
+
+            PrimeGridColumns();
+
+            _grid.Resize += (s, e) => FitProductColumn();
+
             return _grid;
+        }
+
+        private void PrimeGridColumns()
+        {
+            _grid.AutoGenerateColumns = false;
+            _grid.Columns.Clear();
+            _grid.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.None;
+
+            void AddTextCol(string prop, string header, int width, bool readOnly,
+                DataGridViewContentAlignment align = DataGridViewContentAlignment.MiddleLeft)
+            {
+                var col = new DataGridViewTextBoxColumn
+                {
+                    Name = prop,
+                    DataPropertyName = prop,
+                    HeaderText = header,
+                    Width = width,
+                    ReadOnly = readOnly,
+                    SortMode = DataGridViewColumnSortMode.NotSortable,
+                    Resizable = DataGridViewTriState.False
+                };
+                if (align != DataGridViewContentAlignment.MiddleLeft)
+                    col.DefaultCellStyle.Alignment = align;
+                _grid.Columns.Add(col);
+            }
+
+            // Text columns — left aligned
+            AddTextCol("Product", "Product", 400, true);
+            AddTextCol("Brand", "Brand", ColBrandW, true);
+
+            // Unit — center
+            AddTextCol("Unit", "Unit", ColUnitW, true, DataGridViewContentAlignment.MiddleCenter);
+
+            // Price — right
+            AddTextCol("SellingPrice", "Price (₱)", ColPriceW, true, DataGridViewContentAlignment.MiddleRight);
+
+            // Numbers — right
+            AddTextCol("OnHand", "On Hand", ColOnHandW, true, DataGridViewContentAlignment.MiddleRight);
+            AddTextCol("ReorderAt", "Reorder", ColReorderW, true, DataGridViewContentAlignment.MiddleRight);
+
+            // Status — center
+            AddTextCol("StockStatus", "Stock Status", ColStatusW, true, DataGridViewContentAlignment.MiddleCenter);
+
+            _grid.Columns.Add(new DataGridViewTextBoxColumn
+            {
+                Name = "ProductId",
+                DataPropertyName = "ProductId",
+                Visible = false
+            });
+        }
+
+        private void FitProductColumn()
+        {
+            if (_grid == null || !_grid.Columns.Contains("Product")) return;
+
+            int others =
+                ColBrandW + ColUnitW + ColPriceW +
+                ColOnHandW + ColReorderW + ColStatusW;
+
+            int available = _grid.ClientSize.Width - others - 24;
+            if (available < 220) available = 220;
+
+            _grid.Columns["Product"].Width = available;
         }
 
         // ============================================================
@@ -220,39 +301,37 @@ namespace TodangMotor.Controls
             if (_grid.Columns.Contains("ProductId"))
                 _grid.Columns["ProductId"].Visible = false;
 
-            void SetWeight(string col, int weight, string header = null)
-            {
-                if (!_grid.Columns.Contains(col)) return;
-                _grid.Columns[col].FillWeight = weight;
-                if (header != null) _grid.Columns[col].HeaderText = header;
-            }
-
-            SetWeight("Product", 240, "Product");
-            SetWeight("Brand", 140, "Brand");
-            SetWeight("Unit", 60, "Unit");
-            SetWeight("SellingPrice", 110, "Price (PHP)");
-            SetWeight("OnHand", 80, "On Hand");
-            SetWeight("ReorderAt", 80, "Reorder At");
-            SetWeight("StockStatus", 110, "Stock Status");
-
             if (_grid.Rows.Count > 0)
                 _grid.ClearSelection();
 
+            // Color-code Stock Status per row
             foreach (DataGridViewRow row in _grid.Rows)
             {
                 if (row.Cells["StockStatus"].Value is string status)
                 {
                     if (status == "Out of stock")
+                    {
                         row.Cells["StockStatus"].Style.ForeColor = Theme.Danger;
+                        row.Cells["StockStatus"].Style.Font = Theme.FontBodyBold;
+                    }
                     else if (status == "Low")
+                    {
                         row.Cells["StockStatus"].Style.ForeColor = Color.FromArgb(200, 130, 40);
+                        row.Cells["StockStatus"].Style.Font = Theme.FontBodyBold;
+                    }
                     else
+                    {
                         row.Cells["StockStatus"].Style.ForeColor = Theme.Success;
+                        row.Cells["StockStatus"].Style.Font = Theme.FontBody;
+                    }
                 }
             }
 
             _countLabel.ForeColor = Theme.TextSecondary;
             _countLabel.Text = $"Showing {rows.Count} of {_allProducts.Count} active product(s)";
+
+            // Recalculate Product width after data changes
+            FitProductColumn();
         }
     }
 }

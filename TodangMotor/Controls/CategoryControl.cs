@@ -12,30 +12,24 @@ using TodangMotor.Services;
 namespace TodangMotor.Controls
 {
     /// <summary>
-    /// Category management view — list + toolbar, lives inside the
-    /// Owner dashboard content area as a UserControl.
-    /// Single-record Add/Edit is delegated to CategoryForm (popup).
+    /// Category management view. Add via popup; Edit / Deactivate / Reactivate
+    /// via per-row icon actions.
     /// </summary>
     public class CategoryControl : UserControl
     {
-        // ============================================================
-        // SERVICES
-        // ============================================================
-
         private readonly CategoryService _categoryService;
-
-        // ============================================================
-        // STATE
-        // ============================================================
 
         private List<Category> _allCategories = new();
 
         private bool _isLoaded;
-        private bool _isBusy;
 
-        // ============================================================
-        // UI CONTROLS
-        // ============================================================
+        // Icons (Segoe MDL2 Assets)
+        private const string PencilIcon = "\uE70F";
+        private const string BanIcon = "\uE711";
+        private const string CheckIcon = "\uE73E";
+
+        private const int ColStatusW = 140;
+        private const int ColActionW = 60;
 
         private RoundedTextBox _searchBox;
         private RoundedComboBox _statusFilter;
@@ -44,15 +38,7 @@ namespace TodangMotor.Controls
         private DataGridView _grid;
 
         private Button _btnAdd;
-        private Button _btnEdit;
-        private Button _btnDeactivate;
-        private Button _btnReactivate;
-
         private Label _statusLabel;
-
-        // ============================================================
-        // CONSTRUCTION
-        // ============================================================
 
         public CategoryControl()
         {
@@ -60,7 +46,7 @@ namespace TodangMotor.Controls
 
             Dock = DockStyle.Fill;
             BackColor = Theme.Background;
-            Padding = new Padding(Theme.SpacingLg);
+            Padding = new Padding(UiFactory.PagePadding);
 
             BuildLayout();
 
@@ -80,11 +66,9 @@ namespace TodangMotor.Controls
 
         private void BuildLayout()
         {
-            // Add Fill control FIRST so it docks LAST and takes only the
-            // space left after Top/Bottom take theirs.
-            Controls.Add(BuildGrid());        // Fill
-            Controls.Add(BuildBottomBar());   // Bottom
-            Controls.Add(BuildFilterBar());   // Top
+            Controls.Add(BuildGrid());
+            Controls.Add(BuildBottomBar());
+            Controls.Add(BuildFilterBar());
         }
 
         private Panel BuildFilterBar()
@@ -92,12 +76,12 @@ namespace TodangMotor.Controls
             var bar = new Panel
             {
                 Dock = DockStyle.Top,
-                Height = 96,
+                Height = 108,
                 BackColor = Theme.Background
             };
 
             _searchBox = UiFactory.CreateTextBox(320);
-            _searchBox.Location = new Point(4, 12);
+            _searchBox.Location = new Point(0, 16);
             _searchBox.Placeholder = "Search category name…";
             _searchBox.MaxLength = 100;
             _searchBox.TextChanged += (s, e) => ApplyFilters();
@@ -107,15 +91,17 @@ namespace TodangMotor.Controls
                 Text = "Status:",
                 Font = Theme.FontSmall,
                 ForeColor = Theme.TextSecondary,
-                AutoSize = true,
-                Location = new Point(344, 24),
+                AutoSize = false,
+                Size = new Size(56, 24),
+                Location = new Point(_searchBox.Right + 24, 24),
+                TextAlign = ContentAlignment.MiddleLeft,
                 BackColor = Color.Transparent
             };
 
             _statusFilter = new RoundedComboBox
             {
-                Width = 150,
-                Location = new Point(397, 18)
+                Width = 160,
+                Location = new Point(lblStatus.Right + 8, 16)
             };
             _statusFilter.Items.Add("Active");
             _statusFilter.Items.Add("Inactive");
@@ -129,8 +115,8 @@ namespace TodangMotor.Controls
                 Font = Theme.FontSmall,
                 ForeColor = Theme.TextSecondary,
                 AutoSize = false,
-                Location = new Point(4, 68),
-                Height = 20,
+                Location = new Point(0, 76),
+                Height = 22,
                 Width = 700,
                 TextAlign = ContentAlignment.MiddleLeft,
                 Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right,
@@ -150,13 +136,171 @@ namespace TodangMotor.Controls
             _grid = new DataGridView
             {
                 Dock = DockStyle.Fill,
-                Margin = new Padding(0, 4, 0, 4)
+                Margin = new Padding(0, 8, 0, 0)
             };
-            UiFactory.StyleGrid(_grid);
-            _grid.AlternatingRowsDefaultCellStyle.BackColor = Color.FromArgb(248, 249, 251);
+            UiFactory.StyleGridModern(_grid);
+            _grid.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.None;
             _grid.CellDoubleClick += Grid_CellDoubleClick;
+            _grid.CellClick += Grid_CellClick;
+            _grid.CellPainting += Grid_CellPainting;
+            _grid.CellMouseEnter += Grid_CellMouseEnter;
+            _grid.CellMouseLeave += (s, e) => _grid.Cursor = Cursors.Default;
             _grid.KeyDown += Grid_KeyDown;
+
+            PrimeGridColumns();
+            _grid.Resize += (s, e) => FitCategoryColumn();
+
             return _grid;
+        }
+
+        private void PrimeGridColumns()
+        {
+            _grid.AutoGenerateColumns = false;
+            _grid.Columns.Clear();
+            _grid.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.None;
+
+            void AddTextCol(string prop, string header, int width, bool readOnly,
+                DataGridViewContentAlignment align = DataGridViewContentAlignment.MiddleLeft)
+            {
+                var col = new DataGridViewTextBoxColumn
+                {
+                    Name = prop,
+                    DataPropertyName = prop,
+                    HeaderText = header,
+                    Width = width,
+                    ReadOnly = readOnly,
+                    SortMode = DataGridViewColumnSortMode.NotSortable,
+                    Resizable = DataGridViewTriState.False
+                };
+                if (align != DataGridViewContentAlignment.MiddleLeft)
+                    col.DefaultCellStyle.Alignment = align;
+                _grid.Columns.Add(col);
+            }
+
+            AddTextCol("CategoryName", "Category", 500, true);
+            AddTextCol("Status", "Status", ColStatusW, true, DataGridViewContentAlignment.MiddleCenter);
+
+            // Edit — pencil icon
+            _grid.Columns.Add(new DataGridViewTextBoxColumn
+            {
+                Name = "EditIcon",
+                HeaderText = "",
+                Width = ColActionW,
+                ReadOnly = true,
+                SortMode = DataGridViewColumnSortMode.NotSortable,
+                Resizable = DataGridViewTriState.False
+            });
+
+            // Toggle — ban (active) / check (inactive)
+            _grid.Columns.Add(new DataGridViewTextBoxColumn
+            {
+                Name = "ToggleIcon",
+                HeaderText = "",
+                Width = ColActionW,
+                ReadOnly = true,
+                SortMode = DataGridViewColumnSortMode.NotSortable,
+                Resizable = DataGridViewTriState.False
+            });
+
+            _grid.Columns.Add(new DataGridViewTextBoxColumn
+            {
+                Name = "CategoryId",
+                DataPropertyName = "CategoryId",
+                Visible = false
+            });
+        }
+
+        private void FitCategoryColumn()
+        {
+            if (_grid == null || !_grid.Columns.Contains("CategoryName")) return;
+
+            int others = ColStatusW + ColActionW + ColActionW;
+            int available = _grid.ClientSize.Width - others - 24;
+            if (available < 220) available = 220;
+
+            _grid.Columns["CategoryName"].Width = available;
+        }
+
+        private void Grid_CellPainting(object? sender, DataGridViewCellPaintingEventArgs e)
+        {
+            if (e.RowIndex < 0 || e.ColumnIndex < 0) return;
+
+            string colName = _grid.Columns[e.ColumnIndex].Name;
+            if (colName != "EditIcon" && colName != "ToggleIcon") return;
+
+            e.PaintBackground(e.CellBounds, true);
+
+            string glyph;
+            Color color;
+
+            if (colName == "EditIcon")
+            {
+                glyph = PencilIcon;
+                color = Theme.Primary;
+            }
+            else
+            {
+                string status = _grid.Rows[e.RowIndex].Cells["Status"].Value?.ToString() ?? "";
+                bool isActive = status == "Active";
+
+                if (isActive)
+                {
+                    glyph = BanIcon;
+                    color = Color.FromArgb(200, 130, 40);
+                }
+                else
+                {
+                    glyph = CheckIcon;
+                    color = Theme.Success;
+                }
+            }
+
+            using var font = new Font(Theme.IconFontFamily, 14F, FontStyle.Regular);
+            TextRenderer.DrawText(
+                e.Graphics,
+                glyph,
+                font,
+                e.CellBounds,
+                color,
+                TextFormatFlags.HorizontalCenter |
+                TextFormatFlags.VerticalCenter |
+                TextFormatFlags.NoPrefix);
+
+            e.Handled = true;
+        }
+
+        private void Grid_CellMouseEnter(object? sender, DataGridViewCellEventArgs e)
+        {
+            if (e.RowIndex < 0 || e.ColumnIndex < 0) return;
+            string colName = _grid.Columns[e.ColumnIndex].Name;
+            _grid.Cursor = (colName == "EditIcon" || colName == "ToggleIcon")
+                ? Cursors.Hand
+                : Cursors.Default;
+        }
+
+        private void Grid_CellClick(object? sender, DataGridViewCellEventArgs e)
+        {
+            if (e.RowIndex < 0 || e.ColumnIndex < 0) return;
+
+            string colName = _grid.Columns[e.ColumnIndex].Name;
+            if (colName != "EditIcon" && colName != "ToggleIcon") return;
+
+            var idCell = _grid.Rows[e.RowIndex].Cells["CategoryId"];
+            if (idCell?.Value == null) return;
+
+            int id = Convert.ToInt32(idCell.Value);
+            var category = _allCategories.FirstOrDefault(c => c.CategoryId == id);
+            if (category == null) return;
+
+            if (colName == "EditIcon")
+            {
+                OpenCategoryFormForEdit(category);
+            }
+            else
+            {
+                if (category.IsActive) _ = DeactivateCategoryAsync(category);
+                else _ = ReactivateCategoryAsync(category);
+            }
         }
 
         private Panel BuildBottomBar()
@@ -164,25 +308,13 @@ namespace TodangMotor.Controls
             var bar = new Panel
             {
                 Dock = DockStyle.Bottom,
-                Height = 68,
+                Height = 88,
                 BackColor = Theme.Background
             };
 
-            _btnAdd = UiFactory.CreateButton("Add New", UiFactory.ButtonStyle.Primary, 110, 40);
-            _btnAdd.Location = new Point(4, 12);
+            _btnAdd = UiFactory.CreateButton("Add New", UiFactory.ButtonStyle.Primary, 140, UiFactory.PrimaryButtonHeight);
+            _btnAdd.Location = new Point(0, 20);
             _btnAdd.Click += (s, e) => OpenCategoryFormForAdd();
-
-            _btnEdit = UiFactory.CreateButton("Edit", UiFactory.ButtonStyle.Secondary, 90, 40);
-            _btnEdit.Location = new Point(122, 12);
-            _btnEdit.Click += (s, e) => EditSelectedCategory();
-
-            _btnDeactivate = UiFactory.CreateButton("Deactivate", UiFactory.ButtonStyle.Ghost, 110, 40);
-            _btnDeactivate.Location = new Point(220, 12);
-            _btnDeactivate.Click += async (s, e) => await DeactivateSelectedCategoryAsync();
-
-            _btnReactivate = UiFactory.CreateButton("Reactivate", UiFactory.ButtonStyle.Ghost, 110, 40);
-            _btnReactivate.Location = new Point(338, 12);
-            _btnReactivate.Click += async (s, e) => await ReactivateSelectedCategoryAsync();
 
             _statusLabel = new Label
             {
@@ -190,25 +322,22 @@ namespace TodangMotor.Controls
                 Font = Theme.FontSmall,
                 ForeColor = Theme.TextSecondary,
                 AutoSize = false,
-                Location = new Point(468, 12),
-                Height = 40,
-                Width = 500,
+                Location = new Point(_btnAdd.Right + 24, 20),
+                Height = UiFactory.PrimaryButtonHeight,
+                Width = 600,
                 TextAlign = ContentAlignment.MiddleLeft,
                 Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right,
                 BackColor = Color.Transparent
             };
 
             bar.Controls.Add(_btnAdd);
-            bar.Controls.Add(_btnEdit);
-            bar.Controls.Add(_btnDeactivate);
-            bar.Controls.Add(_btnReactivate);
             bar.Controls.Add(_statusLabel);
 
             return bar;
         }
 
         // ============================================================
-        // DATA LOAD
+        // DATA
         // ============================================================
 
         private async Task ReloadAllAsync()
@@ -225,10 +354,6 @@ namespace TodangMotor.Controls
                 SetBusy(false);
             }
         }
-
-        // ============================================================
-        // FILTERS + GRID BINDING
-        // ============================================================
 
         private void ApplyFilters()
         {
@@ -261,9 +386,25 @@ namespace TodangMotor.Controls
                 .ToList();
 
             _grid.DataSource = rows;
-            ApplyColumnLayout();
-            ClearSelection();
+
+            if (_grid.Columns.Contains("CategoryId"))
+                _grid.Columns["CategoryId"].Visible = false;
+
+            if (_grid.Rows.Count > 0)
+                _grid.ClearSelection();
+
+            foreach (DataGridViewRow row in _grid.Rows)
+            {
+                if (row.Cells["Status"].Value is string s)
+                {
+                    row.Cells["Status"].Style.ForeColor =
+                        s == "Active" ? Theme.Success : Theme.TextMuted;
+                    row.Cells["Status"].Style.Font = Theme.FontBodyBold;
+                }
+            }
+
             UpdateCountLabel(rows.Count);
+            FitCategoryColumn();
         }
 
         private void UpdateCountLabel(int shownCount)
@@ -282,49 +423,6 @@ namespace TodangMotor.Controls
                 $"Active: {active}   Inactive: {inactive}";
         }
 
-        private void ApplyColumnLayout()
-        {
-            if (_grid == null || _grid.Columns.Count == 0) return;
-
-            _grid.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill;
-
-            void SetWeight(string col, int weight, string header = null)
-            {
-                if (!_grid.Columns.Contains(col)) return;
-                _grid.Columns[col].FillWeight = weight;
-                if (header != null) _grid.Columns[col].HeaderText = header;
-            }
-
-            if (_grid.Columns.Contains("CategoryId"))
-                _grid.Columns["CategoryId"].Visible = false;
-
-            SetWeight("CategoryName", 400, "Category");
-            SetWeight("Status", 120, "Status");
-        }
-
-        private void ClearSelection()
-        {
-            if (_grid != null && _grid.Rows.Count > 0)
-                _grid.ClearSelection();
-        }
-
-        // ============================================================
-        // SELECTION HELPERS
-        // ============================================================
-
-        private Category? GetSelectedCategory()
-        {
-            if (_grid == null || _grid.SelectedRows.Count == 0) return null;
-            var row = _grid.SelectedRows[0];
-            if (!_grid.Columns.Contains("CategoryId")) return null;
-
-            var value = row.Cells["CategoryId"].Value;
-            if (value == null) return null;
-
-            int id = Convert.ToInt32(value);
-            return _allCategories.FirstOrDefault(c => c.CategoryId == id);
-        }
-
         // ============================================================
         // ROW EVENTS
         // ============================================================
@@ -332,16 +430,27 @@ namespace TodangMotor.Controls
         private void Grid_CellDoubleClick(object sender, DataGridViewCellEventArgs e)
         {
             if (e.RowIndex < 0) return;
-            EditSelectedCategory();
+
+            var idCell = _grid.Rows[e.RowIndex].Cells["CategoryId"];
+            if (idCell?.Value == null) return;
+
+            int id = Convert.ToInt32(idCell.Value);
+            var category = _allCategories.FirstOrDefault(c => c.CategoryId == id);
+            if (category != null) OpenCategoryFormForEdit(category);
         }
 
         private void Grid_KeyDown(object sender, KeyEventArgs e)
         {
-            if (e.KeyCode == Keys.Enter)
-            {
-                e.SuppressKeyPress = true;
-                EditSelectedCategory();
-            }
+            if (e.KeyCode != Keys.Enter) return;
+            e.SuppressKeyPress = true;
+
+            if (_grid.CurrentRow == null) return;
+            var idCell = _grid.CurrentRow.Cells["CategoryId"];
+            if (idCell?.Value == null) return;
+
+            int id = Convert.ToInt32(idCell.Value);
+            var category = _allCategories.FirstOrDefault(c => c.CategoryId == id);
+            if (category != null) OpenCategoryFormForEdit(category);
         }
 
         // ============================================================
@@ -355,9 +464,7 @@ namespace TodangMotor.Controls
                 var parent = FindForm();
                 using var form = new Forms.CategoryForm();
                 if (form.ShowDialog(parent) == DialogResult.OK)
-                {
                     _ = ReloadAllAsync();
-                }
             }
             catch (Exception ex)
             {
@@ -365,23 +472,14 @@ namespace TodangMotor.Controls
             }
         }
 
-        private void EditSelectedCategory()
+        private void OpenCategoryFormForEdit(Category category)
         {
-            var c = GetSelectedCategory();
-            if (c == null)
-            {
-                ShowStatus("Please select a category first.", isError: true);
-                return;
-            }
-
             try
             {
                 var parent = FindForm();
-                using var form = new Forms.CategoryForm(c);
+                using var form = new Forms.CategoryForm(category);
                 if (form.ShowDialog(parent) == DialogResult.OK)
-                {
                     _ = ReloadAllAsync();
-                }
             }
             catch (Exception ex)
             {
@@ -393,20 +491,8 @@ namespace TodangMotor.Controls
         // DEACTIVATE / REACTIVATE
         // ============================================================
 
-        private async Task DeactivateSelectedCategoryAsync()
+        private async Task DeactivateCategoryAsync(Category c)
         {
-            var c = GetSelectedCategory();
-            if (c == null)
-            {
-                ShowStatus("Please select a category first.", isError: true);
-                return;
-            }
-            if (!c.IsActive)
-            {
-                ShowStatus("This category is already inactive.", isError: true);
-                return;
-            }
-
             var confirm = MessageBox.Show(
                 $"Are you sure you want to deactivate \"{c.CategoryName}\"?",
                 "Confirm Deactivate",
@@ -434,20 +520,8 @@ namespace TodangMotor.Controls
             }
         }
 
-        private async Task ReactivateSelectedCategoryAsync()
+        private async Task ReactivateCategoryAsync(Category c)
         {
-            var c = GetSelectedCategory();
-            if (c == null)
-            {
-                ShowStatus("Please select a category first.", isError: true);
-                return;
-            }
-            if (c.IsActive)
-            {
-                ShowStatus("This category is already active.", isError: true);
-                return;
-            }
-
             SetBusy(true);
             try
             {
@@ -474,11 +548,8 @@ namespace TodangMotor.Controls
 
         private void SetBusy(bool busy)
         {
-            _isBusy = busy;
             _btnAdd.Enabled = !busy;
-            _btnEdit.Enabled = !busy;
-            _btnDeactivate.Enabled = !busy;
-            _btnReactivate.Enabled = !busy;
+            _grid.Enabled = !busy;
         }
 
         private void ShowStatus(string message, bool isError)

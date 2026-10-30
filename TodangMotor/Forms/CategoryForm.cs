@@ -8,11 +8,6 @@ using TodangMotor.Services;
 
 namespace TodangMotor.Forms
 {
-    /// <summary>
-    /// Single-record Category editor popup.
-    /// Add mode: CategoryForm()
-    /// Edit mode: CategoryForm(existingCategory)
-    /// </summary>
     public class CategoryForm : ShellForm
     {
         private readonly CategoryService _categoryService;
@@ -20,14 +15,14 @@ namespace TodangMotor.Forms
         private readonly Category? _categoryToEdit;
         private bool IsEditMode => _categoryToEdit != null;
 
-        private RoundedTextBox _txtCategoryName;
-        private Button _btnSave;
-        private Button _btnCancel;
-        private Label _lblStatus;
+        private RoundedTextBox _txtCategoryName = null!;
+        private Button _btnSave = null!;
+        private Button _btnCancel = null!;
+        private Label _lblStatus = null!;
 
-        // ============================================================
-        // CONSTRUCTION
-        // ============================================================
+        private const int PadX = 32;
+        private const int LabelH = 22;
+        private const int FieldH = 44;
 
         public CategoryForm(Category? categoryToEdit = null)
         {
@@ -38,8 +33,8 @@ namespace TodangMotor.Forms
             ShowMaximizeButton = false;
             ShowMinimizeButton = true;
             StartPosition = FormStartPosition.CenterParent;
-            ClientSize = new Size(520, 280);
-            MinimumSize = new Size(500, 260);
+            ClientSize = new Size(520, 340);
+            MinimumSize = new Size(500, 320);
             BackColor = Theme.Background;
             KeyPreview = true;
 
@@ -49,23 +44,39 @@ namespace TodangMotor.Forms
             KeyDown += CategoryForm_KeyDown;
         }
 
-        // ============================================================
-        // LAYOUT
-        // ============================================================
-
         private void BuildLayout()
         {
-            // ---- Footer panel (docked bottom, holds buttons) ----
+            // ---------- Footer ----------
             var footer = new Panel
             {
                 Dock = DockStyle.Bottom,
-                Height = 68,
-                BackColor = Theme.Background,
-                Padding = new Padding(0)
+                Height = 88,
+                BackColor = Theme.Background
             };
 
-            const int btnW = 110;
-            const int btnH = 40;
+            var divider = new Panel
+            {
+                Dock = DockStyle.Top,
+                Height = 1,
+                BackColor = Theme.Divider
+            };
+            footer.Controls.Add(divider);
+
+            int btnW = 140;
+            int btnH = UiFactory.PrimaryButtonHeight;
+
+            _lblStatus = new Label
+            {
+                Text = string.Empty,
+                Font = Theme.FontSmall,
+                ForeColor = Theme.Danger,
+                AutoSize = false,
+                Location = new Point(PadX, 22),
+                Height = btnH,
+                TextAlign = ContentAlignment.MiddleLeft,
+                BackColor = Color.Transparent,
+                Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right
+            };
 
             _btnSave = UiFactory.CreateButton("Save", UiFactory.ButtonStyle.Primary, btnW, btnH);
             _btnSave.Anchor = AnchorStyles.Top | AnchorStyles.Right;
@@ -75,62 +86,48 @@ namespace TodangMotor.Forms
             _btnCancel.Anchor = AnchorStyles.Top | AnchorStyles.Right;
             _btnCancel.Click += (s, e) => { DialogResult = DialogResult.Cancel; Close(); };
 
+            footer.Controls.Add(_lblStatus);
             footer.Controls.Add(_btnSave);
             footer.Controls.Add(_btnCancel);
 
             footer.Resize += (s, e) =>
             {
-                int rightPad = 32;
-                _btnSave.Location = new Point(
-                    footer.ClientSize.Width - rightPad - btnW, 14);
-                _btnCancel.Location = new Point(
-                    footer.ClientSize.Width - rightPad - btnW - 8 - btnW, 14);
+                _btnSave.Location = new Point(footer.ClientSize.Width - PadX - btnW, 22);
+                _btnCancel.Location = new Point(footer.ClientSize.Width - PadX - btnW - 8 - btnW, 22);
+                _lblStatus.Width = Math.Max(100,
+                    footer.ClientSize.Width - PadX - btnW * 2 - 8 - PadX - 16);
             };
 
-            // ---- Content area above the footer ----
-            const int padX = 32;
-            const int labelY = 30;
-            const int fieldY = 56;
+            ContentPanel.Controls.Add(footer);
 
-            int fieldW = ClientSize.Width - padX * 2;
+            // ---------- Body ----------
+            int fieldW = ClientSize.Width - PadX * 2;
+            int y = 32;
 
-            var lblName = new Label
+            AddFieldLabel("Category Name", PadX, y, fieldW);
+
+            _txtCategoryName = UiFactory.CreateTextBox(fieldW);
+            _txtCategoryName.Location = new Point(PadX, y + LabelH + 4);
+            _txtCategoryName.MaxLength = 100;
+            _txtCategoryName.Placeholder = "e.g. Engine Parts";
+            ContentPanel.Controls.Add(_txtCategoryName);
+        }
+
+        private void AddFieldLabel(string text, int x, int y, int width)
+        {
+            var lbl = new Label
             {
-                Text = "Category Name:",
+                Text = text,
                 Font = Theme.FontSmall,
                 ForeColor = Theme.TextSecondary,
                 AutoSize = false,
-                Size = new Size(220, 18),
-                Location = new Point(padX, labelY),
+                Location = new Point(x, y),
+                Size = new Size(width, LabelH),
                 TextAlign = ContentAlignment.MiddleLeft,
                 BackColor = Color.Transparent
             };
-
-            _txtCategoryName = UiFactory.CreateTextBox(fieldW);
-            _txtCategoryName.Location = new Point(padX, fieldY);
-            _txtCategoryName.MaxLength = 100;
-
-            _lblStatus = new Label
-            {
-                Text = string.Empty,
-                Font = Theme.FontSmall,
-                ForeColor = Theme.Danger,
-                AutoSize = false,
-                Location = new Point(padX, fieldY + 50),
-                Size = new Size(fieldW, 44),
-                TextAlign = ContentAlignment.TopLeft,
-                BackColor = Color.Transparent
-            };
-
-            ContentPanel.Controls.Add(lblName);
-            ContentPanel.Controls.Add(_txtCategoryName);
-            ContentPanel.Controls.Add(_lblStatus);
-            ContentPanel.Controls.Add(footer);
+            ContentPanel.Controls.Add(lbl);
         }
-
-        // ============================================================
-        // LOAD
-        // ============================================================
 
         private void CategoryForm_Load(object? sender, EventArgs e)
         {
@@ -148,12 +145,9 @@ namespace TodangMotor.Forms
             }
         }
 
-        // ============================================================
-        // SAVE
-        // ============================================================
-
         private async System.Threading.Tasks.Task SaveAsync()
         {
+            _lblStatus.Text = string.Empty;
             SetBusy(true);
             try
             {
@@ -186,10 +180,6 @@ namespace TodangMotor.Forms
             }
         }
 
-        // ============================================================
-        // EVENTS
-        // ============================================================
-
         private void CategoryForm_KeyDown(object? sender, KeyEventArgs e)
         {
             if (e.KeyCode == Keys.Escape)
@@ -198,10 +188,6 @@ namespace TodangMotor.Forms
                 Close();
             }
         }
-
-        // ============================================================
-        // HELPERS
-        // ============================================================
 
         private void SetBusy(bool busy)
         {

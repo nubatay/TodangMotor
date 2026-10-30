@@ -1,3 +1,5 @@
 <Solution>
+  <Project Path="TodangMotor.Core/TodangMotor.Core.csproj" Id="9c958799-50ba-4113-bf17-9bf30b918d60" />
+  <Project Path="TodangMotor.WPF/TodangMotor.WPF.csproj" Id="0339a3fc-e583-439d-8ef8-63c266b99fc7" />
   <Project Path="TodangMotor/TodangMotor.csproj" />
 </Solution>

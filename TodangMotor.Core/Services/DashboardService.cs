@@ -5,6 +5,7 @@ using System.Threading.Tasks;
 using TodangMotor.Common;
 using TodangMotor.Data;
 using TodangMotor.Models;
+using static TodangMotor.Services.DashboardService;
 
 namespace TodangMotor.Services
 {
@@ -50,7 +51,7 @@ namespace TodangMotor.Services
 
         // ---- Lists ----
         public List<TopProductRow> TopProducts { get; set; } = new();
-        public List<Sale> RecentSales { get; set; } = new();
+        public List<RecentSaleDisplay> RecentSales { get; set; } = new();
         public List<Product> LowStockAlerts { get; set; } = new();
     }
 
@@ -67,6 +68,12 @@ namespace TodangMotor.Services
         {
             _productRepository = new ProductRepository();
             _saleRepository = new SaleRepository();
+        }
+
+        public class RecentSaleDisplay
+        {
+            public Sale Sale { get; set; } = new();
+            public string ItemsSummary { get; set; } = string.Empty;
         }
 
         // ============================================================
@@ -139,17 +146,30 @@ namespace TodangMotor.Services
                 snapshot.SalesByCategory = await _saleRepository.GetSalesByCategoryAsync(from, toExclusive);
                 snapshot.PaymentSplit = await _saleRepository.GetPaymentMethodSplitAsync(from, toExclusive);
 
+                // ---- Fetch all products for mapping (moved up so we can build item summaries) ----
+                var allProducts = await _productRepository.GetAllAsync();
+                var productMap = allProducts.ToDictionary(p => p.ProductId, p => p.ProductName);
+
                 // ---- Recent sales in range ----
                 var allSales = await _saleRepository.GetAllAsync();
-                snapshot.RecentSales = allSales
+                var recentSales = allSales
                     .Where(s => s.SaleDate >= from && s.SaleDate < toExclusive)
                     .OrderByDescending(s => s.SaleDate)
                     .ThenByDescending(s => s.SaleId)
                     .Take(5)
                     .ToList();
 
+                var displaySales = new List<RecentSaleDisplay>();
+                foreach (var s in recentSales)
+                {
+                    var items = await _saleRepository.GetItemsAsync(s.SaleId);
+                    var summary = string.Join(", ", items.Select(i =>
+                        $"{i.Quantity}x {(productMap.TryGetValue(i.ProductId, out var name) ? name : "Item")}"));
+                    displaySales.Add(new RecentSaleDisplay { Sale = s, ItemsSummary = summary });
+                }
+                snapshot.RecentSales = displaySales;
+
                 // ---- Always-current product stats ----
-                var allProducts = await _productRepository.GetAllAsync();
                 var activeProducts = allProducts.Where(p => p.IsActive).ToList();
 
                 snapshot.TotalProducts = activeProducts.Count;

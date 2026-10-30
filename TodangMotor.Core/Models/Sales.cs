@@ -29,6 +29,7 @@
 
         /// <summary>Payment method used. Either "Cash" or "GCash".</summary>
         public string PaymentMethod { get; set; } = string.Empty;
+        public string? ReferenceNo { get; set; }
 
         /// <summary>Sum of all line totals, before payment is applied.</summary>
         public decimal Subtotal { get; set; }

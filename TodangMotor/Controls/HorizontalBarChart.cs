@@ -141,8 +141,7 @@ namespace TodangMotor.Controls
             int labelWidth = usableWidth - ValueWidthPx;
 
             // ---- Top line: label + sub-label ----
-            using var labelFont = new Font(Theme.UiFontFamily, 9F, FontStyle.Bold);
-            using var subFont = new Font(Theme.UiFontFamily, 8F, FontStyle.Regular);
+            using var labelFont = new Font(Theme.UiFontFamily, 10F, FontStyle.Bold);
             using var labelBrush = new SolidBrush(isHover ? Theme.Primary : Theme.TextPrimary);
             using var subBrush = new SolidBrush(Theme.TextMuted);
 
@@ -155,7 +154,7 @@ namespace TodangMotor.Controls
                 PaddingPx + BarLeftPx, y);
 
             // ---- Value on the right (top-right aligned with label row) ----
-            using var valueFont = new Font(Theme.UiFontFamily, 9F, FontStyle.Bold);
+            using var valueFont = new Font(Theme.UiFontFamily, 10F, FontStyle.Bold);
             using var valueBrush = new SolidBrush(isHover ? Theme.Primary : Theme.TextSecondary);
 
             string valueText = "₱" + bar.Value.ToString("N2");
