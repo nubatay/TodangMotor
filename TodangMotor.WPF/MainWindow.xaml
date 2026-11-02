@@ -146,7 +146,7 @@
                         </RadioButton>
 
                         <TextBlock Text="STOCK" Style="{StaticResource NavSection}"/>
-                        <RadioButton GroupName="Nav" Style="{StaticResource NavItem}">
+                        <RadioButton GroupName="Nav" Style="{StaticResource NavItem}" Command="{Binding NavigateToInventoriesCommand}">
                             <StackPanel Orientation="Horizontal">
                                 <ui:SymbolIcon Symbol="Archive24" FontSize="18"/>
                                 <TextBlock Text="Inventory" Margin="14,0,0,0" VerticalAlignment="Center"/>

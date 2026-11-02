@@ -16,6 +16,7 @@
             <conv:StringToVisibilityConverter x:Key="StringToVisibilityConverter" />
             <conv:StringToVisibilityConverterReverse x:Key="StringToVisibilityConverterReverse" />
             <conv:ActionIconConverter x:Key="ActionIconConverter" />
+            <conv:StringEqualsMultiConverter x:Key="StringEqualsMultiConverter" />
 
             <!-- Navigation DataTemplates -->
             <DataTemplate DataType="{x:Type vm:DashboardViewModel}">
@@ -45,6 +46,11 @@
             <!-- User View-->
             <DataTemplate DataType="{x:Type vm:UserViewModel}">
                 <views:UserView />
+            </DataTemplate>
+            
+            <!-- Inventory View -->
+            <DataTemplate DataType="{x:Type vm:InventoryViewModel}">
+                <views:InventoryView />
             </DataTemplate>
 
             <DataTemplate DataType="{x:Type vm:LoginViewModel}">

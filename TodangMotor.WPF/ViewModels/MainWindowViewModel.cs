@@ -15,11 +15,12 @@ namespace TodangMotor.WPF.ViewModels
         private readonly ItemsViewModel _itemsViewModel;
         private readonly CategoryViewModel _categoryViewModel;
         private readonly SupplierViewModel _supplierViewModel;
+        private readonly InventoryViewModel _inventoryViewModel;
 
         private readonly UserViewModel _userViewModel;
 
         public MainWindowViewModel(DashboardViewModel dashboard, PosViewModel pos, LoginViewModel login, ItemsViewModel items, CategoryViewModel categories, SupplierViewModel suppliers,
-            UserViewModel users)
+            UserViewModel users, InventoryViewModel inventory)
         {
             _dashboardViewModel = dashboard;
             _posViewModel = pos;
@@ -28,6 +29,7 @@ namespace TodangMotor.WPF.ViewModels
             _categoryViewModel = categories;
             _supplierViewModel = suppliers;
             _userViewModel = users;
+            _inventoryViewModel = inventory;
 
             CurrentViewModel = _loginViewModel;
             IsLoggedIn = false;
@@ -92,6 +94,13 @@ namespace TodangMotor.WPF.ViewModels
         {
             CurrentViewModel = _userViewModel;
             _userViewModel.LoadDataCommand.Execute(null);
+        }
+
+        [RelayCommand]
+        private void NavigateToInventories()
+        {
+            CurrentViewModel = _inventoryViewModel;
+            _inventoryViewModel.LoadDataCommand.Execute(null);
         }
 
         [RelayCommand]
