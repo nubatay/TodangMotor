@@ -52,6 +52,11 @@
             <DataTemplate DataType="{x:Type vm:InventoryViewModel}">
                 <views:InventoryView />
             </DataTemplate>
+            
+            <!-- Settings View -->
+            <DataTemplate DataType="{x:Type vm:SettingsViewModel}">
+                <views:SettingsView />
+            </DataTemplate>
 
             <DataTemplate DataType="{x:Type vm:LoginViewModel}">
                 <views:LoginView />

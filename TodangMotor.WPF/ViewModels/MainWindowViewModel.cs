@@ -16,11 +16,20 @@ namespace TodangMotor.WPF.ViewModels
         private readonly CategoryViewModel _categoryViewModel;
         private readonly SupplierViewModel _supplierViewModel;
         private readonly InventoryViewModel _inventoryViewModel;
+        private readonly SettingsViewModel _settingsViewModel;
 
         private readonly UserViewModel _userViewModel;
 
-        public MainWindowViewModel(DashboardViewModel dashboard, PosViewModel pos, LoginViewModel login, ItemsViewModel items, CategoryViewModel categories, SupplierViewModel suppliers,
-            UserViewModel users, InventoryViewModel inventory)
+        public MainWindowViewModel(
+            DashboardViewModel dashboard, 
+            PosViewModel pos, 
+            LoginViewModel login, 
+            ItemsViewModel items, 
+            CategoryViewModel categories, 
+            SupplierViewModel suppliers,
+            UserViewModel users, 
+            InventoryViewModel inventory, 
+            SettingsViewModel settings)
         {
             _dashboardViewModel = dashboard;
             _posViewModel = pos;
@@ -30,12 +39,14 @@ namespace TodangMotor.WPF.ViewModels
             _supplierViewModel = suppliers;
             _userViewModel = users;
             _inventoryViewModel = inventory;
+            _settingsViewModel = settings;
 
             CurrentViewModel = _loginViewModel;
             IsLoggedIn = false;
 
             _loginViewModel.LoginSuccessful += OnLoginSuccessful;
             _dashboardViewModel.NavigateRequested += OnDashboardNavigateRequested;
+            _settingsViewModel = settings;
         }
 
         private void OnLoginSuccessful()
@@ -101,6 +112,13 @@ namespace TodangMotor.WPF.ViewModels
         {
             CurrentViewModel = _inventoryViewModel;
             _inventoryViewModel.LoadDataCommand.Execute(null);
+        }
+
+        [RelayCommand]
+        private void NavigateToSettings()
+        {
+            CurrentViewModel = _settingsViewModel; // Use the private field, not 'settings'
+            _settingsViewModel.RefreshBackupInfoCommand.Execute(null);
         }
 
         [RelayCommand]

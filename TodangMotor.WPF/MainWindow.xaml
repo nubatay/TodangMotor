@@ -178,7 +178,7 @@
                                 <TextBlock Text="Reports" Margin="14,0,0,0" VerticalAlignment="Center"/>
                             </StackPanel>
                         </RadioButton>
-                        <RadioButton GroupName="Nav" Style="{StaticResource NavItem}">
+                        <RadioButton GroupName="Nav" Style="{StaticResource NavItem}" Command="{Binding NavigateToSettingsCommand}">
                             <StackPanel Orientation="Horizontal">
                                 <ui:SymbolIcon Symbol="Settings24" FontSize="18"/>
                                 <TextBlock Text="Settings" Margin="14,0,0,0" VerticalAlignment="Center"/>
