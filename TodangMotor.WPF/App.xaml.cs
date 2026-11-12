@@ -4,6 +4,9 @@ using TodangMotor.Data;
 using TodangMotor.Services;
 using TodangMotor.WPF.ViewModels;
 using TodangMotor.WPF.Views;
+using System.Globalization;
+using System.Threading;
+using System.Windows.Markup;
 
 namespace TodangMotor.WPF
 {
@@ -13,6 +16,14 @@ namespace TodangMotor.WPF
 
         protected override void OnStartup(StartupEventArgs e)
         {
+            CultureInfo culture = new CultureInfo("en-PH");
+            Thread.CurrentThread.CurrentCulture = culture;
+            Thread.CurrentThread.CurrentUICulture = culture;
+
+            FrameworkElement.LanguageProperty.OverrideMetadata(
+                typeof(FrameworkElement),
+                new FrameworkPropertyMetadata(XmlLanguage.GetLanguage(culture.IetfLanguageTag)));
+
             base.OnStartup(e);
 
             var serviceCollection = new ServiceCollection();
@@ -21,8 +32,6 @@ namespace TodangMotor.WPF
             ServiceProvider = serviceCollection.BuildServiceProvider();
 
             var mainWindow = ServiceProvider.GetRequiredService<MainWindow>();
-
-            // THIS LINE IS CRUCIAL! If this is missing, the UI doesn't know about the ViewModels.
             mainWindow.DataContext = ServiceProvider.GetRequiredService<MainWindowViewModel>();
 
             mainWindow.Show();
@@ -44,7 +53,7 @@ namespace TodangMotor.WPF
             services.AddSingleton<UserRepository>();
             services.AddSingleton<StockMovementService>();
             services.AddSingleton<BackupRestoreService>();
-
+            services.AddSingleton<PurchaseOrderService>(); 
 
             // 2. Register ViewModels
             services.AddSingleton<DashboardViewModel>();
@@ -52,13 +61,17 @@ namespace TodangMotor.WPF
             services.AddSingleton<LoginViewModel>();
             services.AddSingleton<MainWindowViewModel>();
             services.AddSingleton<ItemsViewModel>();
-            services.AddSingleton<CategoryDialogViewModel>();;
+            services.AddSingleton<CategoryDialogViewModel>();
             services.AddSingleton<CategoryViewModel>();
             services.AddSingleton<SupplierViewModel>();
             services.AddSingleton<UserViewModel>();
             services.AddSingleton<AdjustStockDialogViewModel>();
             services.AddSingleton<InventoryViewModel>();
             services.AddSingleton<SettingsViewModel>();
+            services.AddSingleton<SaleDetailViewModel>();
+            services.AddSingleton<SalesHistoryViewModel>();
+            services.AddSingleton<ReportsViewModel>();
+            services.AddSingleton<PurchaseOrderViewModel>(); 
 
             // 3. Register Views
             services.AddSingleton<MainWindow>();
@@ -71,13 +84,17 @@ namespace TodangMotor.WPF
             services.AddTransient<UserView>();
             services.AddTransient<InventoryView>();
             services.AddTransient<SettingsView>();
+            services.AddTransient<SalesHistoryView>();
+            services.AddTransient<ReportsView>();
+            services.AddTransient<PurchaseOrderView>(); 
 
             // 4. Register Dialogs
             services.AddSingleton<CategoryDialog>();
             services.AddTransient<ProductDialog>();
             services.AddSingleton<SupplierDialog>();
             services.AddSingleton<UserDialog>();
-
+            services.AddSingleton<SaleDetailDialog>();
+            services.AddSingleton<PurchaseOrderDetailDialog>(); 
         }
     }
 }

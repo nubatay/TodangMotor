@@ -23,39 +23,45 @@
                 <views:DashboardView />
             </DataTemplate>
 
-            <!-- POS View -->
             <DataTemplate DataType="{x:Type vm:PosViewModel}">
                 <views:PosView />
             </DataTemplate>
 
-            <!-- Items View -->
+            <DataTemplate DataType="{x:Type vm:SalesHistoryViewModel}">
+                <views:SalesHistoryView />
+            </DataTemplate>
+
             <DataTemplate DataType="{x:Type vm:ItemsViewModel}">
                 <views:ItemsView />
             </DataTemplate>
-            
-            <!-- Category View -->
+
             <DataTemplate DataType="{x:Type vm:CategoryViewModel}">
                 <views:CategoryView />
             </DataTemplate>
-            
-            <!-- Supplier View -->
+
             <DataTemplate DataType="{x:Type vm:SupplierViewModel}">
                 <views:SupplierView />
             </DataTemplate>
-            
-            <!-- User View-->
+
             <DataTemplate DataType="{x:Type vm:UserViewModel}">
                 <views:UserView />
             </DataTemplate>
-            
-            <!-- Inventory View -->
+
             <DataTemplate DataType="{x:Type vm:InventoryViewModel}">
                 <views:InventoryView />
             </DataTemplate>
-            
-            <!-- Settings View -->
+
+            <DataTemplate DataType="{x:Type vm:ReportsViewModel}">
+                <views:ReportsView />
+            </DataTemplate>
+
             <DataTemplate DataType="{x:Type vm:SettingsViewModel}">
                 <views:SettingsView />
+            </DataTemplate>
+
+            <!-- Purchase Order View -->
+            <DataTemplate DataType="{x:Type vm:PurchaseOrderViewModel}">
+                <views:PurchaseOrderView />
             </DataTemplate>
 
             <DataTemplate DataType="{x:Type vm:LoginViewModel}">

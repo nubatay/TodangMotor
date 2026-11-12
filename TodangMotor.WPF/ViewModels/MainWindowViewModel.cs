@@ -17,19 +17,24 @@ namespace TodangMotor.WPF.ViewModels
         private readonly SupplierViewModel _supplierViewModel;
         private readonly InventoryViewModel _inventoryViewModel;
         private readonly SettingsViewModel _settingsViewModel;
-
         private readonly UserViewModel _userViewModel;
+        private readonly SalesHistoryViewModel _salesHistoryViewModel;
+        private readonly ReportsViewModel _reportsViewModel;
+        private readonly PurchaseOrderViewModel _purchaseOrderViewModel; // <-- ADDED
 
         public MainWindowViewModel(
-            DashboardViewModel dashboard, 
-            PosViewModel pos, 
-            LoginViewModel login, 
-            ItemsViewModel items, 
-            CategoryViewModel categories, 
+            DashboardViewModel dashboard,
+            PosViewModel pos,
+            LoginViewModel login,
+            ItemsViewModel items,
+            CategoryViewModel categories,
             SupplierViewModel suppliers,
-            UserViewModel users, 
-            InventoryViewModel inventory, 
-            SettingsViewModel settings)
+            UserViewModel users,
+            InventoryViewModel inventory,
+            SettingsViewModel settings,
+            SalesHistoryViewModel salesHistory,
+            ReportsViewModel reports,
+            PurchaseOrderViewModel purchaseOrders) // <-- ADDED
         {
             _dashboardViewModel = dashboard;
             _posViewModel = pos;
@@ -40,13 +45,15 @@ namespace TodangMotor.WPF.ViewModels
             _userViewModel = users;
             _inventoryViewModel = inventory;
             _settingsViewModel = settings;
+            _reportsViewModel = reports;
+            _salesHistoryViewModel = salesHistory;
+            _purchaseOrderViewModel = purchaseOrders; // <-- ADDED
 
             CurrentViewModel = _loginViewModel;
             IsLoggedIn = false;
 
             _loginViewModel.LoginSuccessful += OnLoginSuccessful;
             _dashboardViewModel.NavigateRequested += OnDashboardNavigateRequested;
-            _settingsViewModel = settings;
         }
 
         private void OnLoginSuccessful()
@@ -78,12 +85,18 @@ namespace TodangMotor.WPF.ViewModels
             _posViewModel.LoadProductsCommand.Execute(null);
         }
 
-        
+        [RelayCommand]
+        private void NavigateToSales()
+        {
+            CurrentViewModel = _salesHistoryViewModel;
+            _salesHistoryViewModel.LoadDataCommand.Execute(null);
+        }
+
         [RelayCommand]
         private void NavigateToItems()
         {
             CurrentViewModel = _itemsViewModel;
-            _itemsViewModel.LoadDataCommand.Execute(null); 
+            _itemsViewModel.LoadDataCommand.Execute(null);
         }
 
         [RelayCommand]
@@ -117,8 +130,21 @@ namespace TodangMotor.WPF.ViewModels
         [RelayCommand]
         private void NavigateToSettings()
         {
-            CurrentViewModel = _settingsViewModel; // Use the private field, not 'settings'
+            CurrentViewModel = _settingsViewModel;
             _settingsViewModel.RefreshBackupInfoCommand.Execute(null);
+        }
+
+        [RelayCommand]
+        private void NavigateToReports()
+        {
+            CurrentViewModel = _reportsViewModel;
+        }
+
+        // <-- ADDED THIS COMMAND -->
+        [RelayCommand]
+        private void NavigateToPurchaseOrders()
+        {
+            CurrentViewModel = _purchaseOrderViewModel;
         }
 
         [RelayCommand]

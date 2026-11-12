@@ -11,14 +11,12 @@
     <ui:FluentWindow.Resources>
         <BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter"/>
 
-        <!-- ===== Palette (same as DashboardView) ===== -->
         <SolidColorBrush x:Key="Brand" Color="#4D6BFE"/>
         <SolidColorBrush x:Key="BrandTint" Color="#EEF1FF"/>
         <SolidColorBrush x:Key="Ink" Color="#0F172A"/>
         <SolidColorBrush x:Key="Muted" Color="#64748B"/>
         <SolidColorBrush x:Key="Line" Color="#EAECF3"/>
 
-        <!-- ===== Section label (MAIN, CATALOG, STOCK, ADMIN) ===== -->
         <Style x:Key="NavSection" TargetType="TextBlock">
             <Setter Property="FontSize" Value="11"/>
             <Setter Property="FontWeight" Value="SemiBold"/>
@@ -26,7 +24,6 @@
             <Setter Property="Margin" Value="24,20,24,6"/>
         </Style>
 
-        <!-- ===== Nav item (radio so only one is active at a time) ===== -->
         <Style x:Key="NavItem" TargetType="RadioButton">
             <Setter Property="Foreground" Value="#334155"/>
             <Setter Property="FontSize" Value="14"/>
@@ -55,7 +52,6 @@
             </Setter>
         </Style>
 
-        <!-- ===== Logout item (button, turns red on hover) ===== -->
         <Style x:Key="LogoutItem" TargetType="Button">
             <Setter Property="Foreground" Value="#334155"/>
             <Setter Property="FontSize" Value="14"/>
@@ -86,7 +82,6 @@
             <ColumnDefinition Width="*"/>
         </Grid.ColumnDefinitions>
 
-        <!-- ================= SIDEBAR ================= -->
         <Border Grid.Column="0" Width="220" Background="White"
                 BorderBrush="{StaticResource Line}" BorderThickness="0,0,1,0"
                 Visibility="{Binding IsLoggedIn, Converter={StaticResource BooleanToVisibilityConverter}}">
@@ -97,11 +92,9 @@
                     <RowDefinition Height="Auto"/>
                 </Grid.RowDefinitions>
 
-                <!-- Logo -->
                 <Image Grid.Row="0" Source="/Assets/Logo.png" Stretch="Uniform" Height="96" Margin="-20,16,-19,16"
                        RenderOptions.BitmapScalingMode="HighQuality"/>
 
-                <!-- Menu -->
                 <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="0,0,0,12" Margin="0,112,0,0" Grid.RowSpan="2">
                     <StackPanel>
                         <TextBlock Text="MAIN" Style="{StaticResource NavSection}" Margin="24,8,24,6"/>
@@ -117,8 +110,7 @@
                                 <TextBlock Text="POS" Margin="14,0,0,0" VerticalAlignment="Center"/>
                             </StackPanel>
                         </RadioButton>
-                        <!-- TODO: add Command="{Binding ...}" once the Sales screen exists -->
-                        <RadioButton GroupName="Nav" Style="{StaticResource NavItem}">
+                        <RadioButton GroupName="Nav" Style="{StaticResource NavItem}" Command="{Binding NavigateToSalesCommand}">
                             <StackPanel Orientation="Horizontal">
                                 <ui:SymbolIcon Symbol="Receipt24" FontSize="18"/>
                                 <TextBlock Text="Sales" Margin="14,0,0,0" VerticalAlignment="Center"/>
@@ -158,7 +150,9 @@
                                 <TextBlock Text="Stock-In" Margin="14,0,0,0" VerticalAlignment="Center"/>
                             </StackPanel>
                         </RadioButton>
-                        <RadioButton GroupName="Nav" Style="{StaticResource NavItem}">
+
+                        <!-- UPDATED THIS BUTTON -->
+                        <RadioButton GroupName="Nav" Style="{StaticResource NavItem}" Command="{Binding NavigateToPurchaseOrdersCommand}">
                             <StackPanel Orientation="Horizontal">
                                 <ui:SymbolIcon Symbol="Cart24" FontSize="18"/>
                                 <TextBlock Text="Purchase Orders" Margin="14,0,0,0" VerticalAlignment="Center"/>
@@ -172,7 +166,7 @@
                                 <TextBlock Text="Users" Margin="14,0,0,0" VerticalAlignment="Center"/>
                             </StackPanel>
                         </RadioButton>
-                        <RadioButton GroupName="Nav" Style="{StaticResource NavItem}">
+                        <RadioButton GroupName="Nav" Style="{StaticResource NavItem}" Command="{Binding NavigateToReportsCommand}">
                             <StackPanel Orientation="Horizontal">
                                 <ui:SymbolIcon Symbol="DataBarVertical24" FontSize="18"/>
                                 <TextBlock Text="Reports" Margin="14,0,0,0" VerticalAlignment="Center"/>
@@ -187,7 +181,6 @@
                     </StackPanel>
                 </ScrollViewer>
 
-                <!-- Footer: Logout -->
                 <Border Grid.Row="2" BorderBrush="{StaticResource Line}" BorderThickness="0,1,0,0" Padding="0,10">
                     <Button Style="{StaticResource LogoutItem}" Command="{Binding LogoutCommand}" HorizontalContentAlignment="Left">
                         <StackPanel Orientation="Horizontal">
@@ -199,7 +192,6 @@
             </Grid>
         </Border>
 
-        <!-- ================= CONTENT ================= -->
         <ContentControl Grid.Column="1" Content="{Binding CurrentViewModel}" Margin="10"/>
     </Grid>
 </ui:FluentWindow>

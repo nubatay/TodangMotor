@@ -1,0 +1,143 @@
+﻿<ui:FluentWindow x:Class="TodangMotor.WPF.Views.SaleDetailDialog"
+                 xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                 xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                 xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
+                 Title="Receipt"
+                 Height="750" Width="450"
+                 WindowStartupLocation="CenterOwner"
+                 ResizeMode="NoResize"
+                 ExtendsContentIntoTitleBar="True"
+                 WindowBackdropType="Mica"
+                 Background="#F5F6FA"
+                 PreviewKeyDown="Window_PreviewKeyDown">
+
+    <ui:FluentWindow.InputBindings>
+        <KeyBinding Key="Escape" Command="{Binding RelativeSource={RelativeSource AncestorType=Window}, Path=CloseCommand}" />
+    </ui:FluentWindow.InputBindings>
+
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <!-- Receipt Paper -->
+        <ScrollViewer Grid.Row="0" VerticalScrollBarVisibility="Auto" Margin="20">
+            <Border Background="#FFFFFF" Padding="24" BorderBrush="#E2E8F0" BorderThickness="1">
+                <Border.Effect>
+                    <DropShadowEffect Color="#0F172A" Opacity="0.08" BlurRadius="20" ShadowDepth="4" Direction="270"/>
+                </Border.Effect>
+
+                <StackPanel>
+                    <!-- Header -->
+                    <TextBlock Text="TODANG MOTOR" FontSize="20" FontWeight="Bold" HorizontalAlignment="Center" Foreground="#0F172A"/>
+                    <TextBlock Text="Parts &amp; Accessories" FontSize="12" HorizontalAlignment="Center" Foreground="#64748B" Margin="0,4,0,16"/>
+
+                    <!-- Meta Info -->
+                    <Grid Margin="0,0,0,16">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                        </Grid.RowDefinitions>
+
+                        <TextBlock Grid.Row="0" Grid.Column="0" Text="Invoice:" FontSize="12" Foreground="#64748B" Margin="0,0,8,4"/>
+                        <TextBlock Grid.Row="0" Grid.Column="1" Text="{Binding InvoiceNo}" FontSize="12" FontWeight="Bold" Foreground="#0F172A" Margin="0,0,0,4"/>
+
+                        <TextBlock Grid.Row="1" Grid.Column="0" Text="Date:" FontSize="12" Foreground="#64748B" Margin="0,0,8,4"/>
+                        <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding DateDisplay}" FontSize="12" Foreground="#0F172A" Margin="0,0,0,4"/>
+
+                        <TextBlock Grid.Row="2" Grid.Column="0" Text="Cashier:" FontSize="12" Foreground="#64748B" Margin="0,0,8,4"/>
+                        <TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding CashierName}" FontSize="12" Foreground="#0F172A" Margin="0,0,0,4"/>
+
+                        <TextBlock Grid.Row="3" Grid.Column="0" Text="Customer:" FontSize="12" Foreground="#64748B" Margin="0,0,8,0"/>
+                        <TextBlock Grid.Row="3" Grid.Column="1" Text="{Binding CustomerName}" FontSize="12" Foreground="#0F172A"/>
+                    </Grid>
+
+                    <!-- Dashed Divider -->
+                    <Rectangle Height="1" Fill="#CBD5E1" Margin="0,0,0,16">
+                        <Rectangle.StrokeDashArray>2 2</Rectangle.StrokeDashArray>
+                    </Rectangle>
+
+                    <!-- Items Header -->
+                    <Grid Margin="0,0,0,8">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="40"/>
+                            <ColumnDefinition Width="70"/>
+                            <ColumnDefinition Width="80"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Grid.Column="0" Text="Item" FontSize="11" FontWeight="Bold" Foreground="#334155"/>
+                        <TextBlock Grid.Column="1" Text="Qty" FontSize="11" FontWeight="Bold" Foreground="#334155" TextAlignment="Center"/>
+                        <TextBlock Grid.Column="2" Text="Price" FontSize="11" FontWeight="Bold" Foreground="#334155" TextAlignment="Right"/>
+                        <TextBlock Grid.Column="3" Text="Total" FontSize="11" FontWeight="Bold" Foreground="#334155" TextAlignment="Right"/>
+                    </Grid>
+
+                    <!-- Items List -->
+                    <ItemsControl ItemsSource="{Binding Lines}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <Grid Margin="0,4">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="40"/>
+                                        <ColumnDefinition Width="70"/>
+                                        <ColumnDefinition Width="80"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Grid.Column="0" Text="{Binding ProductName}" FontSize="12" Foreground="#0F172A" TextTrimming="CharacterEllipsis"/>
+                                    <TextBlock Grid.Column="1" Text="{Binding Quantity}" FontSize="12" Foreground="#0F172A" TextAlignment="Center"/>
+                                    <TextBlock Grid.Column="2" Text="{Binding UnitPrice, StringFormat=N2}" FontSize="12" Foreground="#0F172A" TextAlignment="Right"/>
+                                    <TextBlock Grid.Column="3" Text="{Binding LineTotal, StringFormat=N2}" FontSize="12" Foreground="#0F172A" TextAlignment="Right"/>
+                                </Grid>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+
+                    <!-- Dashed Divider -->
+                    <Rectangle Height="1" Fill="#CBD5E1" Margin="0,16">
+                        <Rectangle.StrokeDashArray>2 2</Rectangle.StrokeDashArray>
+                    </Rectangle>
+
+                    <!-- Totals -->
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                        </Grid.RowDefinitions>
+
+                        <TextBlock Grid.Row="0" Grid.Column="0" Text="Subtotal:" FontSize="14" FontWeight="Bold" Foreground="#0F172A" Margin="0,0,0,4"/>
+                        <TextBlock Grid.Row="0" Grid.Column="1" Text="{Binding Subtotal}" FontSize="14" FontWeight="Bold" Foreground="#0F172A" TextAlignment="Right" Margin="0,0,0,4"/>
+
+                        <TextBlock Grid.Row="1" Grid.Column="0" Text="{Binding PaymentMethod, StringFormat='Tendered ({0}):'}" FontSize="12" Foreground="#64748B" Margin="0,0,0,4"/>
+                        <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding Tendered}" FontSize="12" Foreground="#64748B" TextAlignment="Right" Margin="0,0,0,4"/>
+
+                        <TextBlock Grid.Row="2" Grid.Column="0" Text="Change:" FontSize="12" Foreground="#64748B"/>
+                        <TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding Change}" FontSize="12" Foreground="#64748B" TextAlignment="Right"/>
+                    </Grid>
+
+                    <TextBlock Text="Thank you for your purchase!" FontSize="12" Foreground="#64748B" HorizontalAlignment="Center" Margin="0,24,0,0"/>
+                </StackPanel>
+            </Border>
+        </ScrollViewer>
+
+        <!-- Footer -->
+        <Border Grid.Row="1" Background="#FFFFFF" BorderBrush="#E2E8F0" BorderThickness="0,1,0,0" Padding="24">
+            <Grid>
+                <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                    <ui:Button Appearance="Secondary" Content="Close" Click="Close_Click" Width="100" Height="40" Margin="0,0,12,0"/>
+                    <ui:Button Appearance="Primary" Content="Print" Click="Print_Click" Icon="{ui:SymbolIcon Print24}" Width="120" Height="40" Background="#4D6BFE"/>
+                </StackPanel>
+            </Grid>
+        </Border>
+    </Grid>
+</ui:FluentWindow>
