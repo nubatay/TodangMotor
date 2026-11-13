@@ -1,6 +1,7 @@
-﻿using System;
-using CommunityToolkit.Mvvm.ComponentModel;
+﻿using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using System;
+using System.Globalization;
 
 namespace TodangMotor.WPF.ViewModels
 {
@@ -8,6 +9,8 @@ namespace TodangMotor.WPF.ViewModels
     {
         [ObservableProperty] private ObservableObject _currentViewModel;
         [ObservableProperty] private bool _isLoggedIn;
+        [ObservableProperty] private bool _isOwner;
+        [ObservableProperty] private bool _isCashier;
 
         private readonly DashboardViewModel _dashboardViewModel;
         private readonly PosViewModel _posViewModel;
@@ -62,6 +65,11 @@ namespace TodangMotor.WPF.ViewModels
         private void OnLoginSuccessful()
         {
             IsLoggedIn = true;
+
+            // Set roles based on SessionManager
+            IsOwner = TodangMotor.Common.SessionManager.IsOwner;
+            IsCashier = TodangMotor.Common.SessionManager.IsCashier;
+
             CurrentViewModel = _dashboardViewModel;
         }
 

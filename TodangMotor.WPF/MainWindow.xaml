@@ -97,6 +97,7 @@
 
                 <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="0,0,0,12" Margin="0,112,0,0" Grid.RowSpan="2">
                     <StackPanel>
+                        <!-- ================= MAIN ================= -->
                         <TextBlock Text="MAIN" Style="{StaticResource NavSection}" Margin="24,8,24,6"/>
                         <RadioButton GroupName="Nav" Style="{StaticResource NavItem}" IsChecked="True" Command="{Binding NavigateToDashboardCommand}">
                             <StackPanel Orientation="Horizontal">
@@ -117,26 +118,30 @@
                             </StackPanel>
                         </RadioButton>
 
-                        <TextBlock Text="CATALOG" Style="{StaticResource NavSection}"/>
-                        <RadioButton GroupName="Nav" Style="{StaticResource NavItem}" Command="{Binding NavigateToItemsCommand}">
-                            <StackPanel Orientation="Horizontal">
-                                <ui:SymbolIcon Symbol="Library24" FontSize="18"/>
-                                <TextBlock Text="Items" Margin="14,0,0,0" VerticalAlignment="Center"/>
-                            </StackPanel>
-                        </RadioButton>
-                        <RadioButton GroupName="Nav" Style="{StaticResource NavItem}" Command="{Binding NavigateToCategoriesCommand}">
-                            <StackPanel Orientation="Horizontal">
-                                <ui:SymbolIcon Symbol="Tag24" FontSize="18"/>
-                                <TextBlock Text="Categories" Margin="14,0,0,0" VerticalAlignment="Center"/>
-                            </StackPanel>
-                        </RadioButton>
-                        <RadioButton GroupName="Nav" Style="{StaticResource NavItem}" Command="{Binding NavigateToSuppliersCommand}">
-                            <StackPanel Orientation="Horizontal">
-                                <ui:SymbolIcon Symbol="PeopleCommunity24" FontSize="18"/>
-                                <TextBlock Text="Suppliers" Margin="14,0,0,0" VerticalAlignment="Center"/>
-                            </StackPanel>
-                        </RadioButton>
+                        <!-- ================= CATALOG (Owner Only) ================= -->
+                        <StackPanel Visibility="{Binding IsOwner, Converter={StaticResource BooleanToVisibilityConverter}}">
+                            <TextBlock Text="CATALOG" Style="{StaticResource NavSection}"/>
+                            <RadioButton GroupName="Nav" Style="{StaticResource NavItem}" Command="{Binding NavigateToItemsCommand}">
+                                <StackPanel Orientation="Horizontal">
+                                    <ui:SymbolIcon Symbol="Library24" FontSize="18"/>
+                                    <TextBlock Text="Items" Margin="14,0,0,0" VerticalAlignment="Center"/>
+                                </StackPanel>
+                            </RadioButton>
+                            <RadioButton GroupName="Nav" Style="{StaticResource NavItem}" Command="{Binding NavigateToCategoriesCommand}">
+                                <StackPanel Orientation="Horizontal">
+                                    <ui:SymbolIcon Symbol="Tag24" FontSize="18"/>
+                                    <TextBlock Text="Categories" Margin="14,0,0,0" VerticalAlignment="Center"/>
+                                </StackPanel>
+                            </RadioButton>
+                            <RadioButton GroupName="Nav" Style="{StaticResource NavItem}" Command="{Binding NavigateToSuppliersCommand}">
+                                <StackPanel Orientation="Horizontal">
+                                    <ui:SymbolIcon Symbol="PeopleCommunity24" FontSize="18"/>
+                                    <TextBlock Text="Suppliers" Margin="14,0,0,0" VerticalAlignment="Center"/>
+                                </StackPanel>
+                            </RadioButton>
+                        </StackPanel>
 
+                        <!-- ================= STOCK ================= -->
                         <TextBlock Text="STOCK" Style="{StaticResource NavSection}"/>
                         <RadioButton GroupName="Nav" Style="{StaticResource NavItem}" Command="{Binding NavigateToInventoriesCommand}">
                             <StackPanel Orientation="Horizontal">
@@ -144,40 +149,45 @@
                                 <TextBlock Text="Inventory" Margin="14,0,0,0" VerticalAlignment="Center"/>
                             </StackPanel>
                         </RadioButton>
-                        <RadioButton GroupName="Nav" Style="{StaticResource NavItem}" Command="{Binding NavigateToStockInCommand}">
-                            <StackPanel Orientation="Horizontal">
-                                <ui:SymbolIcon Symbol="Add24" FontSize="18"/>
-                                <TextBlock Text="Stock-In" Margin="14,0,0,0" VerticalAlignment="Center"/>
-                            </StackPanel>
-                        </RadioButton>
 
-                        <!-- UPDATED THIS BUTTON -->
-                        <RadioButton GroupName="Nav" Style="{StaticResource NavItem}" Command="{Binding NavigateToPurchaseOrdersCommand}">
-                            <StackPanel Orientation="Horizontal">
-                                <ui:SymbolIcon Symbol="Cart24" FontSize="18"/>
-                                <TextBlock Text="Purchase Orders" Margin="14,0,0,0" VerticalAlignment="Center"/>
-                            </StackPanel>
-                        </RadioButton>
+                        <!-- Stock-In & Purchase Orders (Owner Only) -->
+                        <StackPanel Visibility="{Binding IsOwner, Converter={StaticResource BooleanToVisibilityConverter}}">
+                            <RadioButton GroupName="Nav" Style="{StaticResource NavItem}" Command="{Binding NavigateToStockInCommand}">
+                                <StackPanel Orientation="Horizontal">
+                                    <ui:SymbolIcon Symbol="Add24" FontSize="18"/>
+                                    <TextBlock Text="Stock-In" Margin="14,0,0,0" VerticalAlignment="Center"/>
+                                </StackPanel>
+                            </RadioButton>
+                            <RadioButton GroupName="Nav" Style="{StaticResource NavItem}" Command="{Binding NavigateToPurchaseOrdersCommand}">
+                                <StackPanel Orientation="Horizontal">
+                                    <ui:SymbolIcon Symbol="Cart24" FontSize="18"/>
+                                    <TextBlock Text="Purchase Orders" Margin="14,0,0,0" VerticalAlignment="Center"/>
+                                </StackPanel>
+                            </RadioButton>
+                        </StackPanel>
 
-                        <TextBlock Text="ADMIN" Style="{StaticResource NavSection}"/>
-                        <RadioButton GroupName="Nav" Style="{StaticResource NavItem}" Command="{Binding NavigateToUsersCommand}">
-                            <StackPanel Orientation="Horizontal">
-                                <ui:SymbolIcon Symbol="Person24" FontSize="18"/>
-                                <TextBlock Text="Users" Margin="14,0,0,0" VerticalAlignment="Center"/>
-                            </StackPanel>
-                        </RadioButton>
-                        <RadioButton GroupName="Nav" Style="{StaticResource NavItem}" Command="{Binding NavigateToReportsCommand}">
-                            <StackPanel Orientation="Horizontal">
-                                <ui:SymbolIcon Symbol="DataBarVertical24" FontSize="18"/>
-                                <TextBlock Text="Reports" Margin="14,0,0,0" VerticalAlignment="Center"/>
-                            </StackPanel>
-                        </RadioButton>
-                        <RadioButton GroupName="Nav" Style="{StaticResource NavItem}" Command="{Binding NavigateToSettingsCommand}">
-                            <StackPanel Orientation="Horizontal">
-                                <ui:SymbolIcon Symbol="Settings24" FontSize="18"/>
-                                <TextBlock Text="Settings" Margin="14,0,0,0" VerticalAlignment="Center"/>
-                            </StackPanel>
-                        </RadioButton>
+                        <!-- ================= ADMIN (Owner Only) ================= -->
+                        <StackPanel Visibility="{Binding IsOwner, Converter={StaticResource BooleanToVisibilityConverter}}">
+                            <TextBlock Text="ADMIN" Style="{StaticResource NavSection}"/>
+                            <RadioButton GroupName="Nav" Style="{StaticResource NavItem}" Command="{Binding NavigateToUsersCommand}">
+                                <StackPanel Orientation="Horizontal">
+                                    <ui:SymbolIcon Symbol="Person24" FontSize="18"/>
+                                    <TextBlock Text="Users" Margin="14,0,0,0" VerticalAlignment="Center"/>
+                                </StackPanel>
+                            </RadioButton>
+                            <RadioButton GroupName="Nav" Style="{StaticResource NavItem}" Command="{Binding NavigateToReportsCommand}">
+                                <StackPanel Orientation="Horizontal">
+                                    <ui:SymbolIcon Symbol="DataBarVertical24" FontSize="18"/>
+                                    <TextBlock Text="Reports" Margin="14,0,0,0" VerticalAlignment="Center"/>
+                                </StackPanel>
+                            </RadioButton>
+                            <RadioButton GroupName="Nav" Style="{StaticResource NavItem}" Command="{Binding NavigateToSettingsCommand}">
+                                <StackPanel Orientation="Horizontal">
+                                    <ui:SymbolIcon Symbol="Settings24" FontSize="18"/>
+                                    <TextBlock Text="Settings" Margin="14,0,0,0" VerticalAlignment="Center"/>
+                                </StackPanel>
+                            </RadioButton>
+                        </StackPanel>
                     </StackPanel>
                 </ScrollViewer>
 

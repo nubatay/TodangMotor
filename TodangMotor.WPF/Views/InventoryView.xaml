@@ -179,7 +179,8 @@
                         <DataGridTemplateColumn.CellTemplate>
                             <DataTemplate>
                                 <Button Command="{Binding DataContext.AdjustStockCommand, RelativeSource={RelativeSource AncestorType=UserControl}}" 
-                                        CommandParameter="{Binding}" Background="Transparent" BorderThickness="0" Cursor="Hand" HorizontalAlignment="Center" ToolTip="Adjust Stock">
+                    CommandParameter="{Binding}" Background="Transparent" BorderThickness="0" Cursor="Hand" HorizontalAlignment="Center" ToolTip="Adjust Stock"
+                    Visibility="{Binding DataContext.IsOwner, RelativeSource={RelativeSource AncestorType=UserControl}, Converter={StaticResource BooleanToVisibilityConverter}}">
                                     <ui:SymbolIcon Symbol="Edit24" Foreground="#4D6BFE" FontSize="18"/>
                                 </Button>
                             </DataTemplate>

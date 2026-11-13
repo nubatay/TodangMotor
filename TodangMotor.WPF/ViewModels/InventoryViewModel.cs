@@ -40,6 +40,8 @@ namespace TodangMotor.WPF.ViewModels
         [ObservableProperty] private string _selectedStockStatus = "All";
         [ObservableProperty] private bool _isLoading;
 
+        public bool IsOwner => TodangMotor.Common.SessionManager.IsOwner;
+
         public event Action<Product>? RequestOpenAdjustStockDialog;
 
         public InventoryViewModel(ProductService productService, CategoryService categoryService)
