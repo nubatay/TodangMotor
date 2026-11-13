@@ -54,6 +54,7 @@ namespace TodangMotor.WPF
             services.AddSingleton<StockMovementService>();
             services.AddSingleton<BackupRestoreService>();
             services.AddSingleton<PurchaseOrderService>(); 
+            services.AddSingleton<StockInService>();
 
             // 2. Register ViewModels
             services.AddSingleton<DashboardViewModel>();
@@ -72,6 +73,9 @@ namespace TodangMotor.WPF
             services.AddSingleton<SalesHistoryViewModel>();
             services.AddSingleton<ReportsViewModel>();
             services.AddSingleton<PurchaseOrderViewModel>(); 
+            services.AddSingleton<StockInViewModel>();
+            services.AddSingleton<CostUpdatePromptViewModel>();
+            
 
             // 3. Register Views
             services.AddSingleton<MainWindow>();
@@ -87,6 +91,7 @@ namespace TodangMotor.WPF
             services.AddTransient<SalesHistoryView>();
             services.AddTransient<ReportsView>();
             services.AddTransient<PurchaseOrderView>(); 
+            services.AddTransient<StockInView>();
 
             // 4. Register Dialogs
             services.AddSingleton<CategoryDialog>();
@@ -95,6 +100,7 @@ namespace TodangMotor.WPF
             services.AddSingleton<UserDialog>();
             services.AddSingleton<SaleDetailDialog>();
             services.AddSingleton<PurchaseOrderDetailDialog>(); 
+            services.AddSingleton<CostUpdatePromptDialog>();
         }
     }
 }

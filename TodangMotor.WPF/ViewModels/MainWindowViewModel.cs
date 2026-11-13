@@ -20,7 +20,8 @@ namespace TodangMotor.WPF.ViewModels
         private readonly UserViewModel _userViewModel;
         private readonly SalesHistoryViewModel _salesHistoryViewModel;
         private readonly ReportsViewModel _reportsViewModel;
-        private readonly PurchaseOrderViewModel _purchaseOrderViewModel; // <-- ADDED
+        private readonly PurchaseOrderViewModel _purchaseOrderViewModel;
+        private readonly StockInViewModel _stockInViewModel;
 
         public MainWindowViewModel(
             DashboardViewModel dashboard,
@@ -34,7 +35,8 @@ namespace TodangMotor.WPF.ViewModels
             SettingsViewModel settings,
             SalesHistoryViewModel salesHistory,
             ReportsViewModel reports,
-            PurchaseOrderViewModel purchaseOrders) // <-- ADDED
+            PurchaseOrderViewModel purchaseOrders,
+            StockInViewModel stockIn) 
         {
             _dashboardViewModel = dashboard;
             _posViewModel = pos;
@@ -47,7 +49,8 @@ namespace TodangMotor.WPF.ViewModels
             _settingsViewModel = settings;
             _reportsViewModel = reports;
             _salesHistoryViewModel = salesHistory;
-            _purchaseOrderViewModel = purchaseOrders; // <-- ADDED
+            _purchaseOrderViewModel = purchaseOrders;
+            _stockInViewModel = stockIn;
 
             CurrentViewModel = _loginViewModel;
             IsLoggedIn = false;
@@ -138,6 +141,12 @@ namespace TodangMotor.WPF.ViewModels
         private void NavigateToReports()
         {
             CurrentViewModel = _reportsViewModel;
+        }
+
+        [RelayCommand]
+        private void NavigateToStockIn()
+        {
+            CurrentViewModel = _stockInViewModel;
         }
 
         // <-- ADDED THIS COMMAND -->
