@@ -132,7 +132,7 @@ namespace TodangMotor.WPF.ViewModels
             var rawProduct = _allProducts.FirstOrDefault(p => p.ProductId == item.ProductId);
             if (rawProduct != null) RequestOpenProductDialog?.Invoke(rawProduct);
         }
-        //check branching
+
         [RelayCommand]
         private async Task ToggleStatusAsync(ProductDisplayItem item)
         {
