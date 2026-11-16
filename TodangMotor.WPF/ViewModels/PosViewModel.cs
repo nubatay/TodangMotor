@@ -205,10 +205,35 @@ namespace TodangMotor.WPF.ViewModels
 
             if (success)
             {
-                // Show success (we will wire up a receipt later)
-                System.Windows.MessageBox.Show($"Sale Completed! Invoice: {invoiceNo}\nChange: ₱{(tendered - subtotal):N2}", "Success");
+                // 1. Build the receipt data model BEFORE clearing the cart
+                var receiptData = new TodangMotor.WPF.Views.ReceiptData
+                {
+                    InvoiceNo = invoiceNo,
+                    CashierName = TodangMotor.Common.SessionManager.CurrentUser?.FullName ?? "Cashier",
+                    CustomerName = string.IsNullOrWhiteSpace(CustomerName) ? "Walk-in" : CustomerName,
+                    PaymentMethod = PaymentMethod,
+                    GcashReference = GcashReference,
+                    Subtotal = subtotal,
+                    Tendered = tendered,
+                    Change = tendered - subtotal,
+                    Items = Cart.Select(c => new TodangMotor.WPF.Views.ReceiptLineData
+                    {
+                        ProductName = c.DisplayName,
+                        Quantity = c.Quantity,
+                        LineTotal = c.LineTotal
+                    }).ToList()
+                };
+
+                // 2. Clear the cart immediately so the POS is ready for the next customer
                 ClearCart();
                 await LoadProductsAsync(); // Refresh stock
+
+                // 3. Show the receipt dialog
+                var receiptWindow = new TodangMotor.WPF.Views.ReceiptWindow(receiptData)
+                {
+                    Owner = System.Windows.Application.Current.MainWindow
+                };
+                receiptWindow.ShowDialog();
             }
             else
             {

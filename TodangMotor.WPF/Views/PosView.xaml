@@ -541,18 +541,47 @@
 
                             <!-- Complete Sale -->
                             <ui:Button Appearance="Primary" Content="Complete Sale"
-                               Command="{Binding CompleteSaleCommand}"
-                               Height="52" Margin="0,20,0,0"
-                               HorizontalAlignment="Stretch"
-                               FontSize="16" FontWeight="Bold"
-                               Background="{StaticResource Brand}">
+           Command="{Binding CompleteSaleCommand}"
+           Height="52" Margin="0,20,0,0"
+           HorizontalAlignment="Stretch"
+           FontSize="16" FontWeight="Bold"
+           Background="{StaticResource Brand}">
                                 <ui:Button.Style>
                                     <Style TargetType="{x:Type ui:Button}"
-                                            BasedOn="{StaticResource {x:Type ui:Button}}">
+               BasedOn="{StaticResource {x:Type ui:Button}}">
                                         <Setter Property="IsEnabled" Value="{Binding IsNotBusy}"/>
+                                        <Setter Property="ToolTipService.ShowOnDisabled" Value="True"/>
+                                        <Setter Property="ToolTipService.Placement" Value="Top"/>
+                                        <Setter Property="ToolTipService.InitialShowDelay" Value="200"/>
                                         <Style.Triggers>
+                                            <!-- Priority 4 (lowest): field-specific messages -->
+                                            <MultiDataTrigger>
+                                                <MultiDataTrigger.Conditions>
+                                                    <Condition Binding="{Binding IsCash}" Value="True"/>
+                                                    <Condition Binding="{Binding TenderedAmountText}" Value=""/>
+                                                </MultiDataTrigger.Conditions>
+                                                <Setter Property="IsEnabled" Value="False"/>
+                                                <Setter Property="ToolTip" Value="Enter the amount tendered to complete the sale"/>
+                                            </MultiDataTrigger>
+                                            <MultiDataTrigger>
+                                                <MultiDataTrigger.Conditions>
+                                                    <Condition Binding="{Binding IsGcash}" Value="True"/>
+                                                    <Condition Binding="{Binding GcashReference}" Value=""/>
+                                                </MultiDataTrigger.Conditions>
+                                                <Setter Property="IsEnabled" Value="False"/>
+                                                <Setter Property="ToolTip" Value="Enter the GCash reference number to complete the sale"/>
+                                            </MultiDataTrigger>
+
+                                            <!-- Priority 2: cart empty -->
                                             <DataTrigger Binding="{Binding Cart.Count}" Value="0">
                                                 <Setter Property="IsEnabled" Value="False"/>
+                                                <Setter Property="ToolTip" Value="Add at least one item to the cart first"/>
+                                            </DataTrigger>
+
+                                            <!-- Priority 1 (highest): busy — always wins -->
+                                            <DataTrigger Binding="{Binding IsBusy}" Value="True">
+                                                <Setter Property="IsEnabled" Value="False"/>
+                                                <Setter Property="ToolTip" Value="Processing sale, please wait..."/>
                                             </DataTrigger>
                                         </Style.Triggers>
                                     </Style>
