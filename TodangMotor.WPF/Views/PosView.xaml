@@ -74,7 +74,7 @@
             <Setter Property="BorderBrush" Value="{StaticResource Line}"/>
             <Setter Property="BorderThickness" Value="1"/>
             <Setter Property="CornerRadius" Value="10"/>
-            <Setter Property="Padding" Value="14,12"/>
+            <Setter Property="Padding" Value="12,8"/>
         </Style>
 
         <!-- ===== Touch-friendly product tile ===== -->
@@ -348,61 +348,41 @@
                             <ItemsControl ItemsSource="{Binding Cart}">
                                 <ItemsControl.ItemTemplate>
                                 <DataTemplate>
-                                    <Border BorderBrush="{StaticResource Line}"
-                                            BorderThickness="0,0,0,1" Padding="0,12">
-                                        <Grid>
-                                            <Grid.ColumnDefinitions>
-                                                <ColumnDefinition Width="*"/>
-                                                <ColumnDefinition Width="Auto"/>
-                                            </Grid.ColumnDefinitions>
+                                        <Border BorderBrush="{StaticResource Line}" BorderThickness="0,0,0,1" Padding="0,8">
+                                            <!-- Added Margin="0,0,8,0" to create a buffer for the scrollbar -->
+                                            <Grid Margin="0,0,8,0">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="*"/>
+                                                    <ColumnDefinition Width="Auto"/>
+                                                </Grid.ColumnDefinitions>
 
-                                            <StackPanel Grid.Column="0" Margin="0,0,12,0" VerticalAlignment="Center">
-                                                <TextBlock Text="{Binding DisplayName}"
-                                                           FontWeight="SemiBold" FontSize="13"
-                                                           Foreground="{StaticResource Ink}"
-                                                           TextTrimming="CharacterEllipsis"/>
-                                                <TextBlock Text="{Binding UnitPrice, StringFormat=C2}"
-                                                           FontSize="12" Foreground="{StaticResource Muted}"
-                                                           Margin="0,2,0,0"/>
-                                            </StackPanel>
+                                                <StackPanel Grid.Column="0" Margin="0,0,12,0" VerticalAlignment="Center">
+                                                    <TextBlock Text="{Binding DisplayName}" FontWeight="SemiBold" FontSize="13" Foreground="{StaticResource Ink}" TextTrimming="CharacterEllipsis"/>
+                                                    <TextBlock Text="{Binding UnitPrice, StringFormat=C2}" FontSize="12" Foreground="{StaticResource Muted}" Margin="0,2,0,0"/>
+                                                </StackPanel>
 
-                                            <StackPanel Grid.Column="1" Orientation="Horizontal"
-                                                        VerticalAlignment="Center">
-                                                <!-- Quantity -->
-                                                <Border Style="{StaticResource InputBorder}"
-                                                    Width="52" Height="32" Margin="0,0,12,0"
-                                                    Background="#FFFFFF">
-                                                         <TextBox Text="{Binding Quantity, UpdateSourceTrigger=PropertyChanged}"
-                                                         TextAlignment="Center"
-                                                         VerticalContentAlignment="Center"
-                                                         Padding="0"
-                                                         FontWeight="Bold" FontSize="13"
-                                                         Foreground="{StaticResource Brand}"
-                                                         Background="Transparent" BorderThickness="0"
-                                                         FocusVisualStyle="{x:Null}"
-                                                         PreviewMouseWheel="QuantityBox_PreviewMouseWheel"/>            
-                                                </Border>
+                                                <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                                                    <!-- Slightly smaller Quantity Box -->
+                                                    <Border Style="{StaticResource InputBorder}" Width="46" Height="28" Margin="0,0,8,0" Background="#FFFFFF">
+                                                        <TextBox Text="{Binding Quantity, UpdateSourceTrigger=PropertyChanged}" 
+                                                             TextAlignment="Center" VerticalContentAlignment="Center" Padding="0"
+                                                             FontWeight="Bold" FontSize="13" Foreground="{StaticResource Brand}"
+                                                             Background="Transparent" BorderThickness="0" FocusVisualStyle="{x:Null}"
+                                                             PreviewMouseWheel="QuantityBox_PreviewMouseWheel"/>
+                                                    </Border>
 
-                                                <!-- Line total -->
-                                                <TextBlock Text="{Binding LineTotal, StringFormat=C2}"
-                                                           FontWeight="Bold" FontSize="13"
-                                                           Foreground="{StaticResource Ink}"
-                                                           Width="72" TextAlignment="Right"
-                                                           VerticalAlignment="Center"/>
+                                                    <!-- Slightly smaller Line Total width -->
+                                                    <TextBlock Text="{Binding LineTotal, StringFormat=C2}" FontWeight="Bold" FontSize="13" Foreground="{StaticResource Ink}" Width="64" TextAlignment="Right" VerticalAlignment="Center"/>
 
-                                                <!-- Remove -->
-                                                <Button Command="{Binding DataContext.RemoveFromCartCommand,
-                                                                  RelativeSource={RelativeSource AncestorType=UserControl}}"
-                                                        CommandParameter="{Binding}"
-                                                        Background="Transparent" BorderThickness="0"
-                                                        Cursor="Hand" Margin="10,0,0,0" Padding="4">
-                                                    <ui:SymbolIcon Symbol="Dismiss24"
-                                                                   Foreground="#EF4444" FontSize="16"/>
-                                                </Button>
-                                            </StackPanel>
-                                        </Grid>
-                                    </Border>
-                                </DataTemplate>
+                                                    <!-- Tightened Remove button -->
+                                                    <Button Command="{Binding DataContext.RemoveFromCartCommand, RelativeSource={RelativeSource AncestorType=UserControl}}" 
+                                                        CommandParameter="{Binding}" Background="Transparent" BorderThickness="0" Cursor="Hand" Margin="8,0,0,0" Padding="2">
+                                                        <ui:SymbolIcon Symbol="Dismiss24" Foreground="#EF4444" FontSize="16"/>
+                                                    </Button>
+                                                </StackPanel>
+                                            </Grid>
+                                        </Border>
+                                    </DataTemplate>
                             </ItemsControl.ItemTemplate>
                         </ItemsControl>
                         </ScrollViewer>
@@ -481,14 +461,14 @@
 
                             <!-- Customer name -->
                             <TextBlock Text="Customer Name (Optional)" Style="{StaticResource FieldLabel}"/>
-                            <Border Style="{StaticResource InputBorder}" Margin="0,0,0,12">
+                            <Border Style="{StaticResource InputBorder}" Margin="0,0,0,8">
                                 <TextBox x:Name="CustomerNameInput" Style="{StaticResource CleanTextBox}" Margin="12,0"
                                     Text="{Binding CustomerName, UpdateSourceTrigger=PropertyChanged}"/>
                             </Border>
 
                             <!-- Payment method -->
                             <TextBlock Text="Payment Method" Style="{StaticResource FieldLabel}"/>
-                            <Border Style="{StaticResource InputBorder}" Height="44" Margin="0,0,0,12">
+                            <Border Style="{StaticResource InputBorder}" Height="44" Margin="0,0,0,8">
                                 <ComboBox SelectedValue="{Binding PaymentMethod}"
                                   SelectedValuePath="Content"
                                   Background="Transparent" BorderThickness="0"
@@ -502,7 +482,7 @@
                             <!-- CASH -->
                             <StackPanel Visibility="{Binding IsCash, Converter={StaticResource BooleanToVisibilityConverter}}">
                                 <TextBlock Text="Amount Tendered" Style="{StaticResource FieldLabel}"/>
-                                <Border Style="{StaticResource InputBorder}" Height="52">
+                                <Border Style="{StaticResource InputBorder}" Height="44">
                                     <Grid>
                                         <ui:SymbolIcon Symbol="Money24" Foreground="#94A3B8" FontSize="20"
                                                        HorizontalAlignment="Left" VerticalAlignment="Center"
@@ -543,7 +523,7 @@
                             <ui:Button x:Name="CompleteSaleBtn"
                                    Appearance="Primary" Content="Complete Sale"
                                    Command="{Binding CompleteSaleCommand}"
-                                   Height="52" Margin="0,20,0,0"
+                                   Height="46" Margin="0,12,0,0"
                                    HorizontalAlignment="Stretch"
                                    FontSize="16" FontWeight="Bold"
                                    Background="{StaticResource Brand}">
