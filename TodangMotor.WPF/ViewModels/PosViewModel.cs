@@ -216,10 +216,13 @@ namespace TodangMotor.WPF.ViewModels
                     Subtotal = subtotal,
                     Tendered = tendered,
                     Change = tendered - subtotal,
-                    Items = Cart.Select(c => new TodangMotor.WPF.Views.ReceiptLineData
+
+                    // Map to the new "Lines" list and include UnitPrice
+                    Lines = Cart.Select(c => new TodangMotor.WPF.Views.ReceiptLineData
                     {
                         ProductName = c.DisplayName,
                         Quantity = c.Quantity,
+                        UnitPrice = c.UnitPrice,
                         LineTotal = c.LineTotal
                     }).ToList()
                 };

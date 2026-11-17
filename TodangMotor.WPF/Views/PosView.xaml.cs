@@ -120,6 +120,24 @@ namespace TodangMotor.WPF.Views
                 }
                 return;
             }
+
+            // Enter key triggers checkout (if the button is enabled)
+            if (e.Key == Key.Enter && Keyboard.Modifiers == ModifierKeys.None)
+            {
+                // Ignore if we are typing in the Search box (handled in SearchInput_PreviewKeyDown)
+                if (Keyboard.FocusedElement == SearchInput) return;
+
+                // Only proceed if the Complete Sale button is actually enabled 
+                // (meaning cart has items and payment fields are filled)
+                if (CompleteSaleBtn != null && CompleteSaleBtn.IsEnabled)
+                {
+                    if (DataContext is PosViewModel vm)
+                    {
+                        vm.CompleteSaleCommand.Execute(null);
+                        e.Handled = true; // Stop the Enter key from doing anything else
+                    }
+                }
+            }
         }
 
         private static T? FindAncestor<T>(DependencyObject child) where T : DependencyObject

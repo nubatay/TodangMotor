@@ -540,15 +540,16 @@
                             </StackPanel>
 
                             <!-- Complete Sale -->
-                            <ui:Button Appearance="Primary" Content="Complete Sale"
-           Command="{Binding CompleteSaleCommand}"
-           Height="52" Margin="0,20,0,0"
-           HorizontalAlignment="Stretch"
-           FontSize="16" FontWeight="Bold"
-           Background="{StaticResource Brand}">
+                            <ui:Button x:Name="CompleteSaleBtn"
+                                   Appearance="Primary" Content="Complete Sale"
+                                   Command="{Binding CompleteSaleCommand}"
+                                   Height="52" Margin="0,20,0,0"
+                                   HorizontalAlignment="Stretch"
+                                   FontSize="16" FontWeight="Bold"
+                                   Background="{StaticResource Brand}">
                                 <ui:Button.Style>
                                     <Style TargetType="{x:Type ui:Button}"
-               BasedOn="{StaticResource {x:Type ui:Button}}">
+                                            BasedOn="{StaticResource {x:Type ui:Button}}">
                                         <Setter Property="IsEnabled" Value="{Binding IsNotBusy}"/>
                                         <Setter Property="ToolTipService.ShowOnDisabled" Value="True"/>
                                         <Setter Property="ToolTipService.Placement" Value="Top"/>

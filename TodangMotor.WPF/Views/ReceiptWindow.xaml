@@ -3,123 +3,160 @@
                  xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
                  xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
                  Title="Receipt"
-                 Width="420"
-                 SizeToContent="Height"
-                 ResizeMode="NoResize"
+                 Height="750" Width="450"
                  WindowStartupLocation="CenterOwner"
+                 ResizeMode="NoResize"
                  ExtendsContentIntoTitleBar="True"
                  WindowBackdropType="Mica"
                  Background="#F5F6FA">
 
-    <ui:FluentWindow.Resources>
-        <SolidColorBrush x:Key="Brand" Color="#4D6BFE"/>
-        <SolidColorBrush x:Key="Ink" Color="#0F172A"/>
-        <SolidColorBrush x:Key="Muted" Color="#64748B"/>
-        <SolidColorBrush x:Key="Line" Color="#EAECF3"/>
-    </ui:FluentWindow.Resources>
-
-    <Grid Margin="20">
+    <Grid>
         <Grid.RowDefinitions>
             <RowDefinition Height="*"/>
             <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
 
-        <!-- The Printable Area -->
-        <Border x:Name="ReceiptPrintArea" Grid.Row="0" Background="White" 
-                BorderBrush="{StaticResource Line}" BorderThickness="1" 
-                CornerRadius="8" Padding="24">
-            <Border.Effect>
-                <DropShadowEffect Color="#0F172A" Opacity="0.04" BlurRadius="16" ShadowDepth="2" Direction="270"/>
-            </Border.Effect>
+        <!-- Receipt Paper -->
+        <ScrollViewer Grid.Row="0" VerticalScrollBarVisibility="Auto" Margin="20">
+            <Border x:Name="ReceiptPrintArea" Background="#FFFFFF" Padding="24" BorderBrush="#E2E8F0" BorderThickness="1">
+                <Border.Effect>
+                    <DropShadowEffect Color="#0F172A" Opacity="0.08" BlurRadius="20" ShadowDepth="4" Direction="270"/>
+                </Border.Effect>
 
-            <StackPanel>
-                <!-- Header -->
-                <TextBlock Text="TODANG MOTOR" FontSize="20" FontWeight="Bold" Foreground="{StaticResource Ink}" HorizontalAlignment="Center"/>
-                <TextBlock Text="Parts &amp; Accessories" FontSize="14" FontWeight="SemiBold" Foreground="{StaticResource Muted}" HorizontalAlignment="Center" Margin="0,2,0,0"/>
-                <TextBlock Text="Lower Tamugan, Marilog, Davao City" FontSize="11" Foreground="{StaticResource Muted}" HorizontalAlignment="Center" Margin="0,6,0,0"/>
+                <StackPanel>
+                    <!-- Header -->
+                    <TextBlock Text="TODANG MOTOR" FontSize="20" FontWeight="Bold" HorizontalAlignment="Center" Foreground="#0F172A"/>
+                    <TextBlock Text="Parts &amp; Accessories" FontSize="12" HorizontalAlignment="Center" Foreground="#64748B" Margin="0,4,0,16"/>
 
-                <Border BorderBrush="{StaticResource Line}" BorderThickness="0,1,0,0" Margin="0,16,0,16"/>
+                    <!-- Meta Info -->
+                    <Grid Margin="0,0,0,16">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                            <!-- NEW ROW -->
+                        </Grid.RowDefinitions>
 
-                <!-- Meta Data -->
-                <Grid Margin="0,0,0,12">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="*"/>
-                        <ColumnDefinition Width="Auto"/>
-                    </Grid.ColumnDefinitions>
-                    <StackPanel Grid.Column="0">
-                        <TextBlock Text="{Binding InvoiceNo}" FontWeight="Bold" FontSize="13" Foreground="{StaticResource Ink}"/>
-                        <TextBlock Text="{Binding DateFormatted}" FontSize="11" Foreground="{StaticResource Muted}" Margin="0,2,0,0"/>
-                    </StackPanel>
-                    <StackPanel Grid.Column="1" HorizontalAlignment="Right">
-                        <TextBlock Text="{Binding CashierName, StringFormat='Cashier: {0}'}" FontSize="11" Foreground="{StaticResource Muted}" HorizontalAlignment="Right"/>
-                        <TextBlock Text="{Binding PaymentMethod, StringFormat='Payment: {0}'}" FontSize="11" Foreground="{StaticResource Muted}" HorizontalAlignment="Right" Margin="0,2,0,0"/>
-                        <TextBlock Text="{Binding GcashReference, StringFormat='Ref: {0}'}" FontSize="11" Foreground="{StaticResource Muted}" HorizontalAlignment="Right" Margin="0,2,0,0"
-                                   Visibility="{Binding GcashReference, Converter={StaticResource StringToVisibilityConverter}}"/>
-                    </StackPanel>
-                </Grid>
+                        <TextBlock Grid.Row="0" Grid.Column="0" Text="Invoice:" FontSize="12" Foreground="#64748B" Margin="0,0,8,4"/>
+                        <TextBlock Grid.Row="0" Grid.Column="1" Text="{Binding InvoiceNo}" FontSize="12" FontWeight="Bold" Foreground="#0F172A" Margin="0,0,0,4"/>
 
-                <TextBlock Text="{Binding CustomerName, StringFormat='Customer: {0}'}" FontSize="11" Foreground="{StaticResource Muted}" Margin="0,0,0,12"/>
+                        <TextBlock Grid.Row="1" Grid.Column="0" Text="Date:" FontSize="12" Foreground="#64748B" Margin="0,0,8,4"/>
+                        <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding DateDisplay}" FontSize="12" Foreground="#0F172A" Margin="0,0,0,4"/>
 
-                <!-- Items Header -->
-                <Grid Margin="0,0,0,8">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="40"/>
-                        <ColumnDefinition Width="*"/>
-                        <ColumnDefinition Width="80"/>
-                    </Grid.ColumnDefinitions>
-                    <TextBlock Grid.Column="0" Text="QTY" FontSize="11" FontWeight="Bold" Foreground="{StaticResource Muted}"/>
-                    <TextBlock Grid.Column="1" Text="ITEM" FontSize="11" FontWeight="Bold" Foreground="{StaticResource Muted}"/>
-                    <TextBlock Grid.Column="2" Text="AMOUNT" FontSize="11" FontWeight="Bold" Foreground="{StaticResource Muted}" HorizontalAlignment="Right"/>
-                </Grid>
+                        <TextBlock Grid.Row="2" Grid.Column="0" Text="Cashier:" FontSize="12" Foreground="#64748B" Margin="0,0,8,4"/>
+                        <TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding CashierName}" FontSize="12" Foreground="#0F172A" Margin="0,0,0,4"/>
 
-                <!-- Items List -->
-                <ItemsControl ItemsSource="{Binding Items}">
-                    <ItemsControl.ItemTemplate>
-                        <DataTemplate>
-                            <Grid Margin="0,4">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="40"/>
-                                    <ColumnDefinition Width="*"/>
-                                    <ColumnDefinition Width="80"/>
-                                </Grid.ColumnDefinitions>
-                                <TextBlock Grid.Column="0" Text="{Binding Quantity}" FontSize="12" Foreground="{StaticResource Ink}"/>
-                                <TextBlock Grid.Column="1" Text="{Binding ProductName}" FontSize="12" Foreground="{StaticResource Ink}" TextWrapping="Wrap" Margin="0,0,8,0"/>
-                                <TextBlock Grid.Column="2" Text="{Binding LineTotalFormatted}" FontSize="12" Foreground="{StaticResource Ink}" HorizontalAlignment="Right"/>
+                        <TextBlock Grid.Row="3" Grid.Column="0" Text="Customer:" FontSize="12" Foreground="#64748B" Margin="0,0,8,4"/>
+                        <TextBlock Grid.Row="3" Grid.Column="1" Text="{Binding CustomerName}" FontSize="12" Foreground="#0F172A" Margin="0,0,0,4"/>
+
+                        <!-- NEW ROW: Payment Type -->
+                        <TextBlock Grid.Row="4" Grid.Column="0" Text="Payment:" FontSize="12" Foreground="#64748B" Margin="0,0,8,0"/>
+                        <TextBlock Grid.Row="4" Grid.Column="1" Text="{Binding PaymentMethod}" FontSize="12" FontWeight="SemiBold" Foreground="#0F172A"/>
+                    </Grid>
+
+                    <!-- Dashed Divider -->
+                    <Rectangle Height="1" Fill="#CBD5E1" Margin="0,0,0,16">
+                        <Rectangle.StrokeDashArray>2 2</Rectangle.StrokeDashArray>
+                    </Rectangle>
+
+                    <!-- Items Header -->
+                    <Grid Margin="0,0,0,8">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="40"/>
+                            <ColumnDefinition Width="70"/>
+                            <ColumnDefinition Width="80"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Grid.Column="0" Text="Item" FontSize="11" FontWeight="Bold" Foreground="#334155"/>
+                        <TextBlock Grid.Column="1" Text="Qty" FontSize="11" FontWeight="Bold" Foreground="#334155" TextAlignment="Center"/>
+                        <TextBlock Grid.Column="2" Text="Price" FontSize="11" FontWeight="Bold" Foreground="#334155" TextAlignment="Right"/>
+                        <TextBlock Grid.Column="3" Text="Total" FontSize="11" FontWeight="Bold" Foreground="#334155" TextAlignment="Right"/>
+                    </Grid>
+
+                    <!-- Items List -->
+                    <ItemsControl ItemsSource="{Binding Lines}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <Grid Margin="0,4">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="40"/>
+                                        <ColumnDefinition Width="70"/>
+                                        <ColumnDefinition Width="80"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Grid.Column="0" Text="{Binding ProductName}" FontSize="12" Foreground="#0F172A" TextTrimming="CharacterEllipsis"/>
+                                    <TextBlock Grid.Column="1" Text="{Binding Quantity}" FontSize="12" Foreground="#0F172A" TextAlignment="Center"/>
+                                    <TextBlock Grid.Column="2" Text="{Binding UnitPrice, StringFormat=N2}" FontSize="12" Foreground="#0F172A" TextAlignment="Right"/>
+                                    <TextBlock Grid.Column="3" Text="{Binding LineTotal, StringFormat=N2}" FontSize="12" Foreground="#0F172A" TextAlignment="Right"/>
+                                </Grid>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+
+                    <!-- Dashed Divider -->
+                    <Rectangle Height="1" Fill="#CBD5E1" Margin="0,16">
+                        <Rectangle.StrokeDashArray>2 2</Rectangle.StrokeDashArray>
+                    </Rectangle>
+
+                    <!-- Totals -->
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                        </Grid.RowDefinitions>
+
+                        <TextBlock Grid.Row="0" Grid.Column="0" Text="Subtotal:" FontSize="14" FontWeight="Bold" Foreground="#0F172A" Margin="0,0,0,4"/>
+                        <TextBlock Grid.Row="0" Grid.Column="1" Text="{Binding Subtotal, StringFormat='₱ {0:N2}'}" FontSize="14" FontWeight="Bold" Foreground="#0F172A" TextAlignment="Right" Margin="0,0,0,4"/>
+
+                        <!-- CASH ONLY: Tendered & Change -->
+                        <StackPanel Grid.Row="1" Grid.ColumnSpan="2" Visibility="{Binding IsCash, Converter={StaticResource BooleanToVisibilityConverter}}">
+                            <Grid Margin="0,0,0,4">
+                                <TextBlock Grid.Column="0" Text="{Binding PaymentMethod, StringFormat='Tendered ({0}):'}" FontSize="12" Foreground="#64748B"/>
+                                <TextBlock Grid.Column="1" Text="{Binding Tendered, StringFormat='₱ {0:N2}'}" FontSize="12" Foreground="#64748B" TextAlignment="Right"/>
                             </Grid>
-                        </DataTemplate>
-                    </ItemsControl.ItemTemplate>
-                </ItemsControl>
+                            <Grid>
+                                <TextBlock Grid.Column="0" Text="Change:" FontSize="12" Foreground="#64748B"/>
+                                <TextBlock Grid.Column="1" Text="{Binding Change, StringFormat='₱ {0:N2}'}" FontSize="12" Foreground="#64748B" TextAlignment="Right"/>
+                            </Grid>
+                        </StackPanel>
 
-                <Border BorderBrush="{StaticResource Line}" BorderThickness="0,1,0,0" Margin="0,12,0,12"/>
+                        <!-- GCASH ONLY: Reference Number -->
+                        <Grid Grid.Row="1" Grid.ColumnSpan="2" Visibility="{Binding IsGcash, Converter={StaticResource BooleanToVisibilityConverter}}" Margin="0,0,0,4">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Grid.Column="0" Text="GCash Ref No:" FontSize="12" Foreground="#64748B"/>
+                            <TextBlock Grid.Column="1" Text="{Binding GcashReference}" FontSize="12" FontWeight="SemiBold" Foreground="#0F172A" TextAlignment="Right"/>
+                        </Grid>
+                    </Grid>
 
-                <!-- Totals -->
-                <Grid Margin="0,0,0,6">
-                    <TextBlock Text="Subtotal" FontSize="12" Foreground="{StaticResource Muted}"/>
-                    <TextBlock Text="{Binding SubtotalFormatted}" FontSize="12" FontWeight="SemiBold" Foreground="{StaticResource Ink}" HorizontalAlignment="Right"/>
-                </Grid>
-                <Grid Margin="0,0,0,6" Visibility="{Binding IsCash, Converter={StaticResource BooleanToVisibilityConverter}}">
-                    <TextBlock Text="Tendered" FontSize="12" Foreground="{StaticResource Muted}"/>
-                    <TextBlock Text="{Binding TenderedFormatted}" FontSize="12" FontWeight="SemiBold" Foreground="{StaticResource Ink}" HorizontalAlignment="Right"/>
-                </Grid>
-                <Grid Margin="0,0,0,6" Visibility="{Binding IsCash, Converter={StaticResource BooleanToVisibilityConverter}}">
-                    <TextBlock Text="Change" FontSize="14" FontWeight="Bold" Foreground="{StaticResource Ink}"/>
-                    <TextBlock Text="{Binding ChangeFormatted}" FontSize="14" FontWeight="Bold" Foreground="{StaticResource Brand}" HorizontalAlignment="Right"/>
-                </Grid>
+                    <TextBlock Text="Thank you for your purchase!" FontSize="12" Foreground="#64748B" HorizontalAlignment="Center" Margin="0,24,0,0"/>
+                </StackPanel>
+            </Border>
+        </ScrollViewer>
 
-                <Border BorderBrush="{StaticResource Line}" BorderThickness="0,1,0,0" Margin="0,16,0,12"/>
-
-                <!-- Footer -->
-                <TextBlock Text="We appreciate your business!" FontSize="12" Foreground="{StaticResource Ink}" HorizontalAlignment="Center" FontWeight="SemiBold"/>
-                <TextBlock Text="This serves as your official receipt." FontSize="10" Foreground="{StaticResource Muted}" HorizontalAlignment="Center" Margin="0,4,0,0"/>
-            </StackPanel>
+        <!-- Footer -->
+        <Border Grid.Row="1" Background="#FFFFFF" BorderBrush="#E2E8F0" BorderThickness="0,1,0,0" Padding="24">
+            <Grid>
+                <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                    <!-- IsCancel allows the ESC key to close it automatically -->
+                    <ui:Button Appearance="Secondary" Content="Close" Click="Close_Click" Width="100" Height="40" Margin="0,0,12,0" IsCancel="True"/>
+                    <!-- IsDefault allows the ENTER key to trigger the Print -->
+                    <ui:Button Appearance="Primary" Content="Print" Click="Print_Click" Icon="{ui:SymbolIcon Print24}" Width="120" Height="40" Background="#4D6BFE" IsDefault="True"/>
+                </StackPanel>
+            </Grid>
         </Border>
-
-        <!-- Action Buttons -->
-        <Grid Grid.Row="1" Margin="0,16,0,0">
-            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
-                <ui:Button Appearance="Secondary" Content="Close" Click="Close_Click" Width="100" Height="40" Margin="0,0,12,0"/>
-                <ui:Button Appearance="Primary" Content="Print Receipt" Icon="{ui:SymbolIcon Print24}" Click="Print_Click" Width="140" Height="40" Background="{StaticResource Brand}"/>
-            </StackPanel>
-        </Grid>
     </Grid>
 </ui:FluentWindow>
