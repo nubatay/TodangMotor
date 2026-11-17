@@ -80,8 +80,9 @@
         <!-- Custom Window Control Buttons -->
         <Style x:Key="WindowControlButton" TargetType="Button">
             <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Foreground" Value="{StaticResource Ink}"/>
             <Setter Property="BorderThickness" Value="0"/>
-            <Setter Property="Width" Value="46"/>
+            <Setter Property="Width" Value="32"/>
             <Setter Property="Height" Value="32"/>
             <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
             <Setter Property="Template">
@@ -100,6 +101,7 @@
             </Setter>
         </Style>
 
+        <!-- ONLY ONE CloseButton STYLE NOW -->
         <Style x:Key="CloseButton" TargetType="Button" BasedOn="{StaticResource WindowControlButton}">
             <Setter Property="Template">
                 <Setter.Value>
@@ -109,7 +111,8 @@
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="border" Property="Background" Value="#EF4444"/>
+                                <Setter TargetName="border" Property="Background" Value="#C42B1C"/>
+                                <Setter Property="Foreground" Value="White"/>
                             </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
@@ -122,35 +125,36 @@
     <Grid>
         <Grid.RowDefinitions>
             <RowDefinition Height="32"/>
-            <!-- Title Bar Height -->
             <RowDefinition Height="*"/>
-            <!-- Main Content Area -->
         </Grid.RowDefinitions>
         <Grid.ColumnDefinitions>
-            <!-- CHANGED TO AUTO: This column will shrink to 0 when the sidebar is hidden -->
             <ColumnDefinition Width="Auto"/>
             <ColumnDefinition Width="*"/>
         </Grid.ColumnDefinitions>
 
-        <!-- ================= TITLE BAR (Spans Full Width) ================= -->
+        <!-- ================= TITLE BAR ================= -->
         <ui:TitleBar Grid.Row="0" Grid.ColumnSpan="2" ShowMinimize="False" ShowMaximize="False" ShowClose="False" Background="Transparent">
             <ui:TitleBar.TrailingContent>
                 <StackPanel Orientation="Horizontal" Margin="0,0,10,0">
-                    <Button Style="{StaticResource WindowControlButton}" Click="Minimize_Click">
-                        <ui:SymbolIcon Symbol="Subtract24" FontSize="14" Foreground="{StaticResource Ink}"/>
+                    <!-- Minimize -->
+                    <Button Style="{StaticResource WindowControlButton}" Click="Minimize_Click" ToolTip="Minimize">
+                        <ui:SymbolIcon Symbol="Subtract24" FontSize="14" Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"/>
                     </Button>
-                    <Button Style="{StaticResource WindowControlButton}" Click="Maximize_Click">
-                        <ui:SymbolIcon x:Name="MaximizeIcon" Symbol="Square24" FontSize="12" Foreground="{StaticResource Ink}"/>
+
+                    <!-- Maximize -->
+                    <Button Style="{StaticResource WindowControlButton}" Click="Maximize_Click" ToolTip="Maximize">
+                        <ui:SymbolIcon x:Name="MaximizeIcon" Symbol="Square24" FontSize="12" Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"/>
                     </Button>
-                    <Button Style="{StaticResource CloseButton}" Click="Close_Click">
-                        <ui:SymbolIcon Symbol="Dismiss24" FontSize="14" Foreground="{StaticResource Ink}"/>
+
+                    <!-- Close -->
+                    <Button Style="{StaticResource CloseButton}" Click="Close_Click" ToolTip="Close">
+                        <ui:SymbolIcon Symbol="Dismiss24" FontSize="14" Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"/>
                     </Button>
                 </StackPanel>
             </ui:TitleBar.TrailingContent>
         </ui:TitleBar>
 
         <!-- ================= SIDEBAR ================= -->
-        <!-- CHANGED: Added Width="220" back to the Border -->
         <Border Grid.Row="0" Grid.RowSpan="2" Grid.Column="0" Width="220" Background="White"
                 BorderBrush="{StaticResource Line}" BorderThickness="0,0,1,0"
                 Visibility="{Binding IsLoggedIn, Converter={StaticResource BooleanToVisibilityConverter}}">
