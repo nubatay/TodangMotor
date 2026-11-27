@@ -11,7 +11,7 @@
         <SolidColorBrush x:Key="Line" Color="#EAECF3"/>
         <SolidColorBrush x:Key="Canvas" Color="#F5F6FA"/>
 
-        <!-- Filter Chip Style (Same as Dashboard) -->
+        <!-- Filter Chip Style -->
         <Style x:Key="FilterChip" TargetType="RadioButton">
             <Setter Property="Foreground" Value="#64748B"/>
             <Setter Property="FontWeight" Value="SemiBold"/>
@@ -26,7 +26,7 @@
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="border" Property="Background" Value="#DDE2F2"/>
+                                <Setter TargetName="border" Property="Background" Value="#E2E8F0"/>
                             </Trigger>
                             <Trigger Property="IsChecked" Value="True">
                                 <Setter TargetName="border" Property="Background" Value="#4D6BFE"/>
@@ -67,50 +67,81 @@
             <Setter Property="SelectionUnit" Value="FullRow"/>
         </Style>
 
+        <!-- PERFECT ALIGNMENT: Header Template Override -->
         <Style TargetType="DataGridColumnHeader">
             <Setter Property="Background" Value="#F1F5F9"/>
             <Setter Property="Foreground" Value="#334155"/>
             <Setter Property="FontWeight" Value="SemiBold"/>
             <Setter Property="FontSize" Value="14"/>
-            <Setter Property="Padding" Value="12,12"/>
             <Setter Property="BorderThickness" Value="0"/>
             <Setter Property="HorizontalContentAlignment" Value="Left"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="DataGridColumnHeader">
+                        <Border Background="{TemplateBinding Background}" Padding="24,16">
+                            <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}" VerticalAlignment="Center"/>
+                        </Border>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
         </Style>
 
-        <Style x:Key="CenterHeader" TargetType="DataGridColumnHeader" BasedOn="{StaticResource {x:Type DataGridColumnHeader}}">
-            <Setter Property="HorizontalContentAlignment" Value="Center"/>
+        <Style x:Key="RightHeader" TargetType="DataGridColumnHeader" BasedOn="{StaticResource {x:Type DataGridColumnHeader}}">
+            <Setter Property="HorizontalContentAlignment" Value="Right"/>
         </Style>
 
         <Style TargetType="DataGridRow">
             <Setter Property="Background" Value="Transparent"/>
             <Setter Property="BorderThickness" Value="0,0,0,1"/>
             <Setter Property="BorderBrush" Value="{StaticResource Line}"/>
-            <Setter Property="Height" Value="50"/>
+            <Setter Property="MinHeight" Value="56"/>
+            <Setter Property="VerticalContentAlignment" Value="Center"/>
             <Style.Triggers>
                 <Trigger Property="IsMouseOver" Value="True">
                     <Setter Property="Background" Value="#F8FAFC"/>
                 </Trigger>
+                <Trigger Property="IsSelected" Value="True">
+                    <Setter Property="Background" Value="#EEF1FF"/>
+                </Trigger>
             </Style.Triggers>
         </Style>
 
+        <!-- PERFECT ALIGNMENT: Cell Template Override -->
         <Style TargetType="DataGridCell">
             <Setter Property="BorderThickness" Value="0"/>
-            <Setter Property="Padding" Value="12,0"/>
             <Setter Property="VerticalContentAlignment" Value="Center"/>
             <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="DataGridCell">
+                        <Border Background="{TemplateBinding Background}" Padding="24,0">
+                            <ContentPresenter VerticalAlignment="Center"/>
+                        </Border>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+            <Style.Triggers>
+                <Trigger Property="IsSelected" Value="True">
+                    <Setter Property="Foreground" Value="{StaticResource Ink}"/>
+                    <Setter Property="Background" Value="Transparent"/>
+                </Trigger>
+            </Style.Triggers>
         </Style>
 
+        <!-- Text Element Styles -->
         <Style x:Key="LeftAlignedText" TargetType="TextBlock">
             <Setter Property="TextTrimming" Value="CharacterEllipsis"/>
             <Setter Property="VerticalAlignment" Value="Center"/>
             <Setter Property="HorizontalAlignment" Value="Left"/>
             <Setter Property="TextAlignment" Value="Left"/>
-            <Setter Property="FontWeight" Value="Normal"/>
+            <Setter Property="Margin" Value="0,0,16,0"/>
+            <Setter Property="ToolTip" Value="{Binding Text, RelativeSource={RelativeSource Self}}"/>
         </Style>
 
-        <Style x:Key="CenterAlignedText" TargetType="TextBlock" BasedOn="{StaticResource LeftAlignedText}">
-            <Setter Property="HorizontalAlignment" Value="Center"/>
-            <Setter Property="TextAlignment" Value="Center"/>
+        <Style x:Key="RightAlignedText" TargetType="TextBlock" BasedOn="{StaticResource LeftAlignedText}">
+            <Setter Property="HorizontalAlignment" Value="Right"/>
+            <Setter Property="TextAlignment" Value="Right"/>
+            <Setter Property="Margin" Value="0"/>
         </Style>
 
         <!-- Card Style -->
@@ -119,7 +150,7 @@
             <Setter Property="BorderBrush" Value="{StaticResource Line}"/>
             <Setter Property="BorderThickness" Value="1"/>
             <Setter Property="CornerRadius" Value="12"/>
-            <Setter Property="Padding" Value="20"/>
+            <Setter Property="Padding" Value="24"/>
             <Setter Property="Effect">
                 <Setter.Value>
                     <DropShadowEffect Color="#0F172A" Opacity="0.04" BlurRadius="16" ShadowDepth="2" Direction="270"/>
@@ -145,7 +176,7 @@
         <!-- Filter Bar -->
         <Border Grid.Row="1" Background="#FFFFFF" BorderBrush="{StaticResource Line}" BorderThickness="1" CornerRadius="12" Padding="16" Margin="0,0,0,16">
             <StackPanel>
-                <Border Background="#E9ECF5" CornerRadius="11" Padding="4" HorizontalAlignment="Left">
+                <Border Background="#F1F5F9" CornerRadius="11" Padding="4" HorizontalAlignment="Left">
                     <ItemsControl ItemsSource="{Binding DateFilters}">
                         <ItemsControl.ItemsPanel>
                             <ItemsPanelTemplate>
@@ -169,6 +200,7 @@
                     </ItemsControl>
                 </Border>
 
+                <!-- Custom Date Pickers -->
                 <StackPanel Orientation="Horizontal" Margin="0,12,0,0" 
                             Visibility="{Binding IsCustomDateVisible, Converter={StaticResource BooleanToVisibilityConverter}}">
                     <Border Style="{StaticResource InputBorder}" Width="150" Margin="0,0,8,0">
@@ -183,33 +215,43 @@
             </StackPanel>
         </Border>
 
-        <!-- Summary Cards -->
-        <UniformGrid Grid.Row="2" Columns="4" Margin="0,0,0,16">
-            <Border Style="{StaticResource StatCard}" Margin="0,0,16,0">
+        <!-- Summary Cards (Grid Layout with exact gaps) -->
+        <Grid Grid.Row="2" Margin="0,0,0,16">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="16"/>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="16"/>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="16"/>
+                <ColumnDefinition Width="*"/>
+            </Grid.ColumnDefinitions>
+
+            <Border Grid.Column="0" Style="{StaticResource StatCard}">
                 <StackPanel>
                     <TextBlock Text="Total Revenue" FontSize="13" FontWeight="SemiBold" Foreground="{StaticResource Muted}"/>
                     <TextBlock Text="{Binding TotalRevenueText}" FontSize="24" FontWeight="Bold" Foreground="{StaticResource Ink}" Margin="0,8,0,0"/>
                 </StackPanel>
             </Border>
-            <Border Style="{StaticResource StatCard}" Margin="0,0,16,0">
+            <Border Grid.Column="2" Style="{StaticResource StatCard}">
                 <StackPanel>
                     <TextBlock Text="Total Cost" FontSize="13" FontWeight="SemiBold" Foreground="{StaticResource Muted}"/>
                     <TextBlock Text="{Binding TotalCostText}" FontSize="24" FontWeight="Bold" Foreground="{StaticResource Ink}" Margin="0,8,0,0"/>
                 </StackPanel>
             </Border>
-            <Border Style="{StaticResource StatCard}" Margin="0,0,16,0">
+            <Border Grid.Column="4" Style="{StaticResource StatCard}">
                 <StackPanel>
                     <TextBlock Text="Net Income" FontSize="13" FontWeight="SemiBold" Foreground="{StaticResource Muted}"/>
                     <TextBlock Text="{Binding NetIncomeText}" FontSize="24" FontWeight="Bold" Foreground="{StaticResource Ink}" Margin="0,8,0,0"/>
                 </StackPanel>
             </Border>
-            <Border Style="{StaticResource StatCard}">
+            <Border Grid.Column="6" Style="{StaticResource StatCard}">
                 <StackPanel>
                     <TextBlock Text="Transactions" FontSize="13" FontWeight="SemiBold" Foreground="{StaticResource Muted}"/>
                     <TextBlock Text="{Binding TransactionsText}" FontSize="24" FontWeight="Bold" Foreground="{StaticResource Ink}" Margin="0,8,0,0"/>
                 </StackPanel>
             </Border>
-        </UniformGrid>
+        </Grid>
 
         <!-- DataGrid & Generate Button -->
         <Grid Grid.Row="3">
@@ -218,23 +260,49 @@
                 <RowDefinition Height="Auto"/>
             </Grid.RowDefinitions>
 
+            <!-- DataGrid Container -->
             <Border Grid.Row="0" Background="#FFFFFF" BorderBrush="{StaticResource Line}" BorderThickness="1" CornerRadius="12" Margin="0,0,0,16">
-                <DataGrid Style="{StaticResource CleanDataGrid}" ItemsSource="{Binding DailyRows}" Margin="8">
-                    <DataGrid.Columns>
-                        <DataGridTextColumn Header="Date" Binding="{Binding Date}" Width="2*" ElementStyle="{StaticResource LeftAlignedText}"/>
-                        <DataGridTextColumn Header="Transactions" Binding="{Binding Transactions}" Width="1*" HeaderStyle="{StaticResource CenterHeader}" ElementStyle="{StaticResource CenterAlignedText}"/>
-                        <DataGridTextColumn Header="Revenue" Binding="{Binding Revenue, StringFormat=C2}" Width="1.5*" HeaderStyle="{StaticResource CenterHeader}" ElementStyle="{StaticResource CenterAlignedText}"/>
-                        <DataGridTextColumn Header="Cost" Binding="{Binding Cost, StringFormat=C2}" Width="1.5*" HeaderStyle="{StaticResource CenterHeader}" ElementStyle="{StaticResource CenterAlignedText}"/>
-                        <DataGridTextColumn Header="Net Income" Binding="{Binding NetIncome, StringFormat=C2, TargetNullValue='—'}" Width="1.5*" HeaderStyle="{StaticResource CenterHeader}" ElementStyle="{StaticResource CenterAlignedText}"/>
-                    </DataGrid.Columns>
-                </DataGrid>
+                <Grid>
+                    <DataGrid Style="{StaticResource CleanDataGrid}" ItemsSource="{Binding DailyRows}" Margin="8">
+                        <DataGrid.Columns>
+                            <DataGridTextColumn Header="Date" Binding="{Binding Date}" Width="2*" ElementStyle="{StaticResource LeftAlignedText}"/>
+
+                            <!-- NUMBERS (Right Aligned) -->
+                            <DataGridTextColumn Header="Transactions" Binding="{Binding Transactions}" Width="1.5*" 
+                                                HeaderStyle="{StaticResource RightHeader}" ElementStyle="{StaticResource RightAlignedText}"/>
+                            <DataGridTextColumn Header="Revenue" Binding="{Binding Revenue, StringFormat=C2}" Width="1.5*" 
+                                                HeaderStyle="{StaticResource RightHeader}" ElementStyle="{StaticResource RightAlignedText}"/>
+                            <DataGridTextColumn Header="Cost" Binding="{Binding Cost, StringFormat=C2}" Width="1.5*" 
+                                                HeaderStyle="{StaticResource RightHeader}" ElementStyle="{StaticResource RightAlignedText}"/>
+                            <DataGridTextColumn Header="Net Income" Binding="{Binding NetIncome, StringFormat=C2, TargetNullValue='—'}" Width="1.5*" 
+                                                HeaderStyle="{StaticResource RightHeader}" ElementStyle="{StaticResource RightAlignedText}"/>
+                        </DataGrid.Columns>
+                    </DataGrid>
+
+                    <!-- Empty State Overlay -->
+                    <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center" IsHitTestVisible="False">
+                        <StackPanel.Style>
+                            <Style TargetType="StackPanel">
+                                <Setter Property="Visibility" Value="Collapsed"/>
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding DailyRows.Count}" Value="0">
+                                        <Setter Property="Visibility" Value="Visible"/>
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </StackPanel.Style>
+                        <ui:SymbolIcon Symbol="DataBarVertical24" FontSize="36" Foreground="#CBD5E1" HorizontalAlignment="Center"/>
+                        <TextBlock Text="No report data found" FontSize="14" FontWeight="SemiBold" Foreground="{StaticResource Muted}" HorizontalAlignment="Center" Margin="0,10,0,2"/>
+                        <TextBlock Text="Try adjusting your date filters." FontSize="12" Foreground="#94A3B8" HorizontalAlignment="Center"/>
+                    </StackPanel>
+                </Grid>
             </Border>
 
             <!-- Generate PDF Button -->
             <StackPanel Grid.Row="1" Orientation="Horizontal" HorizontalAlignment="Right">
                 <TextBlock Text="Note: Data with missing costs will show as '—'" VerticalAlignment="Center" Foreground="{StaticResource Muted}" FontSize="12" Margin="0,0,16,0"/>
                 <ui:Button Appearance="Primary" Content="Generate PDF" Command="{Binding GeneratePdfCommand}" 
-                           Icon="{ui:SymbolIcon DocumentPdf24}" Background="{StaticResource Brand}" Height="42" Padding="20,0"/>
+                           Icon="{ui:SymbolIcon DocumentPdf24}" Background="{StaticResource Brand}" Height="42" Padding="20,0" Cursor="Hand"/>
             </StackPanel>
         </Grid>
     </Grid>

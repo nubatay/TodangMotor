@@ -51,50 +51,112 @@
             <Setter Property="SelectionUnit" Value="FullRow"/>
         </Style>
 
+        <!-- PERFECT ALIGNMENT: Header Template Override -->
         <Style TargetType="DataGridColumnHeader">
             <Setter Property="Background" Value="#F1F5F9"/>
             <Setter Property="Foreground" Value="#334155"/>
             <Setter Property="FontWeight" Value="SemiBold"/>
             <Setter Property="FontSize" Value="14"/>
-            <Setter Property="Padding" Value="12,12"/>
             <Setter Property="BorderThickness" Value="0"/>
             <Setter Property="HorizontalContentAlignment" Value="Left"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="DataGridColumnHeader">
+                        <Border Background="{TemplateBinding Background}" Padding="16,16">
+                            <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}" VerticalAlignment="Center"/>
+                        </Border>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
         </Style>
 
         <Style x:Key="CenterHeader" TargetType="DataGridColumnHeader" BasedOn="{StaticResource {x:Type DataGridColumnHeader}}">
             <Setter Property="HorizontalContentAlignment" Value="Center"/>
         </Style>
 
+        <Style x:Key="RightHeader" TargetType="DataGridColumnHeader" BasedOn="{StaticResource {x:Type DataGridColumnHeader}}">
+            <Setter Property="HorizontalContentAlignment" Value="Right"/>
+        </Style>
+
         <Style TargetType="DataGridRow">
             <Setter Property="Background" Value="Transparent"/>
             <Setter Property="BorderThickness" Value="0,0,0,1"/>
             <Setter Property="BorderBrush" Value="{StaticResource Line}"/>
-            <Setter Property="Height" Value="50"/>
+            <Setter Property="MinHeight" Value="56"/>
+            <Setter Property="VerticalContentAlignment" Value="Center"/>
             <Style.Triggers>
                 <Trigger Property="IsMouseOver" Value="True">
                     <Setter Property="Background" Value="#F8FAFC"/>
                 </Trigger>
+                <Trigger Property="IsSelected" Value="True">
+                    <Setter Property="Background" Value="#EEF1FF"/>
+                </Trigger>
             </Style.Triggers>
         </Style>
 
+        <!-- PERFECT ALIGNMENT: Cell Template Override -->
         <Style TargetType="DataGridCell">
             <Setter Property="BorderThickness" Value="0"/>
-            <Setter Property="Padding" Value="12,0"/>
             <Setter Property="VerticalContentAlignment" Value="Center"/>
             <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="DataGridCell">
+                        <Border Background="{TemplateBinding Background}" Padding="16,0">
+                            <ContentPresenter VerticalAlignment="Center"/>
+                        </Border>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+            <Style.Triggers>
+                <Trigger Property="IsSelected" Value="True">
+                    <Setter Property="Foreground" Value="{StaticResource Ink}"/>
+                    <Setter Property="Background" Value="Transparent"/>
+                </Trigger>
+            </Style.Triggers>
         </Style>
 
+        <!-- Text Element Styles -->
         <Style x:Key="LeftAlignedText" TargetType="TextBlock">
             <Setter Property="TextTrimming" Value="CharacterEllipsis"/>
             <Setter Property="VerticalAlignment" Value="Center"/>
             <Setter Property="HorizontalAlignment" Value="Left"/>
             <Setter Property="TextAlignment" Value="Left"/>
-            <Setter Property="FontWeight" Value="Normal"/>
+            <Setter Property="Margin" Value="0,0,16,0"/>
+            <Setter Property="ToolTip" Value="{Binding Text, RelativeSource={RelativeSource Self}}"/>
         </Style>
 
         <Style x:Key="CenterAlignedText" TargetType="TextBlock" BasedOn="{StaticResource LeftAlignedText}">
             <Setter Property="HorizontalAlignment" Value="Center"/>
             <Setter Property="TextAlignment" Value="Center"/>
+        </Style>
+
+        <Style x:Key="RightAlignedText" TargetType="TextBlock" BasedOn="{StaticResource LeftAlignedText}">
+            <Setter Property="HorizontalAlignment" Value="Right"/>
+            <Setter Property="TextAlignment" Value="Right"/>
+            <Setter Property="Margin" Value="0"/>
+        </Style>
+
+        <!-- Action Button Style (Hover Effect) -->
+        <Style x:Key="ActionIconButton" TargetType="Button">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Padding" Value="6"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="border" Background="{TemplateBinding Background}" CornerRadius="6" Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="border" Property="Background" Value="#F1F5F9"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
         </Style>
 
         <!-- Modern TabControl Style -->
@@ -166,7 +228,6 @@
                                 <RowDefinition Height="Auto"/>
                             </Grid.RowDefinitions>
 
-                            <!-- Supplier -->
                             <StackPanel Grid.Row="0" Grid.Column="0">
                                 <TextBlock Text="Supplier" FontSize="13" FontWeight="SemiBold" Foreground="#334155" Margin="0,0,0,6"/>
                                 <Border Style="{StaticResource InputBorder}">
@@ -175,7 +236,6 @@
                                 </Border>
                             </StackPanel>
 
-                            <!-- Order Date -->
                             <StackPanel Grid.Row="0" Grid.Column="2">
                                 <TextBlock Text="Order Date" FontSize="13" FontWeight="SemiBold" Foreground="#334155" Margin="0,0,0,6"/>
                                 <Border Style="{StaticResource InputBorder}">
@@ -183,7 +243,6 @@
                                 </Border>
                             </StackPanel>
 
-                            <!-- Notes -->
                             <StackPanel Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="3" Margin="0,16,0,0">
                                 <TextBlock Text="Notes (Optional)" FontSize="13" FontWeight="SemiBold" Foreground="#334155" Margin="0,0,0,6"/>
                                 <Border Style="{StaticResource InputBorder}">
@@ -224,27 +283,51 @@
                         </Grid>
                     </Border>
 
-                    <!-- Current Lines Grid -->
+                    <!-- Current Lines Grid & Empty State -->
                     <Border Grid.Row="2" Background="#FFFFFF" BorderBrush="{StaticResource Line}" BorderThickness="1" CornerRadius="12">
-                        <DataGrid Style="{StaticResource CleanDataGrid}" ItemsSource="{Binding CurrentLines}" Margin="8">
-                            <DataGrid.Columns>
-                                <DataGridTextColumn Header="Product" Binding="{Binding ProductName}" Width="2*" ElementStyle="{StaticResource LeftAlignedText}"/>
-                                <DataGridTextColumn Header="Brand" Binding="{Binding Brand}" Width="1.5*" ElementStyle="{StaticResource LeftAlignedText}"/>
-                                <DataGridTextColumn Header="Unit" Binding="{Binding Unit}" Width="100" HeaderStyle="{StaticResource CenterHeader}" ElementStyle="{StaticResource CenterAlignedText}"/>
-                                <DataGridTextColumn Header="Qty" Binding="{Binding Quantity}" Width="100" HeaderStyle="{StaticResource CenterHeader}" ElementStyle="{StaticResource CenterAlignedText}"/>
+                        <Grid>
+                            <DataGrid Style="{StaticResource CleanDataGrid}" ItemsSource="{Binding CurrentLines}" Margin="8">
+                                <DataGrid.Columns>
+                                    <DataGridTextColumn Header="Product" Binding="{Binding ProductName}" Width="2*" ElementStyle="{StaticResource LeftAlignedText}"/>
+                                    <DataGridTextColumn Header="Brand" Binding="{Binding Brand}" Width="1.5*" ElementStyle="{StaticResource LeftAlignedText}"/>
 
-                                <DataGridTemplateColumn Header="" Width="80" HeaderStyle="{StaticResource CenterHeader}">
-                                    <DataGridTemplateColumn.CellTemplate>
-                                        <DataTemplate>
-                                            <Button Command="{Binding DataContext.RemoveLineCommand, RelativeSource={RelativeSource AncestorType=UserControl}}" 
-                                                    CommandParameter="{Binding}" Background="Transparent" BorderThickness="0" Cursor="Hand" HorizontalAlignment="Center">
-                                                <ui:SymbolIcon Symbol="Delete24" Foreground="#EF4444" FontSize="18"/>
-                                            </Button>
-                                        </DataTemplate>
-                                    </DataGridTemplateColumn.CellTemplate>
-                                </DataGridTemplateColumn>
-                            </DataGrid.Columns>
-                        </DataGrid>
+                                    <!-- NUMBERS -->
+                                    <DataGridTextColumn Header="Unit" Binding="{Binding Unit}" Width="100" 
+                                                        HeaderStyle="{StaticResource CenterHeader}" ElementStyle="{StaticResource CenterAlignedText}"/>
+                                    <DataGridTextColumn Header="Qty" Binding="{Binding Quantity}" Width="100" 
+                                                        HeaderStyle="{StaticResource RightHeader}" ElementStyle="{StaticResource RightAlignedText}"/>
+
+                                    <!-- ACTIONS COLUMN -->
+                                    <DataGridTemplateColumn Header="Actions" Width="80" HeaderStyle="{StaticResource CenterHeader}">
+                                        <DataGridTemplateColumn.CellTemplate>
+                                            <DataTemplate>
+                                                <Button Command="{Binding DataContext.RemoveLineCommand, RelativeSource={RelativeSource AncestorType=UserControl}}" 
+                                                        CommandParameter="{Binding}" Style="{StaticResource ActionIconButton}" HorizontalAlignment="Center" ToolTip="Remove Line">
+                                                    <ui:SymbolIcon Symbol="Delete24" Foreground="#EF4444" FontSize="18"/>
+                                                </Button>
+                                            </DataTemplate>
+                                        </DataGridTemplateColumn.CellTemplate>
+                                    </DataGridTemplateColumn>
+                                </DataGrid.Columns>
+                            </DataGrid>
+
+                            <!-- Empty State Overlay -->
+                            <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center" IsHitTestVisible="False">
+                                <StackPanel.Style>
+                                    <Style TargetType="StackPanel">
+                                        <Setter Property="Visibility" Value="Collapsed"/>
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding CurrentLines.Count}" Value="0">
+                                                <Setter Property="Visibility" Value="Visible"/>
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </StackPanel.Style>
+                                <ui:SymbolIcon Symbol="DocumentAdd24" FontSize="36" Foreground="#CBD5E1" HorizontalAlignment="Center"/>
+                                <TextBlock Text="No items added yet" FontSize="14" FontWeight="SemiBold" Foreground="{StaticResource Muted}" HorizontalAlignment="Center" Margin="0,10,0,2"/>
+                                <TextBlock Text="Add a line above to begin building the order." FontSize="12" Foreground="#94A3B8" HorizontalAlignment="Center"/>
+                            </StackPanel>
+                        </Grid>
                     </Border>
 
                     <!-- Footer -->
@@ -279,25 +362,50 @@
                         </Border>
                     </Border>
 
+                    <!-- History DataGrid & Empty State -->
                     <Border Grid.Row="1" Background="#FFFFFF" BorderBrush="{StaticResource Line}" BorderThickness="1" CornerRadius="12">
-                        <DataGrid Style="{StaticResource CleanDataGrid}" ItemsSource="{Binding HistoryItems}" Margin="8">
-                            <DataGrid.Columns>
-                                <DataGridTextColumn Header="PO Number" Binding="{Binding PONumber}" Width="1.5*" ElementStyle="{StaticResource LeftAlignedText}"/>
-                                <DataGridTextColumn Header="Order Date" Binding="{Binding OrderDate}" Width="1.5*" ElementStyle="{StaticResource LeftAlignedText}"/>
-                                <DataGridTextColumn Header="Supplier" Binding="{Binding SupplierName}" Width="2*" ElementStyle="{StaticResource LeftAlignedText}"/>
-                                <DataGridTextColumn Header="Items" Binding="{Binding ItemCount}" Width="100" HeaderStyle="{StaticResource CenterHeader}" ElementStyle="{StaticResource CenterAlignedText}"/>
+                        <Grid>
+                            <DataGrid Style="{StaticResource CleanDataGrid}" ItemsSource="{Binding HistoryItems}" Margin="8">
+                                <DataGrid.Columns>
+                                    <DataGridTextColumn Header="PO Number" Binding="{Binding PONumber}" Width="1.5*" ElementStyle="{StaticResource LeftAlignedText}"/>
+                                    <DataGridTextColumn Header="Order Date" Binding="{Binding OrderDate}" Width="1.5*" ElementStyle="{StaticResource LeftAlignedText}"/>
+                                    <DataGridTextColumn Header="Supplier" Binding="{Binding SupplierName}" Width="2*" ElementStyle="{StaticResource LeftAlignedText}"/>
 
-                                <DataGridTemplateColumn Header="" Width="100" HeaderStyle="{StaticResource CenterHeader}">
-                                    <DataGridTemplateColumn.CellTemplate>
-                                        <DataTemplate>
-                                            <ui:Button Appearance="Secondary" Content="View" 
-                                                       Command="{Binding DataContext.ViewPODetailCommand, RelativeSource={RelativeSource AncestorType=UserControl}}" 
-                                                       CommandParameter="{Binding}" Height="28" Padding="12,0" FontSize="12" HorizontalAlignment="Center" Cursor="Hand"/>
-                                        </DataTemplate>
-                                    </DataGridTemplateColumn.CellTemplate>
-                                </DataGridTemplateColumn>
-                            </DataGrid.Columns>
-                        </DataGrid>
+                                    <!-- NUMBERS -->
+                                    <DataGridTextColumn Header="Items" Binding="{Binding ItemCount}" Width="100" 
+                                                        HeaderStyle="{StaticResource RightHeader}" ElementStyle="{StaticResource RightAlignedText}"/>
+
+                                    <!-- ACTIONS COLUMN -->
+                                    <DataGridTemplateColumn Header="Actions" Width="100" HeaderStyle="{StaticResource CenterHeader}">
+                                        <DataGridTemplateColumn.CellTemplate>
+                                            <DataTemplate>
+                                                <Button Command="{Binding DataContext.ViewPODetailCommand, RelativeSource={RelativeSource AncestorType=UserControl}}" 
+                                                        CommandParameter="{Binding}" Style="{StaticResource ActionIconButton}" HorizontalAlignment="Center" ToolTip="View PO Details">
+                                                    <ui:SymbolIcon Symbol="Eye24" Foreground="#4D6BFE" FontSize="18"/>
+                                                </Button>
+                                            </DataTemplate>
+                                        </DataGridTemplateColumn.CellTemplate>
+                                    </DataGridTemplateColumn>
+                                </DataGrid.Columns>
+                            </DataGrid>
+
+                            <!-- Empty State Overlay -->
+                            <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center" IsHitTestVisible="False">
+                                <StackPanel.Style>
+                                    <Style TargetType="StackPanel">
+                                        <Setter Property="Visibility" Value="Collapsed"/>
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding HistoryItems.Count}" Value="0">
+                                                <Setter Property="Visibility" Value="Visible"/>
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </StackPanel.Style>
+                                <ui:SymbolIcon Symbol="Search24" FontSize="36" Foreground="#CBD5E1" HorizontalAlignment="Center"/>
+                                <TextBlock Text="No purchase orders found" FontSize="14" FontWeight="SemiBold" Foreground="{StaticResource Muted}" HorizontalAlignment="Center" Margin="0,10,0,2"/>
+                                <TextBlock Text="Try adjusting your search terms." FontSize="12" Foreground="#94A3B8" HorizontalAlignment="Center"/>
+                            </StackPanel>
+                        </Grid>
                     </Border>
                 </Grid>
             </TabItem>

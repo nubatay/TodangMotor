@@ -53,14 +53,23 @@
             <Setter Property="SelectionUnit" Value="FullRow"/>
         </Style>
 
+        <!-- PERFECT ALIGNMENT: Header Template Override -->
         <Style TargetType="DataGridColumnHeader">
             <Setter Property="Background" Value="#F1F5F9"/>
             <Setter Property="Foreground" Value="#334155"/>
             <Setter Property="FontWeight" Value="SemiBold"/>
             <Setter Property="FontSize" Value="14"/>
-            <Setter Property="Padding" Value="12,12"/>
             <Setter Property="BorderThickness" Value="0"/>
             <Setter Property="HorizontalContentAlignment" Value="Left"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="DataGridColumnHeader">
+                        <Border Background="{TemplateBinding Background}" Padding="24,16">
+                            <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}" VerticalAlignment="Center"/>
+                        </Border>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
         </Style>
 
         <Style x:Key="CenterHeader" TargetType="DataGridColumnHeader" BasedOn="{StaticResource {x:Type DataGridColumnHeader}}">
@@ -71,7 +80,8 @@
             <Setter Property="Background" Value="Transparent"/>
             <Setter Property="BorderThickness" Value="0,0,0,1"/>
             <Setter Property="BorderBrush" Value="{StaticResource Line}"/>
-            <Setter Property="Height" Value="50"/>
+            <Setter Property="MinHeight" Value="56"/>
+            <Setter Property="VerticalContentAlignment" Value="Center"/>
             <Style.Triggers>
                 <Trigger Property="IsMouseOver" Value="True">
                     <Setter Property="Background" Value="#F8FAFC"/>
@@ -82,11 +92,20 @@
             </Style.Triggers>
         </Style>
 
+        <!-- PERFECT ALIGNMENT: Cell Template Override -->
         <Style TargetType="DataGridCell">
             <Setter Property="BorderThickness" Value="0"/>
-            <Setter Property="Padding" Value="12,0"/>
             <Setter Property="VerticalContentAlignment" Value="Center"/>
             <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="DataGridCell">
+                        <Border Background="{TemplateBinding Background}" Padding="24,0">
+                            <ContentPresenter VerticalAlignment="Center"/>
+                        </Border>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
             <Style.Triggers>
                 <Trigger Property="IsSelected" Value="True">
                     <Setter Property="Foreground" Value="{StaticResource Ink}"/>
@@ -100,7 +119,30 @@
             <Setter Property="VerticalAlignment" Value="Center"/>
             <Setter Property="HorizontalAlignment" Value="Left"/>
             <Setter Property="TextAlignment" Value="Left"/>
+            <Setter Property="Margin" Value="0,0,16,0"/>
             <Setter Property="ToolTip" Value="{Binding Text, RelativeSource={RelativeSource Self}}"/>
+        </Style>
+
+        <!-- Action Button Style (Hover Effect) -->
+        <Style x:Key="ActionIconButton" TargetType="Button">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Padding" Value="6"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="border" Background="{TemplateBinding Background}" CornerRadius="6" Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="border" Property="Background" Value="#F1F5F9"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
         </Style>
     </UserControl.Resources>
 
@@ -147,56 +189,90 @@
             </Grid>
         </Border>
 
-        <!-- DataGrid -->
+        <!-- DataGrid & Empty State Container -->
         <Border Grid.Row="2" Background="#FFFFFF" BorderBrush="{StaticResource Line}" BorderThickness="1" CornerRadius="12">
             <Border.Effect>
                 <DropShadowEffect Color="#0F172A" Opacity="0.04" BlurRadius="16" ShadowDepth="2" Direction="270"/>
             </Border.Effect>
 
-            <DataGrid Style="{StaticResource CleanDataGrid}" ItemsSource="{Binding FilteredSuppliers}" Margin="8">
-                <DataGrid.Columns>
-                    <DataGridTextColumn Header="Supplier Name" Binding="{Binding SupplierName}" Width="2*" ElementStyle="{StaticResource LeftAlignedText}"/>
-                    <DataGridTextColumn Header="Contact Number" Binding="{Binding ContactNumber}" Width="1.5*" ElementStyle="{StaticResource LeftAlignedText}"/>
-                    <DataGridTextColumn Header="Address" Binding="{Binding Address}" Width="2.5*" ElementStyle="{StaticResource LeftAlignedText}"/>
+            <Grid>
+                <DataGrid Style="{StaticResource CleanDataGrid}" ItemsSource="{Binding FilteredSuppliers}" Margin="8">
+                    <DataGrid.Columns>
+                        <!-- TEXT COLUMNS -->
+                        <DataGridTextColumn Header="Supplier Name" Binding="{Binding SupplierName}" Width="2*" ElementStyle="{StaticResource LeftAlignedText}"/>
+                        <DataGridTextColumn Header="Contact Number" Binding="{Binding ContactNumber}" Width="1.5*" ElementStyle="{StaticResource LeftAlignedText}"/>
+                        <DataGridTextColumn Header="Address" Binding="{Binding Address}" Width="2.5*" ElementStyle="{StaticResource LeftAlignedText}"/>
 
-                    <DataGridTemplateColumn Header="Status" Width="130" HeaderStyle="{StaticResource CenterHeader}">
-                        <DataGridTemplateColumn.CellTemplate>
-                            <DataTemplate>
-                                <!-- Added VerticalAlignment="Center" to stop the stretching -->
-                                <!-- Increased horizontal padding to make it look like a pill -->
-                                <Border Background="{Binding StatusColor}" 
-                    CornerRadius="12" 
-                    Padding="12,4" 
-                    HorizontalAlignment="Center"
-                    VerticalAlignment="Center">
-                                    <TextBlock Text="{Binding StatusText}" 
-                           Foreground="White" 
-                           FontSize="11" 
-                           FontWeight="Bold"/>
-                                </Border>
-                            </DataTemplate>
-                        </DataGridTemplateColumn.CellTemplate>
-                    </DataGridTemplateColumn>
+                        <!-- STATUS COLUMN (Soft Chips) -->
+                        <DataGridTemplateColumn Header="Status" Width="130" HeaderStyle="{StaticResource CenterHeader}">
+                            <DataGridTemplateColumn.CellTemplate>
+                                <DataTemplate>
+                                    <Border CornerRadius="12" Padding="10,4" HorizontalAlignment="Center" VerticalAlignment="Center">
+                                        <Border.Style>
+                                            <Style TargetType="Border">
+                                                <Setter Property="Background" Value="#DCFCE7"/>
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding IsActive}" Value="False">
+                                                        <Setter Property="Background" Value="#FEE2E2"/>
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </Border.Style>
+                                        <TextBlock Text="{Binding StatusText}" FontSize="11" FontWeight="SemiBold">
+                                            <TextBlock.Style>
+                                                <Style TargetType="TextBlock">
+                                                    <Setter Property="Foreground" Value="#16A34A"/>
+                                                    <Style.Triggers>
+                                                        <DataTrigger Binding="{Binding IsActive}" Value="False">
+                                                            <Setter Property="Foreground" Value="#DC2626"/>
+                                                        </DataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </TextBlock.Style>
+                                        </TextBlock>
+                                    </Border>
+                                </DataTemplate>
+                            </DataGridTemplateColumn.CellTemplate>
+                        </DataGridTemplateColumn>
 
-                    <DataGridTemplateColumn Header="" Width="120" HeaderStyle="{StaticResource CenterHeader}">
-                        <DataGridTemplateColumn.CellTemplate>
-                            <DataTemplate>
-                                <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
-                                    <Button Command="{Binding DataContext.EditSupplierCommand, RelativeSource={RelativeSource AncestorType=UserControl}}" 
-                                            CommandParameter="{Binding}" Background="Transparent" BorderThickness="0" Cursor="Hand" ToolTip="Edit Supplier">
-                                        <ui:SymbolIcon Symbol="Edit24" Foreground="#4D6BFE" FontSize="18"/>
-                                    </Button>
+                        <!-- ACTIONS COLUMN -->
+                        <DataGridTemplateColumn Header="Actions" Width="130" HeaderStyle="{StaticResource CenterHeader}">
+                            <DataGridTemplateColumn.CellTemplate>
+                                <DataTemplate>
+                                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
+                                        <Button Command="{Binding DataContext.EditSupplierCommand, RelativeSource={RelativeSource AncestorType=UserControl}}" 
+                                                CommandParameter="{Binding}" Style="{StaticResource ActionIconButton}" ToolTip="Edit Supplier">
+                                            <ui:SymbolIcon Symbol="Edit24" Foreground="#4D6BFE" FontSize="18"/>
+                                        </Button>
 
-                                    <Button Command="{Binding DataContext.ToggleStatusCommand, RelativeSource={RelativeSource AncestorType=UserControl}}" 
-                                            CommandParameter="{Binding}" Background="Transparent" BorderThickness="0" Cursor="Hand" Margin="10,0,0,0" ToolTip="Deactivate/Reactivate">
-                                        <ui:SymbolIcon Symbol="{Binding IsActive, Converter={StaticResource ActionIconConverter}}" Foreground="#EF4444" FontSize="18"/>
-                                    </Button>
-                                </StackPanel>
-                            </DataTemplate>
-                        </DataGridTemplateColumn.CellTemplate>
-                    </DataGridTemplateColumn>
-                </DataGrid.Columns>
-            </DataGrid>
+                                        <Button Command="{Binding DataContext.ToggleStatusCommand, RelativeSource={RelativeSource AncestorType=UserControl}}" 
+                                                CommandParameter="{Binding}" Style="{StaticResource ActionIconButton}" Margin="4,0,0,0" ToolTip="Deactivate/Reactivate">
+                                            <ui:SymbolIcon Symbol="{Binding IsActive, Converter={StaticResource ActionIconConverter}}" Foreground="#EF4444" FontSize="18"/>
+                                        </Button>
+                                    </StackPanel>
+                                </DataTemplate>
+                            </DataGridTemplateColumn.CellTemplate>
+                        </DataGridTemplateColumn>
+                    </DataGrid.Columns>
+                </DataGrid>
+
+                <!-- Empty State Overlay -->
+                <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center" IsHitTestVisible="False">
+                    <StackPanel.Style>
+                        <Style TargetType="StackPanel">
+                            <Setter Property="Visibility" Value="Collapsed"/>
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding FilteredSuppliers.Count}" Value="0">
+                                    <Setter Property="Visibility" Value="Visible"/>
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </StackPanel.Style>
+                    <ui:SymbolIcon Symbol="Search24" FontSize="36" Foreground="#CBD5E1" HorizontalAlignment="Center"/>
+                    <TextBlock Text="No suppliers found" FontSize="14" FontWeight="SemiBold" Foreground="{StaticResource Muted}" HorizontalAlignment="Center" Margin="0,10,0,2"/>
+                    <TextBlock Text="Try adjusting your search or filters." FontSize="12" Foreground="#94A3B8" HorizontalAlignment="Center"/>
+                </StackPanel>
+            </Grid>
         </Border>
     </Grid>
 </UserControl>
